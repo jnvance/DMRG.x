@@ -47,7 +47,7 @@ int main(int argc, char **argv)
     MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY);
     for (PetscInt i = Istart; i < Iend; ++i){
         MatSetValue(B, i, i, 2, INSERT_VALUES);
-        if (i<size_B-1) MatSetValue(B, i, i+1, -1, INSERT_VALUES);
+        // if (i<size_B-1) MatSetValue(B, i, i+1, -1, INSERT_VALUES);
         if (i>0)        MatSetValue(B, i, i-1, -1, INSERT_VALUES);
     }
     MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY);
