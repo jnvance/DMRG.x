@@ -1,11 +1,8 @@
 #ifndef __KRON_HPP__
 #define __KRON_HPP__
 
-/**
-    Density Matrix Renormalization Group Algorithm
-
-    Implementation of the kronecker product
-    with distributed sparse matrices in PETSc and SLEPc (v3.7)
+/** @defgroup Kronecker
+ *  @brief Implementation of the kronecker product with distributed sparse matrices in PETSc and SLEPc (v3.7)
  */
 
 #include <slepceps.h>
@@ -32,18 +29,18 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     PetscMPIInt     nprocs, rank;           // MPI comm variables
     PetscInt        M_A, N_A, M_B, N_B, M_C, N_C;
 
-    /// Get information from MPI
+    // Get information from MPI
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
-    /// Determine dimensions of C and initialize
+    // Determine dimensions of C and initialize
     MatGetSize(A, &M_A, &N_A);
     MatGetSize(B, &M_B, &N_B);
     M_C = M_A * M_B;
     N_C = N_A * N_B;
 
-    /// Setup matrix C
-    /// TODO: maybe hardcode some setup options
+    // Setup matrix C
+    // TODO: maybe hardcode some setup options
     MatCreate(comm, &C);
     MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C);
     MatSetFromOptions(C);
@@ -53,33 +50,33 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     PetscInt Istart, Iend;
     MatGetOwnershipRange(C, &Istart, &Iend);
 
-    /// Determine required rows from A
+    // Determine required rows from A
     Mat submat_A;
     PetscInt Astart, Aend;
-    Astart = Istart/M_B;        /// CHECK denominators
-    Aend = 1+(Iend-1)/M_B;      /// overestimate Aend
+    Astart = Istart/M_B;        // CHECK denominators
+    Aend = 1+(Iend-1)/M_B;      // overestimate Aend
     PetscInt M_req_A = Aend - Astart;
 
-    /// List down indices needed for submatrix A
+    // List down indices needed for submatrix A
     PetscInt id_rows_A[M_req_A], id_cols_A[N_A];
     for (PetscInt Irow = Astart; Irow < Aend; ++Irow)
         id_rows_A[Irow-Astart] = Irow;
     for (PetscInt Icol = 0; Icol < N_A; ++Icol)
         id_cols_A[Icol] = Icol;
 
-    /// Construct index set
+    // Construct index set
     IS isrow_A, iscol_A;
     ISCreateGeneral(comm, M_req_A, id_rows_A, PETSC_COPY_VALUES, &isrow_A);
     ISCreateGeneral(comm, N_A,     id_cols_A, PETSC_COPY_VALUES, &iscol_A);
 
-    /// Construct submatrix_A
+    // Construct submatrix_A
     MatGetSubMatrix(A, isrow_A, iscol_A, MAT_INITIAL_MATRIX, &submat_A);
 
     PetscInt A_sub_start, A_sub_end;
     MatGetOwnershipRange(submat_A, &A_sub_start, &A_sub_end);
 
     #ifdef __PRINT_TESTS__
-    /// Test: Confirm correct ownership
+    // Test: Confirm correct ownership
     for(PetscInt Irank = 0; Irank < nprocs; ++Irank){
         if(Irank==rank)
             printf("[%2d] A_submat start: %-5d end: %-5d\n", rank, A_sub_start, A_sub_end);
@@ -89,8 +86,8 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     ISView(isrow_A, PETSC_VIEWER_STDOUT_WORLD);
     #endif
 
-    /// Get indices for submatrix B, with each process taking all elements
-    /// TODO: Reallocate aligned
+    // Get indices for submatrix B, with each process taking all elements
+    // TODO: Reallocate aligned
     Mat submat_B;
     PetscInt id_rows_B[M_B], id_cols_B[N_B];
     for (PetscInt Irow = 0; Irow < M_B; ++Irow)
@@ -98,32 +95,32 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     for (PetscInt Icol = 0; Icol < N_B; ++Icol)
         id_cols_B[Icol] = Icol;
 
-    /// Construct index set
+    // Construct index set
     IS isrow_B, iscol_B;
     ISCreateGeneral(comm, M_B, id_rows_B, PETSC_COPY_VALUES, &isrow_B);
     ISCreateGeneral(comm, N_B, id_cols_B, PETSC_COPY_VALUES, &iscol_B);
 
-    /// Construct submatrix_B
+    // Construct submatrix_B
     MatGetSubMatrix(B, isrow_B, iscol_B, MAT_INITIAL_MATRIX, &submat_B);
 
     PetscInt B_sub_start, B_sub_end;
     MatGetOwnershipRange(submat_B, &B_sub_start, &B_sub_end);
 
-    /// Map ownership
-    /// Input: the row INDEX in the global matrix A/B
-    /// Output: the corresponding row index in the locally-owned rows of submatrix A/B
+    // Map ownership
+    // Input: the row INDEX in the global matrix A/B
+    // Output: the corresponding row index in the locally-owned rows of submatrix A/B
     #define ROW_MAP_A(INDEX) ((INDEX) - Astart + A_sub_start)
     #define ROW_MAP_B(INDEX) ((INDEX) + B_sub_start)
 
 
-    /// Submatrix constructions offsets the starting column
-    /// Input: the corresponding column index in the locally-owned submatrix A/B
-    /// Output: the column INDEX in the global matrix A/B
+    // Submatrix constructions offsets the starting column
+    // Input: the corresponding column index in the locally-owned submatrix A/B
+    // Output: the column INDEX in the global matrix A/B
     #define COL_MAP_A(INDEX) ((INDEX) - N_A * (nprocs - 1) )
     #define COL_MAP_B(INDEX) ((INDEX) - N_B * (nprocs - 1) )
 
 
-    /// Determine non-zero indices of submatrices
+    // Determine non-zero indices of submatrices
     const PetscInt*     cols_A;
     const PetscScalar*  vals_A;
     const PetscInt*     cols_B;
@@ -132,12 +129,12 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     PetscInt            Arow, Brow;
     PetscInt            ncols_C;
 
-    /// IMPLEMENTATION OPTIONS:
-    /// Load A and B one row at a time (check)
-    /// Pre-allocate an array for calculating a row of C using
-    ///     the maximum possible number of columns scanned through all A and B
-    /// Load B all at once and destroy submatrix
-    ///     Find a way to get and set values using the entire submatrix B
+    // IMPLEMENTATION OPTIONS:
+    // Load A and B one row at a time (check)
+    // Pre-allocate an array for calculating a row of C using
+    //     the maximum possible number of columns scanned through all A and B
+    // Load B all at once and destroy submatrix
+    //     Find a way to get and set values using the entire submatrix B
 
     // #define __SEQ_ORDER__
     #ifdef __SEQ_ORDER__
@@ -160,8 +157,8 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 
                 ncols_C = ncols_A * ncols_B;
 
-                /// This malloc might be costly, try to estimate the max number of nonzeros
-                /// of the product matrix and pre-allocate outside the loop
+                // This malloc might be costly, try to estimate the max number of nonzeros
+                // of the product matrix and pre-allocate outside the loop
                 PetscInt*       cols_C = new PetscInt[ncols_C];
                 PetscScalar*    vals_C = new PetscScalar[ncols_C];
 

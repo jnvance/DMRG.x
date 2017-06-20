@@ -20,12 +20,12 @@ int main(int argc, char **argv)
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
-    /// Create two square matrices A and B w/in petsc
+    // Create two square matrices A and B w/in petsc
     Mat A, B;
     Mat C = NULL;
 
-    const PetscInt size_A = 12;  /// size of matrix A
-    const PetscInt size_B =  8;  /// size of matrix B
+    const PetscInt size_A = 12;  // size of matrix A
+    const PetscInt size_B =  8;  // size of matrix B
 
     #define INIT_AND_ZERO(MAT,MATSIZE) \
         MatCreate(comm, &MAT); \
@@ -39,11 +39,11 @@ int main(int argc, char **argv)
     #undef INIT_AND_ZERO
 
 
-    /// Fill matrices with values
+    // Fill matrices with values
     PetscInt Istart,Iend;
     MatGetOwnershipRange(B,&Istart,&Iend);
 
-    /// Matrix B is tridiagonal with constant diagonal and subdiagonal entries
+    // Matrix B is tridiagonal with constant diagonal and subdiagonal entries
     MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY);
     for (PetscInt i = Istart; i < Iend; ++i){
         MatSetValue(B, i, i, 2, INSERT_VALUES);
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     }
     MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY);
 
-    /// Matrix A is diagonal with varying entries
+    // Matrix A is diagonal with varying entries
     ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatGetOwnershipRange(A, &Istart, &Iend); CHKERRQ(ierr);
     for (PetscInt i = Istart; i < Iend; ++i){
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 
     MatKron(A, B, C, comm);
 
-    /// Peek into values
+    // Peek into values
     // #define __PEEK__
     #ifdef __PEEK__
         PetscViewer fd = nullptr;
@@ -86,7 +86,7 @@ int main(int argc, char **argv)
     #endif
     #undef __PEEK__
 
-    /// Write to file
+    // Write to file
     #define __WRITE__
     #ifdef __WRITE__
         PetscViewer writer = nullptr;
