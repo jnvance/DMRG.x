@@ -194,7 +194,7 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 
 
     /*Write submatrices to file*/
-    #define __WRITE__
+    // #define __WRITE__
     #ifdef __WRITE__
         PetscViewer writer = nullptr;
         #define WRITE(MAT,FILE) \

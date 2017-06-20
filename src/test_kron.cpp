@@ -1,11 +1,8 @@
-
 static char help[] =
     "Test Code for Kronecker product\n";
 
-
 #include <iostream>
 #include <slepceps.h>
-
 #include "kron.hpp"
 
 #define CHK(FUNCTION) ierr = FUNCTION; CHKERRQ(ierr);
@@ -68,7 +65,7 @@ int main(int argc, char **argv)
     MatKron(A, B, C, comm);
 
     /// Peek into values
-    #define __PEEK__
+    // #define __PEEK__
     #ifdef __PEEK__
         PetscViewer fd = nullptr;
         #define PEEK(MAT) \
@@ -100,9 +97,9 @@ int main(int argc, char **argv)
             MatView(MAT, writer);\
             PetscViewerDestroy(&writer);
 
-        WRITE(A,"trash/A.dat")
-        WRITE(B,"trash/B.dat")
-        WRITE(C,"trash/C.dat")
+        WRITE(A,"test_kron/A.dat")
+        WRITE(B,"test_kron/B.dat")
+        WRITE(C,"test_kron/C.dat")
         #undef WRITE
         PetscViewerDestroy(&writer);
     #endif

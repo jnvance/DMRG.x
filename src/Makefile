@@ -1,5 +1,5 @@
 
-TARGETS = dmrg.x
+TARGETS = dmrg.x test_kron.x
 
 CXXFLAGS="-O3"
 
