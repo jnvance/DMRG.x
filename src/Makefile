@@ -14,6 +14,7 @@ test_kron.x: test_kron.o chkopts
 	${RM} test_kron.o
 
 flush: clean
-	${RM} ${TARGETS} *.dat *.dat.info
+	${RM} ${TARGETS} *.dat *.dat.info *.x
+	${RM} -r test_kron
 
 include ${SLEPC_DIR}/lib/slepc/conf/slepc_common
