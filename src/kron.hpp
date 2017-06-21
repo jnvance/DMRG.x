@@ -94,6 +94,8 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 
     // Get indices for submatrix B, with each process taking all elements
     // TODO: Reallocate aligned
+    // TODO: Collect elements needed only on processor
+    //       If processor takes no non-zero value in A, do not take values for B
     Mat submat_B;
     PetscInt id_rows_B[M_B], id_cols_B[N_B];
     for (PetscInt Irow = 0; Irow < M_B; ++Irow)
