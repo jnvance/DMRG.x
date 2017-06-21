@@ -33,6 +33,12 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
+    // Put input matrices in correct state for submatrix extraction
+    ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
     // Determine dimensions of C and initialize
     MatGetSize(A, &M_A, &N_A);
     MatGetSize(B, &M_B, &N_B);
