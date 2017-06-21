@@ -14,6 +14,7 @@
     is achieved by getting the submatrices of A and C
 
     TODO:
+        * Implement overloading for when one or more arguments is the identity matrix
         * Reduce communication.
         * Write a test suite to check whether this works for small and
             large matrices
