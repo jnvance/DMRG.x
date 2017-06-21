@@ -1,7 +1,7 @@
 
 TARGETS = dmrg.x test_kron.x
 
-CXXFLAGS="-O3"
+CXXFLAGS=-O3
 
 all: ${TARGETS}
 
