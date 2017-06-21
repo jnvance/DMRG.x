@@ -1,57 +1,64 @@
-#ifndef __DMRG_H__
-#define __DMRG_H__
+#ifndef __DMRG_HPP__
+#define __DMRG_HPP__
 
 /** @defgroup DMRG
 
-    @brief Implementation of the DMRGBlock and DMRGSystem classes
+    @brief Implementation of the DMRGBlock and iDMRG classes
 
  */
+
 
 #include <slepceps.h>
 #include <petscmat.h>
 #include "kron.hpp"
+
+
+#define     DMRGBLOCK_DEFAULT_LENGTH        1
+#define     DMRGBLOCK_DEFAULT_BASIS_SIZE    2
+#define     DMRG_DEFAULT_MPI_COMM           PETSC_COMM_WORLD
 
 /** @defgroup DMRG
 
  */
 class DMRGBlock
 {
-    public:
+    Mat             H_;
+    Mat             Sz_;
+    Mat             Sp_;
 
-        DMRGBlock(MPI_Comm comm=PETSC_COMM_WORLD, PetscInt length=1, PetscInt basis_size=2) :
-            length_(length),
-            basis_size_(basis_size),
-            comm_(comm)
-            {} // constructor with spin 1/2 defaults
+    PetscInt        length_;
+    PetscInt        basis_size_;
 
-        ~DMRGBlock(){}
+    MPI_Comm        comm_;
 
-        PetscErrorCode init(); // explicit initializer
-        PetscErrorCode destroy(); // explicit destructor
+public:
 
-        PetscInt length(){return length_;}
-        PetscInt basis_size(){return basis_size_;}
+    DMRGBlock() :   length_(DMRGBLOCK_DEFAULT_LENGTH),
+                    basis_size_(DMRGBLOCK_DEFAULT_BASIS_SIZE),
+                    comm_(DMRG_DEFAULT_MPI_COMM)
+                    {}  // constructor with spin 1/2 defaults
 
-    private:
+    ~DMRGBlock(){}
 
-        Mat         H_;
-        Mat         Sz_;
-        Mat         Sp_;
+    // PetscErrorCode  init(); // explicit initializer
+    PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt); // explicit initializer
+    PetscErrorCode  destroy(); // explicit destructor
+    PetscErrorCode  grow(); // explicit destructor
 
-        PetscInt    length_;
-        PetscInt    basis_size_;
+    PetscInt        length(){return length_;}
+    PetscInt        basis_size(){return basis_size_;}
 
-        MPI_Comm    comm_;
 };
 
 
-// We employ an explicit function for initializing the system
-// since we want to catch and check errors through ierr, which produces a return.
-// This cannot be done with default constructors since return values are not allowed.
-
-PetscErrorCode DMRGBlock::init()
+PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
+                                PetscInt length = DMRGBLOCK_DEFAULT_LENGTH,
+                                PetscInt basis_size = DMRGBLOCK_DEFAULT_BASIS_SIZE)
 {
     PetscErrorCode  ierr = 0;
+    comm_ = comm;
+    length_ = length;
+    basis_size_ = basis_size;
 
     PetscInt sqmatrixdim = pow(basis_size_,length_);
 
@@ -98,6 +105,7 @@ PetscErrorCode DMRGBlock::init()
     return ierr;
 }
 
+
 PetscErrorCode DMRGBlock::destroy()
 {
     PetscErrorCode  ierr = 0;
@@ -113,16 +121,53 @@ PetscErrorCode DMRGBlock::destroy()
     return ierr;
 }
 
+PetscErrorCode DMRGBlock::grow()
+{
+    PetscErrorCode  ierr = 0;
+
+    return ierr;
+}
+
 
 /*--------------------------------------------------------------------------------*/
 
 
-class DMRGSystem
+class iDMRG
 {
-    public:
 
-    private:
+    DMRGBlock LeftBlock_;
+    DMRGBlock RightBlock_;
+
+    MPI_Comm    comm_;
+
+public:
+
+    PetscErrorCode init(MPI_Comm);
+    PetscErrorCode destroy();
 
 };
 
-#endif // __DMRG_H__
+
+PetscErrorCode iDMRG::init(MPI_Comm comm=DMRG_DEFAULT_MPI_COMM)
+{
+    PetscErrorCode  ierr = 0;
+    comm_ = comm;
+    ierr = LeftBlock_.init(comm_); CHKERRQ(ierr);
+    ierr = RightBlock_.init(comm_); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::destroy()
+{
+    PetscErrorCode  ierr = 0;
+
+    ierr = LeftBlock_.destroy(); CHKERRQ(ierr);
+    ierr = RightBlock_.destroy(); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+#endif // __DMRG_HPP__

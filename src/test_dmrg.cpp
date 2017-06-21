@@ -19,13 +19,10 @@ int main(int argc, char **argv)
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
+    iDMRG dmrg;
+    dmrg.init();
 
-    DMRGBlock block(comm);
-    block.init();
-
-    /* Do something */
-
-    block.destroy();
+    dmrg.destroy();
     SlepcFinalize();
     return ierr;
 }
