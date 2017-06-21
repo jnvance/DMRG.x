@@ -22,8 +22,8 @@
  */
 class DMRGBlock
 {
-    Mat             H_;
-    Mat             Sz_;
+    Mat             H_;     // Hamiltonian of entire block
+    Mat             Sz_;    // Spin operator of rightmost/leftmost
     Mat             Sp_;
 
     PetscInt        length_;
@@ -43,7 +43,17 @@ public:
     // PetscErrorCode  init(); // explicit initializer
     PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt); // explicit initializer
     PetscErrorCode  destroy(); // explicit destructor
-    PetscErrorCode  grow(); // explicit destructor
+
+    const Mat  H()        {return H_;}
+    const Mat  Sz()       {return Sz_;}
+    const Mat  Sp()       {return Sp_;}
+
+    PetscErrorCode  update_operators(Mat H_new, Mat Sz_new, Mat Sp_new);
+
+    PetscErrorCode  update_H(Mat H_new);
+    PetscErrorCode  update_Sz(Mat Sz_new);
+    PetscErrorCode  update_Sp(Mat Sp_new);
+
 
     PetscInt        length(){return length_;}
     PetscInt        basis_size(){return basis_size_;}
@@ -79,15 +89,15 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
     // For the simple infinite-system DMRG, the calculations begin with a
     // block of 2x2 matrices explictly constructed in 1-2 processor implementations
 
-    // This section is model-specific code for the Heisenberg XXZ chain
-    // TODO: Modify and refactor later to be model-independent
-
     // fill the operator values
+    // matrix assembly assumes block length = 1, basis_size = 2
+    // TODO: generalize!
+    if(!(length_==1 && basis_size==2)) SETERRQ(comm,1,"Matrix assembly assumes block length = 1, basis_size = 2\n");
     ierr = MatSetValue(Sz_, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
     ierr = MatSetValue(Sz_, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
     ierr = MatSetValue(Sp_, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
 
-    #define __PEEK__
+    // #define __PEEK__
     #ifdef __PEEK__
         // Peek into values
         PetscViewer fd = nullptr;
@@ -96,7 +106,9 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
         ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr); \
         ierr = MatView(mat, fd); CHKERRQ(ierr);
 
+        PetscPrintf(comm, "Sz\n");
         PEEK(Sz_)
+        PetscPrintf(comm, "Sp\n");
         PEEK(Sp_)
     #undef PEEK
     #endif
@@ -121,12 +133,32 @@ PetscErrorCode DMRGBlock::destroy()
     return ierr;
 }
 
-PetscErrorCode DMRGBlock::grow()
+PetscErrorCode DMRGBlock::update_operators(Mat H_new, Mat Sz_new, Mat Sp_new)
 {
     PetscErrorCode  ierr = 0;
-
+    ierr = update_H(H_new); CHKERRQ(ierr);
+    ierr = update_Sz(Sz_new); CHKERRQ(ierr);
+    ierr = update_Sp(Sp_new); CHKERRQ(ierr);
     return ierr;
 }
+
+#define UPDATE_OPERATOR(MATRIX) \
+PetscErrorCode DMRGBlock::update_ ## MATRIX(Mat MATRIX ## _new)         \
+{                                                                       \
+    PetscErrorCode  ierr = 0;                                           \
+    if (MATRIX ## _ == MATRIX ## _new) /* Check whether same matrix */  \
+        return ierr;                                                    \
+    Mat MATRIX ## _temp = MATRIX ## _;                                  \
+    MATRIX ## _ = MATRIX ## _new;                                       \
+    ierr = MatDestroy(&MATRIX ## _temp); CHKERRQ(ierr);                 \
+    return ierr;                                                        \
+}
+
+UPDATE_OPERATOR(H)
+UPDATE_OPERATOR(Sz)
+UPDATE_OPERATOR(Sp)
+
+#undef UPDATE_OPERATOR
 
 
 /*--------------------------------------------------------------------------------*/
