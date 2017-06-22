@@ -23,8 +23,8 @@
  */
 class DMRGBlock
 {
-    Mat             H_;     // Hamiltonian of entire block
-    Mat             Sz_;    // Spin operator of rightmost/leftmost
+    Mat             H_;     /* Hamiltonian of entire block */
+    Mat             Sz_;    /* Operators of rightmost/leftmost spin */
     Mat             Sp_;
 
     PetscInt        length_;
@@ -41,9 +41,8 @@ public:
 
     ~DMRGBlock(){}
 
-    // PetscErrorCode  init(); // explicit initializer
-    PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt); // explicit initializer
-    PetscErrorCode  destroy(); // explicit destructor
+    PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt);     /* explicit initializer */
+    PetscErrorCode  destroy();                              /* explicit destructor */
 
     const Mat  H()        {return H_;}
     const Mat  Sz()       {return Sz_;}
@@ -59,6 +58,8 @@ public:
     PetscInt        length(){return length_;}
     PetscInt        basis_size(){return basis_size_;}
 
+    void            length(PetscInt _length){length_ = _length;}
+
 };
 
 
@@ -73,7 +74,9 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
 
     PetscInt sqmatrixdim = pow(basis_size_,length_);
 
-    // initialize the matrices
+    /*
+        initialize the matrices
+    */
     #define INIT_AND_ZERO(mat) \
         ierr = MatCreate(comm_, &mat); CHKERRQ(ierr); \
         ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, sqmatrixdim, sqmatrixdim); CHKERRQ(ierr); \
@@ -86,34 +89,21 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
         INIT_AND_ZERO(Sp_)
     #undef INIT_AND_ZERO
 
-    // Operators are constructed explicitly in this section
-    // For the simple infinite-system DMRG, the calculations begin with a
-    // block of 2x2 matrices explictly constructed in 1-2 processor implementations
+    /*
+        Operators are constructed explicitly in this section
+        For the simple infinite-system DMRG, the calculations begin with a
+        block of 2x2 matrices explictly constructed in 1-2 processor implementations
+    */
 
-    // fill the operator values
-    // matrix assembly assumes block length = 1, basis_size = 2
-    // TODO: generalize!
+    /*
+        fill the operator values
+        matrix assembly assumes block length = 1, basis_size = 2
+        TODO: generalize!
+    */
     if(!(length_==1 && basis_size==2)) SETERRQ(comm,1,"Matrix assembly assumes block length = 1, basis_size = 2\n");
     ierr = MatSetValue(Sz_, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
     ierr = MatSetValue(Sz_, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
     ierr = MatSetValue(Sp_, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-
-    // #define __PEEK__
-    #ifdef __PEEK__
-        // Peek into values
-        PetscViewer fd = nullptr;
-    #define PEEK(mat) \
-        ierr = MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr); \
-        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr); \
-        ierr = MatView(mat, fd); CHKERRQ(ierr);
-
-        PetscPrintf(comm, "Sz\n");
-        PEEK(Sz_)
-        PetscPrintf(comm, "Sp\n");
-        PEEK(Sp_)
-    #undef PEEK
-    #endif
-
 
     return ierr;
 }
