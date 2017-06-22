@@ -15,7 +15,7 @@
 
     TODO:
         * Implement MatKronAdd $ C += A \otimes B $
-
+        * Implement MatKronScaleAdd $ C += a * A \otimes B $
         * Implement overloading for when one or more arguments is the identity matrix
         * Implement overloading for when one or more arguments is the Sz, Sp, or Sm
         * Reduce communication.
@@ -26,7 +26,7 @@
         * Check if it works well with other PetscScalar datatypes (complex/real)
  */
 PetscErrorCode
-MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+MatKronScaleAdd(PetscScalar a, const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -182,12 +182,27 @@ MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
                 PetscInt*       cols_C = new PetscInt[ncols_C];
                 PetscScalar*    vals_C = new PetscScalar[ncols_C];
 
-                for (int j_A = 0; j_A < ncols_A; ++j_A)
+
+                if (a == 1.)
                 {
-                    for (int j_B = 0; j_B < ncols_B; ++j_B)
+                    for (int j_A = 0; j_A < ncols_A; ++j_A)
                     {
-                        cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-                        vals_C [ j_A * ncols_B + j_B ] = vals_A[j_A] * vals_B[j_B];
+                        for (int j_B = 0; j_B < ncols_B; ++j_B)
+                        {
+                            cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                            vals_C [ j_A * ncols_B + j_B ] = vals_A[j_A] * vals_B[j_B];
+                        }
+                    }
+                }
+                else
+                {
+                    for (int j_A = 0; j_A < ncols_A; ++j_A)
+                    {
+                        for (int j_B = 0; j_B < ncols_B; ++j_B)
+                        {
+                            cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                            vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
+                        }
                     }
                 }
 
@@ -232,6 +247,17 @@ MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     MatDestroy(&submat_A);
     MatDestroy(&submat_B);
     // if(submat_C) MatDestroy(&submat_C);
+    return ierr;
+}
+
+
+PetscErrorCode
+MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = MatKronScaleAdd(1., A, B, C, comm); CHKERRQ(ierr);
+
     return ierr;
 }
 
