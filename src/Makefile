@@ -1,7 +1,7 @@
 
-TARGETS = dmrg.x test_kron.x
+TARGETS = test_dmrg.x test_kron.x
 
-CXXFLAGS=-O3
+CXXFLAGS=-O3 -std=c++11
 
 all: ${TARGETS}
 
