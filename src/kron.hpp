@@ -14,6 +14,8 @@
     is achieved by getting the submatrices of A and C
 
     TODO:
+        * Implement MatKronAdd $ C += A \otimes B $
+
         * Implement overloading for when one or more arguments is the identity matrix
         * Implement overloading for when one or more arguments is the Sz, Sp, or Sm
         * Reduce communication.
@@ -24,7 +26,7 @@
         * Check if it works well with other PetscScalar datatypes (complex/real)
  */
 PetscErrorCode
-MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -47,13 +49,21 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     M_C = M_A * M_B;
     N_C = N_A * N_B;
 
-    // Setup matrix C
-    // TODO: maybe hardcode some setup options
-    MatCreate(comm, &C);
-    MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C);
-    MatSetFromOptions(C);
-    MatSetUp(C);
-    MatZeroEntries(C);
+    // // Setup matrix C
+    // // TODO: maybe hardcode some setup options
+    // MatCreate(comm, &C);
+    // MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C);
+    // MatSetFromOptions(C);
+    // MatSetUp(C);
+    // MatZeroEntries(C);
+
+    // Determine whether C has the correct size
+    PetscInt M_C_input, N_C_input;
+    MatGetSize(C, &M_C_input, &N_C_input);
+    if( (M_C_input != M_C) || (N_C_input != N_C) ){
+        SETERRQ(comm,1,"Incorrect Matrix size");
+        PetscPrintf(comm, "Input(%d, %d) != Expected(%d, %d)\n", M_C_input, N_C_input, M_C, N_C);
+    }
 
     PetscInt Istart, Iend;
     MatGetOwnershipRange(C, &Istart, &Iend);
@@ -181,7 +191,7 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
                     }
                 }
 
-                MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, INSERT_VALUES );
+                MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
 
                 delete [] cols_C;
                 delete [] vals_C;
@@ -224,5 +234,44 @@ MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
     // if(submat_C) MatDestroy(&submat_C);
     return ierr;
 }
+
+
+PetscErrorCode
+MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+{
+    PetscErrorCode ierr = 0;
+
+    PetscMPIInt     nprocs, rank;           // MPI comm variables
+    PetscInt        M_A, N_A, M_B, N_B, M_C, N_C;
+
+    // Get information from MPI
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+
+    // Put input matrices in correct state for submatrix extraction
+    ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    // Determine dimensions of C and initialize
+    MatGetSize(A, &M_A, &N_A);
+    MatGetSize(B, &M_B, &N_B);
+    M_C = M_A * M_B;
+    N_C = N_A * N_B;
+
+    // Setup matrix C
+    // TODO: maybe hardcode some setup options
+    MatCreate(comm, &C);
+    MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C);
+    MatSetFromOptions(C);
+    MatSetUp(C);
+    MatZeroEntries(C);
+
+    MatKronAdd(A, B, C, comm);
+
+    return ierr;
+}
+
 
 #endif // __KRON_HPP__
