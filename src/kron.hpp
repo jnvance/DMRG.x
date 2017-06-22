@@ -15,6 +15,7 @@
 
     TODO:
         * Implement overloading for when one or more arguments is the identity matrix
+        * Implement overloading for when one or more arguments is the Sz, Sp, or Sm
         * Reduce communication.
         * Write a test suite to check whether this works for small and
             large matrices
