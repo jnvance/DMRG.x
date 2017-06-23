@@ -121,6 +121,10 @@ PetscErrorCode DMRGBlock::destroy()
     length_ = 0;
     basis_size_ = 0;
 
+    H_ = NULL;
+    Sz_ = NULL;
+    Sp_ = NULL;
+
     return ierr;
 }
 
@@ -226,7 +230,13 @@ PetscErrorCode iDMRG::destroy()
     MatDestroy(&Sz1_);
     MatDestroy(&Sp1_);
     MatDestroy(&Sm1_);
+    MatDestroy(&superblock_H_); /* Do a check whether matrix is in the correct state */
 
+    eye1_ = NULL;
+    Sz1_ = NULL;
+    Sp1_ = NULL;
+    Sm1_ = NULL;
+    superblock_H_ = NULL;
 
     return ierr;
 }
