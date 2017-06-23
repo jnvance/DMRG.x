@@ -158,10 +158,15 @@ UPDATE_OPERATOR(Sp)
 class iDMRG
 {
 
-    DMRGBlock LeftBlock_;
-    DMRGBlock RightBlock_;
+protected:
+
+    DMRGBlock BlockLeft_;
+    DMRGBlock BlockRight_;
 
     MPI_Comm    comm_;
+
+    /* Matrices of the single-site operators */
+    Mat eye1_, Sz1_, Sp1_, Sm1_;
 
 public:
 
@@ -175,8 +180,16 @@ PetscErrorCode iDMRG::init(MPI_Comm comm=DMRG_DEFAULT_MPI_COMM)
 {
     PetscErrorCode  ierr = 0;
     comm_ = comm;
-    ierr = LeftBlock_.init(comm_); CHKERRQ(ierr);
-    ierr = RightBlock_.init(comm_); CHKERRQ(ierr);
+
+    /* Initialize block objects */
+    ierr = BlockLeft_.init(comm_); CHKERRQ(ierr);
+    ierr = BlockRight_.init(comm_); CHKERRQ(ierr);
+
+    /* Initialize single-site operators */
+    MatEyeCreate(comm, eye1_, 2);
+    MatSzCreate(comm, Sz1_);
+    MatSpCreate(comm, Sp1_);
+    MatTranspose(Sp1_, MAT_INITIAL_MATRIX, &Sm1_);
 
     return ierr;
 }
@@ -186,8 +199,16 @@ PetscErrorCode iDMRG::destroy()
 {
     PetscErrorCode  ierr = 0;
 
-    ierr = LeftBlock_.destroy(); CHKERRQ(ierr);
-    ierr = RightBlock_.destroy(); CHKERRQ(ierr);
+    /* Destroy block objects */
+    ierr = BlockLeft_.destroy(); CHKERRQ(ierr);
+    ierr = BlockRight_.destroy(); CHKERRQ(ierr);
+
+    /* Destroy single-site operators */
+    MatDestroy(&eye1_);
+    MatDestroy(&Sz1_);
+    MatDestroy(&Sp1_);
+    MatDestroy(&Sm1_);
+
 
     return ierr;
 }
