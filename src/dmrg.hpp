@@ -173,6 +173,9 @@ public:
     PetscErrorCode init(MPI_Comm);
     PetscErrorCode destroy();
 
+    /* Miscellaneous functions */
+    PetscErrorCode MatPeekOperators();
+
 };
 
 
@@ -209,6 +212,24 @@ PetscErrorCode iDMRG::destroy()
     MatDestroy(&Sp1_);
     MatDestroy(&Sm1_);
 
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::MatPeekOperators()
+{
+    PetscErrorCode  ierr = 0;
+
+    PetscPrintf(comm_, "\nLeft Block Operators\nBlock Length = %d\n", BlockLeft_.length());
+    ierr = MatPeek(comm_, BlockLeft_.H(), "H (left)");
+    ierr = MatPeek(comm_, BlockLeft_.Sz(), "Sz (left)");
+    ierr = MatPeek(comm_, BlockLeft_.Sp(), "Sp (left)");
+
+    PetscPrintf(comm_, "\nRight Block Operators\nBlock Length = %d\n", BlockLeft_.length());
+    ierr = MatPeek(comm_, BlockRight_.H(), "H (right)");
+    ierr = MatPeek(comm_, BlockRight_.Sz(), "Sz (right)");
+    ierr = MatPeek(comm_, BlockRight_.Sp(), "Sp (right)");
 
     return ierr;
 }
