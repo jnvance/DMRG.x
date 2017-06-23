@@ -163,6 +163,8 @@ protected:
     DMRGBlock BlockLeft_;
     DMRGBlock BlockRight_;
 
+    Mat       superblock_H_ = NULL;
+
     MPI_Comm    comm_;
 
     /* Matrices of the single-site operators */
@@ -172,6 +174,19 @@ public:
 
     PetscErrorCode init(MPI_Comm);
     PetscErrorCode destroy();
+
+    /* Block enlargement to be implemented in inherited classes */
+    virtual PetscErrorCode BuildBlockLeft(){
+        SETERRQ(comm_, 1, "BuildBlockLeft() is not implemented in the base class.\n");
+    }
+
+    virtual PetscErrorCode BuildBlockRight(){
+        SETERRQ(comm_, 1, "BuildBlockRight() is not implemented in the base class.\n");
+    }
+
+    virtual PetscErrorCode BuildSuperBlock(){
+        SETERRQ(comm_, 1, "BuildSuperBlock() is not implemented in the base class.\n");
+    }
 
     /* Miscellaneous functions */
     PetscErrorCode MatPeekOperators();
@@ -226,10 +241,15 @@ PetscErrorCode iDMRG::MatPeekOperators()
     ierr = MatPeek(comm_, BlockLeft_.Sz(), "Sz (left)");
     ierr = MatPeek(comm_, BlockLeft_.Sp(), "Sp (left)");
 
-    PetscPrintf(comm_, "\nRight Block Operators\nBlock Length = %d\n", BlockLeft_.length());
+    PetscPrintf(comm_, "\nRight Block Operators\nBlock Length = %d\n", BlockRight_.length());
     ierr = MatPeek(comm_, BlockRight_.H(), "H (right)");
     ierr = MatPeek(comm_, BlockRight_.Sz(), "Sz (right)");
     ierr = MatPeek(comm_, BlockRight_.Sp(), "Sp (right)");
+
+    if (superblock_H_){
+        PetscPrintf(comm_, "\nSuperblock\nBlock Length = %d\n", BlockLeft_.length() + BlockRight_.length());
+        ierr = MatPeek(comm_, superblock_H_, "H (superblock)"); CHKERRQ(ierr);
+    }
 
     return ierr;
 }
