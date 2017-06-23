@@ -24,8 +24,8 @@ int main(int argc, char **argv)
     Mat A, B;
     Mat C = NULL;
 
-    const PetscInt size_A = 12;  // size of matrix A
-    const PetscInt size_B =  8;  // size of matrix B
+    const PetscInt size_A = 11;  // size of matrix A
+    const PetscInt size_B =  17;  // size of matrix B
 
     #define INIT_AND_ZERO(MAT,MATSIZE) \
         MatCreate(comm, &MAT); \
@@ -45,21 +45,24 @@ int main(int argc, char **argv)
 
     // Matrix B is tridiagonal with constant diagonal and subdiagonal entries
     MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY);
-    for (PetscInt i = Istart; i < Iend; ++i){
-        MatSetValue(B, i, i, 2, INSERT_VALUES);
-        // if (i<size_B-1) MatSetValue(B, i, i+1, -1, INSERT_VALUES);
-        if (i>0)        MatSetValue(B, i, i-1, -1, INSERT_VALUES);
-    }
+    // for (PetscInt i = Istart; i < Iend; ++i){
+    //     MatSetValue(B, i, i, 2, INSERT_VALUES);
+    //     // if (i<size_B-1) MatSetValue(B, i, i+1, -1, INSERT_VALUES);
+    //     if (i>0)        MatSetValue(B, i, i-1, -1, INSERT_VALUES);
+    // }
+    MatSetRandom(B, NULL);
     MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY);
 
     // Matrix A is diagonal with varying entries
     ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatGetOwnershipRange(A, &Istart, &Iend); CHKERRQ(ierr);
-    for (PetscInt i = Istart; i < Iend; ++i){
-        ierr = MatSetValue(A, i, i, i, INSERT_VALUES); CHKERRQ(ierr);
-        if (i%2 == 0) {ierr = MatSetValue(A, i, i+1, -1, INSERT_VALUES); CHKERRQ(ierr);}
-        if (i%2 == 1) {ierr = MatSetValue(A, i, i-1, -1, INSERT_VALUES); CHKERRQ(ierr);}
-    }
+    // ierr = MatGetOwnershipRange(A, &Istart, &Iend); CHKERRQ(ierr);
+    // for (PetscInt i = Istart; i < Iend; ++i){
+    //     ierr = MatSetValue(A, i, i, i, INSERT_VALUES); CHKERRQ(ierr);
+    //     if (i%2 == 0 && i+1 < Iend) {ierr = MatSetValue(A, i, i+1, -1, INSERT_VALUES); CHKERRQ(ierr);}
+    //     if (i%2 == 1) {ierr = MatSetValue(A, i, i-1, -1, INSERT_VALUES); CHKERRQ(ierr);}
+    // }
+    MatSetRandom(A, NULL);
+    MatTranspose(A, MAT_REUSE_MATRIX, &A);
     ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
     MatKron(A, B, C, comm);

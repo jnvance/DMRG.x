@@ -25,6 +25,9 @@
         * Check if this works for sparse x dense (m~10000s)
         * Check if it works well with other PetscScalar datatypes (complex/real)
  */
+
+#undef __FUNCT__
+#define __FUNCT__ "MatKronScaleAdd"
 PetscErrorCode
 MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
 {
@@ -162,6 +165,8 @@ MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI
         if(Irank==rank)
     #endif
 
+    // #define __NO_KRON__
+    #ifndef __NO_KRON__
             for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
             {
                 Arow = Irow/M_B;
@@ -214,6 +219,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI
                 MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
                 MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
             };
+    #endif
 
     #ifdef __SEQ_ORDER__
         MPI_Barrier(comm);
@@ -226,8 +232,8 @@ MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI
 
 
     /*Write submatrices to file*/
-    // #define __WRITE__
-    #ifdef __WRITE__
+    // #define __KRON_WRITE_SUBMAT__
+    #ifdef __KRON_WRITE_SUBMAT__
         PetscViewer writer = nullptr;
         #define WRITE(MAT,FILE) \
             MatAssemblyBegin(MAT, MAT_FLUSH_ASSEMBLY);\
@@ -236,12 +242,12 @@ MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI
             MatView(MAT, writer);\
             PetscViewerDestroy(&writer);
 
-        WRITE(submat_A,"trash/submat_A.dat")
-        WRITE(submat_B,"trash/submat_B.dat")
+        WRITE(submat_A,"test_kron/submat_A.dat")
+        WRITE(submat_B,"test_kron/submat_B.dat")
         #undef WRITE
         PetscViewerDestroy(&writer);
     #endif
-    #undef __WRITE__
+    #undef __KRON_WRITE_SUBMAT__
 
 
     MatDestroy(&submat_A);
