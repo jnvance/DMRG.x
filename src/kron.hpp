@@ -26,7 +26,7 @@
         * Check if it works well with other PetscScalar datatypes (complex/real)
  */
 PetscErrorCode
-MatKronScaleAdd(PetscScalar a, const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -252,7 +252,7 @@ MatKronScaleAdd(PetscScalar a, const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 
 
 PetscErrorCode
-MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+MatKronAdd(const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -263,7 +263,7 @@ MatKronAdd(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
 
 
 PetscErrorCode
-MatKron(const Mat A, const Mat B, Mat& C, MPI_Comm comm)
+MatKron(const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
 {
     PetscErrorCode ierr = 0;
 
