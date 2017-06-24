@@ -87,4 +87,22 @@ PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label)
     return ierr;
 }
 
+
+#undef __FUNCT__
+#define __FUNCT__ "MatWrite"
+PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename)
+{
+    PetscErrorCode  ierr = 0;
+
+    PetscViewer writer = nullptr;
+    MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
+    MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
+    PetscViewerBinaryOpen(comm, filename, FILE_MODE_WRITE, &writer);
+    MatView(mat, writer);
+    PetscViewerDestroy(&writer);
+    writer = nullptr;
+
+    return ierr;
+}
+
 #endif // __MATRIX_TOOLS_HPP__
