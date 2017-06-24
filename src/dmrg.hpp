@@ -164,10 +164,11 @@ class iDMRG
 
 protected:
 
-    DMRGBlock BlockLeft_;
-    DMRGBlock BlockRight_;
+    DMRGBlock   BlockLeft_;
+    DMRGBlock   BlockRight_;
 
-    Mat       superblock_H_ = NULL;
+    Mat         superblock_H_ = NULL;
+    PetscBool   superblock_set_ = PETSC_FALSE;
 
     MPI_Comm    comm_;
 
@@ -192,8 +193,12 @@ public:
         SETERRQ(comm_, 1, "BuildSuperBlock() is not implemented in the base class.\n");
     }
 
+    /* Solve states */
+    PetscErrorCode solve_ground_state();
+
     /* Miscellaneous functions */
     PetscErrorCode MatPeekOperators();
+    PetscErrorCode MatSaveOperators();
 
 };
 
@@ -256,9 +261,29 @@ PetscErrorCode iDMRG::MatPeekOperators()
     ierr = MatPeek(comm_, BlockRight_.Sz(), "Sz (right)");
     ierr = MatPeek(comm_, BlockRight_.Sp(), "Sp (right)");
 
-    if (superblock_H_){
+    if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
         PetscPrintf(comm_, "\nSuperblock\nBlock Length = %d\n", BlockLeft_.length() + BlockRight_.length());
         ierr = MatPeek(comm_, superblock_H_, "H (superblock)"); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::MatSaveOperators()
+{
+    PetscErrorCode  ierr = 0;
+
+    ierr = MatWrite(comm_, BlockLeft_.H(), "data/H_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockLeft_.Sz(), "data/Sz_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockLeft_.Sp(), "data/Sp_left.dat"); CHKERRQ(ierr);
+
+    ierr = MatWrite(comm_, BlockRight_.H(), "data/H_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockRight_.Sz(), "data/Sz_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockRight_.Sp(), "data/Sp_right.dat"); CHKERRQ(ierr);
+
+    if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
+        ierr = MatWrite(comm_, superblock_H_, "data/H_superblock.dat"); CHKERRQ(ierr);
     }
 
     return ierr;
