@@ -51,18 +51,21 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = MatKronScaleAdd(0.5, BlockLeft_Sm, Sp1_, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(Mat_temp); /* H_temp is destroyed here */ CHKERRQ(ierr);
     ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
+    Mat_temp = NULL;
 
     /*
         Update the Sz operator
     */
-    ierr = MatKron(BlockLeft_.Sz(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKron(eye1_, BlockLeft_.Sz(), Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(Mat_temp); CHKERRQ(ierr);
+    Mat_temp = NULL;
 
     /*
         Update the Sp operator
     */
-    ierr = MatKron(BlockLeft_.Sp(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKron(eye1_, BlockLeft_.Sp(), Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(Mat_temp); CHKERRQ(ierr);
+    Mat_temp = NULL;
 
     BlockLeft_.length(BlockLeft_.length() + 1);
 
@@ -185,6 +188,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     ierr = MatDestroy(&mat_temp); CHKERRQ(ierr);
 
+    superblock_set_ = PETSC_TRUE;
+
     return ierr;
 }
 
@@ -205,16 +210,24 @@ int main(int argc, char **argv)
     iDMRG_Heisenberg heis;
     heis.init(comm);
 
-    heis.BuildBlockLeft();
-    heis.BuildBlockLeft();
+    heis.BuildBlockRight();
     heis.BuildBlockLeft();
 
     heis.BuildBlockRight();
+    heis.BuildBlockLeft();
+
     heis.BuildBlockRight();
+    heis.BuildBlockLeft();
+
     heis.BuildBlockRight();
+    heis.BuildBlockLeft();
+
+    heis.BuildBlockRight();
+    heis.BuildBlockLeft();
 
     heis.BuildSuperBlock();
 
+    heis.MatSaveOperators();
     heis.MatPeekOperators();
     heis.destroy();
 
