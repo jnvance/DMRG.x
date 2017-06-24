@@ -23,8 +23,8 @@
  */
 class DMRGBlock
 {
-    Mat             H_;     // Hamiltonian of entire block
-    Mat             Sz_;    // Spin operator of rightmost/leftmost
+    Mat             H_;     /* Hamiltonian of entire block */
+    Mat             Sz_;    /* Operators of rightmost/leftmost spin */
     Mat             Sp_;
 
     PetscInt        length_;
@@ -41,9 +41,8 @@ public:
 
     ~DMRGBlock(){}
 
-    // PetscErrorCode  init(); // explicit initializer
-    PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt); // explicit initializer
-    PetscErrorCode  destroy(); // explicit destructor
+    PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt);     /* explicit initializer */
+    PetscErrorCode  destroy();                              /* explicit destructor */
 
     const Mat  H()        {return H_;}
     const Mat  Sz()       {return Sz_;}
@@ -59,6 +58,8 @@ public:
     PetscInt        length(){return length_;}
     PetscInt        basis_size(){return basis_size_;}
 
+    void            length(PetscInt _length){length_ = _length;}
+
 };
 
 
@@ -73,7 +74,9 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
 
     PetscInt sqmatrixdim = pow(basis_size_,length_);
 
-    // initialize the matrices
+    /*
+        initialize the matrices
+    */
     #define INIT_AND_ZERO(mat) \
         ierr = MatCreate(comm_, &mat); CHKERRQ(ierr); \
         ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, sqmatrixdim, sqmatrixdim); CHKERRQ(ierr); \
@@ -86,34 +89,21 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
         INIT_AND_ZERO(Sp_)
     #undef INIT_AND_ZERO
 
-    // Operators are constructed explicitly in this section
-    // For the simple infinite-system DMRG, the calculations begin with a
-    // block of 2x2 matrices explictly constructed in 1-2 processor implementations
+    /*
+        Operators are constructed explicitly in this section
+        For the simple infinite-system DMRG, the calculations begin with a
+        block of 2x2 matrices explictly constructed in 1-2 processor implementations
+    */
 
-    // fill the operator values
-    // matrix assembly assumes block length = 1, basis_size = 2
-    // TODO: generalize!
+    /*
+        fill the operator values
+        matrix assembly assumes block length = 1, basis_size = 2
+        TODO: generalize!
+    */
     if(!(length_==1 && basis_size==2)) SETERRQ(comm,1,"Matrix assembly assumes block length = 1, basis_size = 2\n");
     ierr = MatSetValue(Sz_, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
     ierr = MatSetValue(Sz_, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
     ierr = MatSetValue(Sp_, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-
-    // #define __PEEK__
-    #ifdef __PEEK__
-        // Peek into values
-        PetscViewer fd = nullptr;
-    #define PEEK(mat) \
-        ierr = MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr); \
-        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr); \
-        ierr = MatView(mat, fd); CHKERRQ(ierr);
-
-        PetscPrintf(comm, "Sz\n");
-        PEEK(Sz_)
-        PetscPrintf(comm, "Sp\n");
-        PEEK(Sp_)
-    #undef PEEK
-    #endif
-
 
     return ierr;
 }
@@ -130,6 +120,10 @@ PetscErrorCode DMRGBlock::destroy()
 
     length_ = 0;
     basis_size_ = 0;
+
+    H_ = NULL;
+    Sz_ = NULL;
+    Sp_ = NULL;
 
     return ierr;
 }
@@ -168,15 +162,43 @@ UPDATE_OPERATOR(Sp)
 class iDMRG
 {
 
-    DMRGBlock LeftBlock_;
-    DMRGBlock RightBlock_;
+protected:
+
+    DMRGBlock   BlockLeft_;
+    DMRGBlock   BlockRight_;
+
+    Mat         superblock_H_ = NULL;
+    PetscBool   superblock_set_ = PETSC_FALSE;
 
     MPI_Comm    comm_;
+
+    /* Matrices of the single-site operators */
+    Mat eye1_, Sz1_, Sp1_, Sm1_;
 
 public:
 
     PetscErrorCode init(MPI_Comm);
     PetscErrorCode destroy();
+
+    /* Block enlargement to be implemented in inherited classes */
+    virtual PetscErrorCode BuildBlockLeft(){
+        SETERRQ(comm_, 1, "BuildBlockLeft() is not implemented in the base class.\n");
+    }
+
+    virtual PetscErrorCode BuildBlockRight(){
+        SETERRQ(comm_, 1, "BuildBlockRight() is not implemented in the base class.\n");
+    }
+
+    virtual PetscErrorCode BuildSuperBlock(){
+        SETERRQ(comm_, 1, "BuildSuperBlock() is not implemented in the base class.\n");
+    }
+
+    /* Solve states */
+    PetscErrorCode solve_ground_state();
+
+    /* Miscellaneous functions */
+    PetscErrorCode MatPeekOperators();
+    PetscErrorCode MatSaveOperators();
 
 };
 
@@ -185,8 +207,16 @@ PetscErrorCode iDMRG::init(MPI_Comm comm=DMRG_DEFAULT_MPI_COMM)
 {
     PetscErrorCode  ierr = 0;
     comm_ = comm;
-    ierr = LeftBlock_.init(comm_); CHKERRQ(ierr);
-    ierr = RightBlock_.init(comm_); CHKERRQ(ierr);
+
+    /* Initialize block objects */
+    ierr = BlockLeft_.init(comm_); CHKERRQ(ierr);
+    ierr = BlockRight_.init(comm_); CHKERRQ(ierr);
+
+    /* Initialize single-site operators */
+    MatEyeCreate(comm, eye1_, 2);
+    MatSzCreate(comm, Sz1_);
+    MatSpCreate(comm, Sp1_);
+    MatTranspose(Sp1_, MAT_INITIAL_MATRIX, &Sm1_);
 
     return ierr;
 }
@@ -196,8 +226,65 @@ PetscErrorCode iDMRG::destroy()
 {
     PetscErrorCode  ierr = 0;
 
-    ierr = LeftBlock_.destroy(); CHKERRQ(ierr);
-    ierr = RightBlock_.destroy(); CHKERRQ(ierr);
+    /* Destroy block objects */
+    ierr = BlockLeft_.destroy(); CHKERRQ(ierr);
+    ierr = BlockRight_.destroy(); CHKERRQ(ierr);
+
+    /* Destroy single-site operators */
+    MatDestroy(&eye1_);
+    MatDestroy(&Sz1_);
+    MatDestroy(&Sp1_);
+    MatDestroy(&Sm1_);
+    MatDestroy(&superblock_H_); /* Do a check whether matrix is in the correct state */
+
+    eye1_ = NULL;
+    Sz1_ = NULL;
+    Sp1_ = NULL;
+    Sm1_ = NULL;
+    superblock_H_ = NULL;
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::MatPeekOperators()
+{
+    PetscErrorCode  ierr = 0;
+
+    PetscPrintf(comm_, "\nLeft Block Operators\nBlock Length = %d\n", BlockLeft_.length());
+    ierr = MatPeek(comm_, BlockLeft_.H(), "H (left)");
+    ierr = MatPeek(comm_, BlockLeft_.Sz(), "Sz (left)");
+    ierr = MatPeek(comm_, BlockLeft_.Sp(), "Sp (left)");
+
+    PetscPrintf(comm_, "\nRight Block Operators\nBlock Length = %d\n", BlockRight_.length());
+    ierr = MatPeek(comm_, BlockRight_.H(), "H (right)");
+    ierr = MatPeek(comm_, BlockRight_.Sz(), "Sz (right)");
+    ierr = MatPeek(comm_, BlockRight_.Sp(), "Sp (right)");
+
+    if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
+        PetscPrintf(comm_, "\nSuperblock\nBlock Length = %d\n", BlockLeft_.length() + BlockRight_.length());
+        ierr = MatPeek(comm_, superblock_H_, "H (superblock)"); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::MatSaveOperators()
+{
+    PetscErrorCode  ierr = 0;
+
+    ierr = MatWrite(comm_, BlockLeft_.H(), "data/H_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockLeft_.Sz(), "data/Sz_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockLeft_.Sp(), "data/Sp_left.dat"); CHKERRQ(ierr);
+
+    ierr = MatWrite(comm_, BlockRight_.H(), "data/H_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockRight_.Sz(), "data/Sz_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(comm_, BlockRight_.Sp(), "data/Sp_right.dat"); CHKERRQ(ierr);
+
+    if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
+        ierr = MatWrite(comm_, superblock_H_, "data/H_superblock.dat"); CHKERRQ(ierr);
+    }
 
     return ierr;
 }

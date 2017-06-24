@@ -11,9 +11,12 @@ import PetscBinaryIO as pet
 import numpy as np
 import scipy
 
+import matplotlib.pyplot as plt
+
+
 def run_and_check(nprocs):
     ## create empty test_kron folder
-    os.system('rm -rf test_kron; mkdir test_kron')
+    os.system('rm -rf test_kron; mkdir test_kron; make test_kron.x')
     ## run executable
     os.system('mpirun -np {} ./test_kron.x'.format(nprocs))
     io = pet.PetscBinaryIO()
@@ -24,6 +27,20 @@ def run_and_check(nprocs):
     with open('test_kron/C.dat','r') as fh:
         C = io.readBinaryFile(fh,'scipy.sparse')[0]
     spC = scipy.sparse.kron(A,B)
+
+    plt.imshow(A.toarray())
+    plt.savefig("test_kron/A.png")
+    plt.clf()
+    plt.imshow(B.toarray())
+    plt.savefig("test_kron/B.png")
+    plt.clf()
+    plt.imshow(C.toarray())
+    plt.savefig("test_kron/C.png")
+    plt.clf()
+    plt.imshow(spC.toarray())
+    plt.savefig("test_kron/spC.png")
+    plt.clf()
+
 
     return np.all(C.toarray() == spC.toarray())
 
