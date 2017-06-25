@@ -44,9 +44,9 @@ public:
     PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt);     /* explicit initializer */
     PetscErrorCode  destroy();                              /* explicit destructor */
 
-    const Mat  H()        {return H_;}
-    const Mat  Sz()       {return Sz_;}
-    const Mat  Sp()       {return Sp_;}
+    Mat  H()        {return H_;}
+    Mat  Sz()       {return Sz_;}
+    Mat  Sp()       {return Sp_;}
 
     PetscErrorCode  update_operators(Mat H_new, Mat Sz_new, Mat Sp_new);
 
@@ -296,7 +296,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = MatCreateVecs(superblock_H_,NULL,&gsv_r_); CHKERRQ(ierr);
     ierr = MatCreateVecs(superblock_H_,NULL,&gsv_i_); CHKERRQ(ierr);
 
-    PetscReal kr, ki;
+    PetscScalar kr, ki;
 
     if (nconv>0)
     {
