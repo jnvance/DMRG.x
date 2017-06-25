@@ -164,11 +164,20 @@ class iDMRG
 
 protected:
 
+    PetscInt    final_nsites_;
+    PetscInt    nsteps_;
+    PetscInt    iter_;
+
     DMRGBlock   BlockLeft_;
     DMRGBlock   BlockRight_;
 
     Mat         superblock_H_ = NULL;
     PetscBool   superblock_set_ = PETSC_FALSE;
+
+    /* Ground state */
+    PetscScalar *gse_r_list_, *gse_i_list_;
+    Vec         gsv_r_, gsv_i_;
+    PetscBool   groundstate_solved_ = PETSC_FALSE;
 
     MPI_Comm    comm_;
 
@@ -179,6 +188,9 @@ public:
 
     PetscErrorCode init(MPI_Comm);
     PetscErrorCode destroy();
+
+    PetscInt LengthBlockLeft(){ return BlockLeft_.length(); }
+    PetscInt LengthBlockRight(){ return BlockRight_.length(); }
 
     /* Block enlargement to be implemented in inherited classes */
     virtual PetscErrorCode BuildBlockLeft(){
@@ -194,7 +206,7 @@ public:
     }
 
     /* Solve states */
-    PetscErrorCode solve_ground_state();
+    PetscErrorCode SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error);
 
     /* Miscellaneous functions */
     PetscErrorCode MatPeekOperators();
@@ -242,6 +254,81 @@ PetscErrorCode iDMRG::destroy()
     Sp1_ = NULL;
     Sm1_ = NULL;
     superblock_H_ = NULL;
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error)
+{
+    PetscErrorCode ierr = 0;
+
+    /*
+        Checkpoint whether superblock Hamiltonian has been set and assembled
+    */
+    if (superblock_set_ == PETSC_FALSE)
+        SETERRQ(comm_, 1, "Superblock Hamiltonian has not been set with BuildSuperBlock().");
+
+    PetscBool assembled;
+    ierr = MatAssembled(superblock_H_, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(superblock_H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(superblock_H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    /*
+        Solve the eigensystem using SLEPC EPS
+    */
+
+    EPS eps;
+    ierr = EPSCreate(comm_, &eps); CHKERRQ(ierr);
+    ierr = EPSSetOperators(eps, superblock_H_, NULL); CHKERRQ(ierr);
+    ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
+    ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
+    ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
+
+    ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
+    ierr = EPSSolve(eps); CHKERRQ(ierr);
+
+    PetscInt nconv;
+    ierr = EPSGetConverged(eps,&nconv);CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_WORLD,"\nNumber of converged eigenpairs: %D\n",nconv);CHKERRQ(ierr);
+
+    ierr = MatCreateVecs(superblock_H_,NULL,&gsv_r_); CHKERRQ(ierr);
+    ierr = MatCreateVecs(superblock_H_,NULL,&gsv_i_); CHKERRQ(ierr);
+
+    PetscReal kr, ki;
+
+    if (nconv>0)
+    {
+        /*
+            Get converged eigenpairs: 0-th eigenvalue is stored in gse_r (real part) and
+            gse_i (imaginary part)
+        */
+        ierr = EPSGetEigenpair(eps, 0, &kr, &ki, gsv_r_, gsv_i_); CHKERRQ(ierr);
+        ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error);CHKERRQ(ierr);
+
+        #if defined(PETSC_USE_COMPLEX)
+            gse_r = PetscRealPart(kr);
+            gse_i = PetscImaginaryPart(ki);
+        #else
+            gse_r = kr;
+            gse_i = ki;
+        #endif
+
+        groundstate_solved_ = PETSC_TRUE;
+
+    }
+    else
+    {
+        PetscPrintf(PETSC_COMM_WORLD,"Warning: EPS did not converge.");
+    }
+
+    superblock_set_ = PETSC_FALSE;
+
+    MatDestroy(&superblock_H_);
+    VecDestroy(&gsv_r_);
+    VecDestroy(&gsv_i_);
 
     return ierr;
 }
