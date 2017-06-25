@@ -2,8 +2,6 @@ static char help[] =
     "Test Code for DMRG\n";
 
 #include <iostream>
-#include <slepceps.h>
-
 #include "dmrg.hpp"
 
 /*
@@ -210,25 +208,32 @@ int main(int argc, char **argv)
     iDMRG_Heisenberg heis;
     heis.init(comm);
 
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
+    ierr = PetscPrintf(PETSC_COMM_WORLD,
+            "   gs energy /site    ||Ax-kx||/||kx||\n"
+            "   ----------------- ------------------\n");CHKERRQ(ierr);
 
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
+    PetscReal gse_r, gse_i, error;
 
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
+    PetscInt superblocklength;
+    for (PetscInt i = 0; i < 4; ++i)
+    {
+        heis.BuildBlockRight();
+        heis.BuildBlockLeft();
+        heis.BuildSuperBlock();
+        heis.SolveGroundState(gse_r, gse_i, error);
 
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
+        superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
 
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
+        if (gse_i!=0.0) {
+            ierr = PetscPrintf(PETSC_COMM_WORLD," %9f%+9fi %12g\n",(double)gse_r,(double)gse_i,(double)error);CHKERRQ(ierr);
+        } else {
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %12f       %12g\n", (double)gse_r/((double)(superblocklength)),(double)(error)); CHKERRQ(ierr);
+        }
 
-    heis.BuildSuperBlock();
+    }
 
     heis.MatSaveOperators();
-    heis.MatPeekOperators();
+    // heis.MatPeekOperators();
     heis.destroy();
 
 
@@ -295,7 +300,6 @@ int main(int argc, char **argv)
     PetscScalar    kr,ki;
     PetscInt i;
     Vec xr, xi;
-
 
     ierr = MatCreateVecs(H_temp,NULL,&xr);CHKERRQ(ierr);
     ierr = MatCreateVecs(H_temp,NULL,&xi);CHKERRQ(ierr);
