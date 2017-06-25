@@ -292,7 +292,6 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 
     PetscInt nconv;
     ierr = EPSGetConverged(eps,&nconv);CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_WORLD,"\nNumber of converged eigenpairs: %D\n",nconv);CHKERRQ(ierr);
 
     ierr = MatCreateVecs(superblock_H_,NULL,&gsv_r_); CHKERRQ(ierr);
     ierr = MatCreateVecs(superblock_H_,NULL,&gsv_i_); CHKERRQ(ierr);
