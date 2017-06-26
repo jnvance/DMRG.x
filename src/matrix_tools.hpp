@@ -47,7 +47,7 @@ PetscErrorCode MatSzCreate(MPI_Comm comm, Mat& Sz)
 
 
 #undef __FUNCT__
-#define __FUNCT__ "MatSzCreate"
+#define __FUNCT__ "MatSpCreate"
 PetscErrorCode MatSpCreate(MPI_Comm comm, Mat& Sp)
 {
     PetscErrorCode  ierr = 0;
