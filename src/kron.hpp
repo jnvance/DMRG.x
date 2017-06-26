@@ -29,7 +29,7 @@
 #undef __FUNCT__
 #define __FUNCT__ "MatKronScaleAdd"
 PetscErrorCode
-MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
+MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -258,7 +258,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat A, const Mat B, Mat& C, const MPI
 
 
 PetscErrorCode
-MatKronAdd(const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
+MatKronAdd(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -269,7 +269,7 @@ MatKronAdd(const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
 
 
 PetscErrorCode
-MatKron(const Mat A, const Mat B, Mat& C, const MPI_Comm comm)
+MatKron(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
 {
     PetscErrorCode ierr = 0;
 
