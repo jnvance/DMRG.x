@@ -13,6 +13,10 @@ test_kron.x: test_kron.o chkopts
 	-${CLINKER} -o test_kron.x test_kron.o ${SLEPC_EPS_LIB}
 	${RM} test_kron.o
 
+test_reshape.x: test_reshape.o chkopts
+	-${CLINKER} -o test_reshape.x test_reshape.o ${SLEPC_EPS_LIB}
+	${RM} test_reshape.o
+
 flush: clean
 	${RM} ${TARGETS} *.dat *.dat.info *.x
 	${RM} -r test_kron
