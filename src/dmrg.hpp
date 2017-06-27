@@ -294,7 +294,13 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSGetConverged(eps,&nconv);CHKERRQ(ierr);
 
     ierr = MatCreateVecs(superblock_H_,NULL,&gsv_r_); CHKERRQ(ierr);
-    ierr = MatCreateVecs(superblock_H_,NULL,&gsv_i_); CHKERRQ(ierr);
+
+    /* TODO: Verify that this works */
+    #if defined(PETSC_USE_COMPLEX)
+        gsv_i_ = NULL;
+    #else
+        ierr = MatCreateVecs(superblock_H_,NULL,&gsv_i_); CHKERRQ(ierr);
+    #endif
 
     PetscScalar kr, ki;
 
@@ -303,18 +309,25 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         /*
             Get converged eigenpairs: 0-th eigenvalue is stored in gse_r (real part) and
             gse_i (imaginary part)
+
+            Note on EPSGetEigenpair():
+
+            If the eigenvalue is real, then eigi and Vi are set to zero. If PETSc is configured
+            with complex scalars the eigenvalue is stored directly in eigr (eigi is set to zero)
+            and the eigenvector in Vr (Vi is set to zero).
         */
-        ierr = EPSGetEigenpair(eps, 0, &kr, &ki, gsv_r_, gsv_i_); CHKERRQ(ierr);
-        ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error);CHKERRQ(ierr);
 
         #if defined(PETSC_USE_COMPLEX)
+            ierr = EPSGetEigenpair(eps, 0, &kr, &ki, gsv_r_, NULL); CHKERRQ(ierr);
             gse_r = PetscRealPart(kr);
-            gse_i = PetscImaginaryPart(ki);
+            gse_i = PetscImaginaryPart(kr);
         #else
+            ierr = EPSGetEigenpair(eps, 0, &kr, &ki, gsv_r_, gsv_i_); CHKERRQ(ierr);
             gse_r = kr;
             gse_i = ki;
         #endif
 
+        ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error);CHKERRQ(ierr);
         groundstate_solved_ = PETSC_TRUE;
 
     }
