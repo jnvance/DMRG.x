@@ -152,10 +152,10 @@ PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, c
     VecGetArray(subvec, &subvec_array);
 
 
-    PetscViewer fd = nullptr;
-    PetscPrintf(comm, "Sub Vector\n");
-    ierr = VecView(subvec, fd); CHKERRQ(ierr);
-    PetscViewerDestroy(&fd);
+    // PetscViewer fd = nullptr;
+    // PetscPrintf(comm, "Sub Vector\n");
+    // ierr = VecView(subvec, fd); CHKERRQ(ierr);
+    // PetscViewerDestroy(&fd);
 
 
     PetscMPIInt rank;
