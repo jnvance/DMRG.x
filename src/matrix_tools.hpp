@@ -105,4 +105,80 @@ PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename
     return ierr;
 }
 
+
+/* Reshape m*n vector to m x n array */
+#undef __FUNCT__
+#define __FUNCT__ "VecReshapeToMat"
+PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N)
+{
+
+    PetscErrorCode  ierr = 0;
+
+    /*
+        Get the size of vec and determine whether the size of the ouput matrix
+        is compatible with this size, i.e. vec_size == M*N
+     */
+    PetscInt    vec_size;
+    ierr = VecGetSize(vec, &vec_size); CHKERRQ(ierr);
+    if( M * N != vec_size ) SETERRQ(comm, 1, "Size mismatch");
+
+
+    PetscInt    mat_Istart, mat_Iend, mat_nrows;
+    PetscInt    subvec_Istart, subvec_Iend, subvec_nitems;
+    PetscInt*   vec_idx;
+    IS          vec_is;
+    Vec         subvec;
+
+    /*
+        TODO: Assign the data pointer beforehand, and dump vector
+    */
+    MatCreateDense(comm, PETSC_DECIDE, PETSC_DECIDE, M, N, NULL, &mat);
+
+    MatGetOwnershipRange(mat, &mat_Istart, &mat_Iend);
+
+    mat_nrows  = mat_Iend - mat_Istart;
+    subvec_Istart = mat_Istart*N;
+    subvec_Iend   = mat_Iend*N;
+    subvec_nitems = subvec_Iend - subvec_Istart;
+
+    PetscMalloc1(subvec_nitems, &vec_idx);
+    for (int i = 0; i < subvec_nitems; ++i)
+        vec_idx[i] = subvec_Istart + i;
+    ISCreateGeneral(comm, subvec_nitems, vec_idx, PETSC_OWN_POINTER, &vec_is); /* vec_idx is now owned by vec_is */
+
+    VecGetSubVector(vec, vec_is, &subvec);
+
+    PetscScalar*    subvec_array;
+    VecGetArray(subvec, &subvec_array);
+
+
+    PetscViewer fd = nullptr;
+    PetscPrintf(comm, "Sub Vector\n");
+    ierr = VecView(subvec, fd); CHKERRQ(ierr);
+    PetscViewerDestroy(&fd);
+
+
+    PetscMPIInt rank;
+    MPI_Comm_rank(comm, &rank);
+
+    PetscInt*   col_idx;
+    PetscMalloc1(N, &col_idx);
+    for (PetscInt i = 0; i < N; ++i) col_idx[i] = i;
+
+    for (PetscInt Irow = mat_Istart; Irow < mat_Iend; ++Irow)
+    {
+        MatSetValues(mat, 1, &Irow, N, col_idx, &subvec_array[(Irow-mat_Istart)*N], INSERT_VALUES);
+    }
+
+    PetscFree(col_idx);
+    VecRestoreSubVector(vec, vec_is, &subvec);
+    ISDestroy(&vec_is);
+
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
 #endif // __MATRIX_TOOLS_HPP__
