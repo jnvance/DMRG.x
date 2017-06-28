@@ -179,6 +179,9 @@ protected:
     Vec         gsv_r_, gsv_i_;
     PetscBool   groundstate_solved_ = PETSC_FALSE;
 
+    Mat         dm_left;
+    Mat         dm_right;
+
     MPI_Comm    comm_;
 
     /* Matrices of the single-site operators */
@@ -337,10 +340,8 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     }
 
     superblock_set_ = PETSC_FALSE;
-
     MatDestroy(&superblock_H_);
-    VecDestroy(&gsv_r_);
-    VecDestroy(&gsv_i_);
+    EPSDestroy(&eps);
 
     return ierr;
 }
