@@ -209,8 +209,8 @@ int main(int argc, char **argv)
     heis.init(comm);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
-            "   nsites   gs energy /site    ||Ax-kx||/||kx||\n"
-            "  -------- ----------------- ------------------\n");CHKERRQ(ierr);
+            "   nsites   gs energy   gs energy /site    ||Ax-kx||/||kx||\n"
+            "  -------- ----------- ----------------- ------------------\n");CHKERRQ(ierr);
 
     PetscReal gse_r, gse_i, error;
 
@@ -220,6 +220,7 @@ int main(int argc, char **argv)
         heis.BuildBlockRight();
         heis.BuildBlockLeft();
         heis.BuildSuperBlock();
+        heis.MatSaveOperators();
         heis.SolveGroundState(gse_r, gse_i, error);
 
         superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
@@ -227,12 +228,12 @@ int main(int argc, char **argv)
         if (gse_i!=0.0) {
             ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n", superblocklength, (double)gse_r/((double)(superblocklength)), (double)gse_i/((double)(superblocklength)),(double)error);CHKERRQ(ierr);
         } else {
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d    %12f       %12g\n", superblocklength, (double)gse_r/((double)(superblocklength)),(double)(error)); CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d%12f    %12f       %12g\n", superblocklength, (double)gse_r, (double)gse_r/((double)(superblocklength)),(double)(error)); CHKERRQ(ierr);
         }
 
     }
 
-    heis.MatSaveOperators();
+    // heis.MatSaveOperators();
     // heis.MatPeekOperators();
     heis.destroy();
 
