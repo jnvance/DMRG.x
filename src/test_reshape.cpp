@@ -3,7 +3,7 @@ static char help[] =
 
 #include <iostream>
 #include <slepceps.h>
-#include "matrix_tools.hpp"
+#include "linalg_tools.hpp"
 
 #define CHK(FUNCTION) ierr = FUNCTION; CHKERRQ(ierr);
 

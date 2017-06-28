@@ -11,7 +11,7 @@
 #include <slepceps.h>
 #include <petscmat.h>
 #include "kron.hpp"
-#include "matrix_tools.hpp"
+#include "linalg_tools.hpp"
 
 
 #define     DMRGBLOCK_DEFAULT_LENGTH        1
