@@ -106,6 +106,43 @@ PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "VecWrite"
+PetscErrorCode VecWrite(const MPI_Comm& comm, const Vec& vec, const char* filename)
+{
+    PetscErrorCode  ierr = 0;
+
+    PetscViewer writer = nullptr;
+    // MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
+    // MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
+    PetscViewerBinaryOpen(comm, filename, FILE_MODE_WRITE, &writer);
+    VecView(vec, writer);
+    PetscViewerDestroy(&writer);
+    writer = nullptr;
+
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "VecPeek"
+PetscErrorCode VecPeek(const MPI_Comm& comm, const Vec& vec, const char* label)
+{
+    PetscErrorCode  ierr = 0;
+
+    // PetscViewer viewer = nullptr;
+    // MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
+    // MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
+    // PetscViewerBinaryOpen(comm, filename, FILE_MODE_WRITE, &viewer);
+    ierr = PetscPrintf(comm, "\n%s\n", label); CHKERRQ(ierr);
+    ierr = VecView(vec, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
+    // PetscViewerDestroy(&viewer);
+    // viewer = nullptr;
+
+    return ierr;
+}
+
+
 /* Reshape m*n vector to m x n array */
 #undef __FUNCT__
 #define __FUNCT__ "VecReshapeToMat"
