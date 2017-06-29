@@ -16,9 +16,9 @@ public:
         Overload base class implementation
         with the Heisenberg Hamiltonian
     */
-    PetscErrorCode BuildBlockLeft();
-    PetscErrorCode BuildBlockRight();
-    PetscErrorCode BuildSuperBlock();
+    PetscErrorCode BuildBlockLeft() final;
+    PetscErrorCode BuildBlockRight() final;
+    PetscErrorCode BuildSuperBlock() final;
 
 };
 

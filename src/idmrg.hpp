@@ -42,17 +42,9 @@ public:
     PetscInt LengthBlockRight(){ return BlockRight_.length(); }
 
     /* Block enlargement to be implemented in inherited classes */
-    virtual PetscErrorCode BuildBlockLeft(){
-        SETERRQ(comm_, 1, "BuildBlockLeft() is not implemented in the base class.\n");
-    }
-
-    virtual PetscErrorCode BuildBlockRight(){
-        SETERRQ(comm_, 1, "BuildBlockRight() is not implemented in the base class.\n");
-    }
-
-    virtual PetscErrorCode BuildSuperBlock(){
-        SETERRQ(comm_, 1, "BuildSuperBlock() is not implemented in the base class.\n");
-    }
+    virtual PetscErrorCode BuildBlockLeft()=0;
+    virtual PetscErrorCode BuildBlockRight()=0;
+    virtual PetscErrorCode BuildSuperBlock()=0;
 
     /* Solve states */
     PetscErrorCode SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error);
