@@ -217,7 +217,7 @@ int main(int argc, char **argv)
     double gse_site_theor =  -0.4431471805599;
 
     PetscInt superblocklength;
-    for (PetscInt i = 0; i < 5; ++i)
+    for (PetscInt i = 0; i < 8; ++i)
     {
         heis.BuildBlockRight();
         heis.BuildBlockLeft();
@@ -231,8 +231,8 @@ int main(int argc, char **argv)
             // TODO: Implement error printing for complex values
             ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n", superblocklength, (double)gse_r/((double)(superblocklength)), (double)gse_i/((double)(superblocklength)),(double)error);CHKERRQ(ierr);
         } else {
-            PetscScalar gse_site  = (double)gse_r/((double)(superblocklength));
-            PetscScalar error_rel = (gse_site - gse_site_theor) / gse_site_theor;
+            double gse_site  = (double)gse_r/((double)(superblocklength));
+            double error_rel = (gse_site - gse_site_theor) / gse_site_theor;
             ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d%12f    %12f       %9f    %12g\n", superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
         }
 
