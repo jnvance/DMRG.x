@@ -17,7 +17,7 @@ protected:
     DMRGBlock   BlockLeft_;
     DMRGBlock   BlockRight_;
 
-    Mat         superblock_H_ = NULL;
+    Mat         superblock_H_ = nullptr;
     PetscBool   superblock_set_ = PETSC_FALSE;
 
     /* Ground state */
@@ -25,8 +25,8 @@ protected:
     Vec         gsv_r_, gsv_i_;
     PetscBool   groundstate_solved_ = PETSC_FALSE;
 
-    Mat         dm_left;
-    Mat         dm_right;
+    Mat         dm_left = nullptr;
+    Mat         dm_right = nullptr;
 
     MPI_Comm    comm_;
 
@@ -48,6 +48,10 @@ public:
 
     /* Solve states */
     PetscErrorCode SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error);
+
+    /* From ground state, construct the left and right reduced density matrices */
+    PetscErrorCode BuildReducedDensityMatrices();
+
 
     /* Miscellaneous functions */
     PetscErrorCode MatPeekOperators();

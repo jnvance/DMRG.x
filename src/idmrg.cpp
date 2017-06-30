@@ -116,16 +116,53 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 
         ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error);CHKERRQ(ierr);
         groundstate_solved_ = PETSC_TRUE;
-
+        superblock_set_ = PETSC_FALSE;
     }
     else
     {
         PetscPrintf(PETSC_COMM_WORLD,"Warning: EPS did not converge.");
     }
 
-    superblock_set_ = PETSC_FALSE;
     MatDestroy(&superblock_H_);
     EPSDestroy(&eps);
+
+    return ierr;
+}
+
+
+/* NOTE: Routine assumes ground state eigenvector is purely real */
+PetscErrorCode iDMRG::BuildReducedDensityMatrices()
+{
+    PetscErrorCode  ierr = 0;
+
+    if(groundstate_solved_ == PETSC_FALSE) SETERRQ(comm_, 1, "Ground state not yet solved.");
+
+    PetscInt    size_left, size_right;
+    Mat         gsv_mat, gsv_mat_hc;
+
+    ierr = MatGetSize(BlockLeft_.H(), &size_left, NULL); CHKERRQ(ierr);
+    ierr = MatGetSize(BlockRight_.H(), &size_right, NULL); CHKERRQ(ierr);
+
+    /* Reshape the vector to a matrix of size (size_left, size_right) */
+    VecReshapeToMat(comm_, gsv_r_, gsv_mat, size_left, size_right );
+
+    /* Obtain the conjugate transpose */
+    // MatCreateHermitianTranspose(gsv_mat, &gsv_mat_hc);
+    // MatCreateTranspose(gsv_mat, &gsv_mat_hc);
+    MatHermitianTranspose(gsv_mat, MAT_INITIAL_MATRIX, &gsv_mat_hc);
+
+
+    /* Trace out the other block (fastest-changing index in gsv_mat) */
+    // MatMatMult(gsv_mat, gsv_mat_hc, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &dm_left);
+
+
+    // MatPeek(comm_, gsv_mat, "gsv_mat");
+    // MatPeek(comm_, gsv_mat_hc, "gsv_mat_hc");
+
+    if (dm_left) MatDestroy(&dm_left);
+    if (dm_right) MatDestroy(&dm_right);
+    if (gsv_mat) MatDestroy(&gsv_mat);
+    if (gsv_mat_hc) MatDestroy(&gsv_mat_hc);
 
     return ierr;
 }
