@@ -17,7 +17,7 @@ test_reshape.x: test_reshape.o linalg_tools.o chkopts
 	-${CLINKER} -o test_reshape.x test_reshape.o linalg_tools.o ${SLEPC_EPS_LIB}
 	${RM} test_reshape.o
 
-tests:
+tests: test_dmrg.x test_kron.x test_reshape.x
 	mpirun -np 2 ./test_dmrg.x
 	python test_kron.py
 	mpirun -np 2 ./test_reshape.x
