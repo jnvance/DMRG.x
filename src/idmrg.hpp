@@ -21,8 +21,8 @@ protected:
     PetscBool   superblock_set_ = PETSC_FALSE;
 
     /* Ground state */
-    PetscScalar *gse_r_list_, *gse_i_list_;
-    Vec         gsv_r_, gsv_i_;
+    Vec         gsv_r_ = nullptr;
+    Vec         gsv_i_ = nullptr;
     PetscBool   groundstate_solved_ = PETSC_FALSE;
 
     Mat         dm_left = nullptr;

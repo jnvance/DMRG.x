@@ -80,6 +80,8 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     PetscInt nconv;
     ierr = EPSGetConverged(eps,&nconv);CHKERRQ(ierr);
 
+    if (gsv_r_) VecDestroy(&gsv_r_);
+    if (gsv_i_) VecDestroy(&gsv_i_);
     ierr = MatCreateVecs(superblock_H_,NULL,&gsv_r_); CHKERRQ(ierr);
 
     /* TODO: Verify that this works */
@@ -137,19 +139,19 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 
     if(groundstate_solved_ == PETSC_FALSE) SETERRQ(comm_, 1, "Ground state not yet solved.");
 
-    PetscInt    size_left, size_right;
-    Mat         gsv_mat, gsv_mat_hc;
+    PetscInt    size_left, size_right, size_vec;
+    // Mat         gsv_mat, gsv_mat_hc;
 
     ierr = MatGetSize(BlockLeft_.H(), &size_left, NULL); CHKERRQ(ierr);
     ierr = MatGetSize(BlockRight_.H(), &size_right, NULL); CHKERRQ(ierr);
 
     /* Reshape the vector to a matrix of size (size_left, size_right) */
-    VecReshapeToMat(comm_, gsv_r_, gsv_mat, size_left, size_right );
+    // VecReshapeToMat(comm_, gsv_r_, gsv_mat, size_left, size_right );
 
     /* Obtain the conjugate transpose */
     // MatCreateHermitianTranspose(gsv_mat, &gsv_mat_hc);
     // MatCreateTranspose(gsv_mat, &gsv_mat_hc);
-    MatHermitianTranspose(gsv_mat, MAT_INITIAL_MATRIX, &gsv_mat_hc);
+    // MatHermitianTranspose(gsv_mat, MAT_INITIAL_MATRIX, &gsv_mat_hc);
 
 
     /* Trace out the other block (fastest-changing index in gsv_mat) */
@@ -159,10 +161,21 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     // MatPeek(comm_, gsv_mat, "gsv_mat");
     // MatPeek(comm_, gsv_mat_hc, "gsv_mat_hc");
 
-    if (dm_left) MatDestroy(&dm_left);
-    if (dm_right) MatDestroy(&dm_right);
-    if (gsv_mat) MatDestroy(&gsv_mat);
-    if (gsv_mat_hc) MatDestroy(&gsv_mat_hc);
+    /* Brute-force implementation */
+    /* Collect entire groundstate vector to all processes */
+
+
+    #if defined(PETSC_USE_COMPLEX)
+
+    #else
+        SETERRQ(comm_, 1, "Not implemented for real scalars.");
+    #endif
+
+
+    if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
+    if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
+    if (dm_left) MatDestroy(&dm_left); dm_left = nullptr;
+    if (dm_right) MatDestroy(&dm_right); dm_right = nullptr;
 
     return ierr;
 }

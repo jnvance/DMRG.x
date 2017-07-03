@@ -83,6 +83,9 @@ PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label)
     PetscPrintf(comm, "\n%s\n", label);
     ierr = MatView(mat, fd); CHKERRQ(ierr);
 
+    PetscViewerDestroy(&fd);
+    fd = nullptr;
+
     return ierr;
 }
 
@@ -212,6 +215,29 @@ PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, c
 
     ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+/* Reshape m*n vector to m x n array */
+#undef __FUNCT__
+#define __FUNCT__ "VecToMatMultHermitianTranspose"
+PetscErrorCode VecToMatMultHermitianTranspose(const MPI_Comm& comm, const Vec& vec_r, const Vec& vec_i, Mat& mat, const PetscInt M, const PetscInt N, const PetscBool )
+{
+
+    PetscErrorCode  ierr = 0;
+
+
+    /* Brute-force implementation */
+    /* Collect entire groundstate vector to all processes */
+
+
+    #if defined(PETSC_USE_COMPLEX)
+
+    #else
+        SETERRQ(comm, 1, "Not implemented for real scalars.");
+    #endif
 
     return ierr;
 }
