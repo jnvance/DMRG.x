@@ -24,6 +24,8 @@ tests: test_dmrg.x test_kron.x test_reshape.x
 
 flush: clean
 	${RM} ${TARGETS} *.dat *.dat.info *.x
-	${RM} -r test_kron
+	${RM} -rf test_kron/*
+	${RM} -rf test_reshape/*
+	${RM} -rf data/*
 
 include ${SLEPC_DIR}/lib/slepc/conf/slepc_common
