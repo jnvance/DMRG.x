@@ -1,7 +1,7 @@
 
 TARGETS = test_dmrg.x test_kron.x test_reshape.x
 
-CXXFLAGS=-O3 -std=c++11
+CXXFLAGS=-O3 -std=c++11 -D__TESTING
 
 all: ${TARGETS}
 

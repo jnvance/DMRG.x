@@ -139,7 +139,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 
     if(groundstate_solved_ == PETSC_FALSE) SETERRQ(comm_, 1, "Ground state not yet solved.");
 
-    PetscInt    size_left, size_right, size_vec;
+    PetscInt    size_left, size_right;
     // Mat         gsv_mat, gsv_mat_hc;
 
     ierr = MatGetSize(BlockLeft_.H(), &size_left, NULL); CHKERRQ(ierr);
@@ -166,11 +166,15 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 
 
     #if defined(PETSC_USE_COMPLEX)
-
+        ierr = VecToMatMultHC(comm_, gsv_r_, nullptr, dm_left, size_left, size_right, PETSC_TRUE); CHKERRQ(ierr);
     #else
         SETERRQ(comm_, 1, "Not implemented for real scalars.");
     #endif
 
+    #ifdef __TESTING
+        MatWrite(comm_, dm_left, "data/dm_left.dat");
+        VecWrite(comm_, gsv_r_, "data/gsv_r_.dat");
+    #endif
 
     if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
     if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
