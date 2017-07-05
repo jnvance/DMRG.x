@@ -96,18 +96,79 @@ PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename
     PetscErrorCode  ierr = 0;
 
     PetscViewer writer = nullptr;
+
     MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
     MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
-    if(comm==PETSC_COMM_SELF){
-        char filename_[80]; PetscMPIInt rank; MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+
+    PetscMPIInt rank;
+    MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+
+    PetscBool flg;
+    ierr = PetscObjectTypeCompare((PetscObject)mat,MATMPIDENSE,&flg);CHKERRQ(ierr);
+
+    char filename_[80];
+    if(comm==PETSC_COMM_SELF || flg==PETSC_TRUE){
         sprintf(filename_, "%s.%d", filename, rank);
-        PetscViewerBinaryOpen(comm, filename_, FILE_MODE_WRITE, &writer);
     }
     else {
-        PetscViewerBinaryOpen(comm, filename, FILE_MODE_WRITE, &writer);
+        sprintf(filename_, "%s", filename);
     }
-    MatView(mat, writer);
-    PetscViewerDestroy(&writer);
+
+    if(flg==PETSC_TRUE) {
+
+        #ifdef __IMPLEMENTATION01
+        /*
+            Get indices for submatrix, with process 0 taking all elements
+        */
+        PetscInt M, N;
+        Mat submat = nullptr, submat_loc = nullptr;
+        MatGetSize(mat, &M, &N);
+        if(rank!=0){ M = 0; N = 0; }
+        PetscInt id_rows[M], id_cols[N];
+        for (PetscInt Irow = 0; Irow < M; ++Irow)
+            id_rows[Irow] = Irow;
+        for (PetscInt Icol = 0; Icol < N; ++Icol)
+            id_cols[Icol] = Icol;
+        IS isrow, iscol;
+
+        ISCreateGeneral(comm, M, id_rows, PETSC_COPY_VALUES, &isrow);
+        ISCreateGeneral(comm, N, id_cols, PETSC_COPY_VALUES, &iscol);
+        MatGetSubMatrix(mat, isrow, iscol, MAT_INITIAL_MATRIX, &submat);
+
+        if(rank==0)
+        {
+            MatDenseGetLocalMatrix(submat, &submat_loc);
+            PetscViewerBinaryOpen(PETSC_COMM_SELF, filename_, FILE_MODE_WRITE, &writer);
+            MatView(submat_loc, writer);
+        }
+        if(submat) MatDestroy(&submat);
+
+        #else
+
+        Mat mat_loc;
+        MatDenseGetLocalMatrix(mat, &mat_loc);
+        PetscViewerBinaryOpen(PETSC_COMM_SELF, filename_, FILE_MODE_WRITE, &writer);
+        MatView(mat_loc, writer);
+
+        /*
+            Read in python using:
+
+                M = []
+                for i in range(4):
+                    with open('<filename>.'+str(i),'r') as fh:
+                        A = io.readBinaryFile(fh,complexscalars=True,mattype='dense')[0]
+                    M.append(A.copy())
+                M = np.vstack(M)
+        */
+        #endif
+    }
+    else
+    {
+        PetscViewerBinaryOpen(comm, filename_, FILE_MODE_WRITE, &writer);
+        MatView(mat, writer);
+    }
+
+    if(writer) PetscViewerDestroy(&writer);
     writer = nullptr;
 
     return ierr;
@@ -154,7 +215,7 @@ PetscErrorCode VecPeek(const MPI_Comm& comm, const Vec& vec, const char* label)
 /* Reshape m*n vector to m x n array */
 #undef __FUNCT__
 #define __FUNCT__ "VecReshapeToMat"
-PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N, const PetscBool mat_is_local = PETSC_FALSE)
+PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N, const PetscBool mat_is_local)
 {
 
     PetscErrorCode  ierr = 0;
@@ -258,7 +319,18 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
         Collect entire vector into sequential matrices residing in each process
     */
     Mat gsv_mat_seq = nullptr;
-    // ierr = VecReshapeToLocalMat(comm, vec_r, gsv_mat_seq, M, N ); CHKERRQ(ierr);
+    Mat gsv_mat_hc  = nullptr;
+
+    #ifdef __BUILD_SEQUENTIAL
+        ierr = VecReshapeToMat(comm, vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
+        ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc);
+        ierr = MatMatMult(gsv_mat_seq, gsv_mat_hc, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &mat); CHKERRQ(ierr);
+        if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
+        if(gsv_mat_hc ) {ierr = MatDestroy(&gsv_mat_hc ); CHKERRQ(ierr);}
+        return ierr;
+    #endif // __BUILD_SEQUENTIAL
+
+
     ierr = VecReshapeToLocalMat(comm, vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
 
     /*
@@ -305,13 +377,12 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
     ierr = MatDenseRestoreArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
     ierr = MatDenseRestoreArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
 
-    Mat gsv_mat_hc;
     ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc); CHKERRQ(ierr);
 
-    MatMatMult(gsv_mat_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_local);
+    ierr = MatMatMult(gsv_mat_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_local); CHKERRQ(ierr);
 
-    if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
     if(gsv_mat_loc) {ierr = MatDestroy(&gsv_mat_loc); CHKERRQ(ierr);}
+    if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
     if(gsv_mat_hc ) {ierr = MatDestroy(&gsv_mat_hc ); CHKERRQ(ierr);}
 
     return ierr;

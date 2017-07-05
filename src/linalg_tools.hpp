@@ -30,7 +30,7 @@ PetscErrorCode VecPeek(const MPI_Comm& comm, const Vec& vec, const char* label);
  */
 PetscErrorCode VecReshapeToMat(
     const MPI_Comm& comm, const Vec& vec, Mat& mat,
-    const PetscInt M, const PetscInt N, const PetscBool mat_is_local);
+    const PetscInt M, const PetscInt N, const PetscBool mat_is_local = PETSC_FALSE);
 
 
 /**
