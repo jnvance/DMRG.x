@@ -207,6 +207,17 @@ int main(int argc, char **argv)
 
     iDMRG_Heisenberg heis;
     heis.init(comm);
+    /*
+        Determine from options how many times the left and right blocks are grown
+        before solving for the ground state of the superblock Hamiltonian
+    */
+    PetscInt n_pre = 2;
+    PetscInt n_solve = 3;
+
+    ierr = PetscOptionsGetInt(NULL,NULL,"-pre",&n_pre,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetInt(NULL,NULL,"-solve",&n_solve,NULL); CHKERRQ(ierr);
+
+    PetscPrintf(comm, "pre: %-3d\nsolve: %-3d \n\n", n_pre, n_solve);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   nsites   gs energy   gs energy /site    rel error      ||Ax-kx||/||kx||\n"
@@ -216,13 +227,13 @@ int main(int argc, char **argv)
 
     double gse_site_theor =  -0.4431471805599;
 
-    for (PetscInt i = 0; i < 3; ++i){
+    for (PetscInt i = 0; i < n_pre; ++i){
         heis.BuildBlockLeft();
         heis.BuildBlockRight();
     }
 
     PetscInt superblocklength;
-    for (PetscInt i = 0; i < 4; ++i)
+    for (PetscInt i = 0; i < n_solve; ++i)
     {
         heis.BuildBlockRight();
         heis.BuildBlockLeft();
