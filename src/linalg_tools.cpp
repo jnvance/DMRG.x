@@ -290,7 +290,38 @@ PetscErrorCode VecReshapeToLocalMat(const MPI_Comm& comm, const Vec& vec,
     Mat& mat, const PetscInt M, const PetscInt N)
 {
     PetscErrorCode ierr = 0;
-    ierr = VecReshapeToMat(comm, vec, mat, M, N, PETSC_TRUE); CHKERRQ(ierr);
+
+    Vec         vec_seq;
+    VecScatter  ctx;
+    PetscScalar *vec_vals;
+    PetscInt    *col_idx;
+
+    ierr = VecScatterCreateToAll(vec, &ctx, &vec_seq); CHKERRQ(ierr);
+    ierr = VecScatterBegin(ctx, vec, vec_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+    ierr = VecScatterEnd(ctx, vec, vec_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+    ierr = VecGetArray(vec_seq, &vec_vals); CHKERRQ(ierr);
+
+    ierr = MatCreateSeqDense(PETSC_COMM_SELF, M, N, NULL, &mat); CHKERRQ(ierr);
+
+    ierr = PetscMalloc1(N, &col_idx); CHKERRQ(ierr);
+
+    for (PetscInt i = 0; i < N; ++i)
+        col_idx[i] = i;
+
+    for (PetscInt Irow = 0; Irow < M; ++Irow)
+    {
+        ierr = MatSetValues(mat, 1, &Irow, N, col_idx, &vec_vals[Irow*N], INSERT_VALUES);
+        CHKERRQ(ierr);
+    }
+    ierr = PetscFree(col_idx); CHKERRQ(ierr);
+
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    ierr = VecRestoreArray(vec_seq, &vec_vals); CHKERRQ(ierr);
+    ierr = VecScatterDestroy(&ctx); CHKERRQ(ierr);
+    ierr = VecDestroy(&vec_seq); CHKERRQ(ierr);
+
     return ierr;
 };
 
