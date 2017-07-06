@@ -375,42 +375,48 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
         SETERRQ(comm, 1, "Hermitian conjugate on left matrix not yet supported.");
         mat_dim = N;
     }
-
     ierr = MatCreateDense(comm, PETSC_DECIDE, PETSC_DECIDE, mat_dim, mat_dim, NULL, &mat); CHKERRQ(ierr);
-
-    /*
-        Create a matrix object that handles the local portion of mat
-    */
-    Mat mat_local;
-    MatDenseGetLocalMatrix(mat, &mat_local);
     /*
         Get ownership info
     */
     PetscInt    Istart, Iend, nrows;
     ierr = MatGetOwnershipRange(mat, &Istart, &Iend); CHKERRQ(ierr);
     nrows = Iend - Istart;
+
+    Mat gsv_mat_loc = nullptr;
+    Mat mat_local = nullptr;
+
     /*
-        Create a copy of the portion of gsv_mat that mimics the local row partition of mat
+        Some processes may not have been assigned any rows.
+        Otherwise, "Intel MKL ERROR: Parameter 8 was incorrect on entry to ZGEMM ." is produced
     */
-    Mat gsv_mat_loc;
-    ierr = MatCreateSeqDense(PETSC_COMM_SELF, nrows, N, NULL, &gsv_mat_loc); CHKERRQ(ierr);
-    /*
-        Fill gsv_mat_loc with column slices of gsv_mat_seq that belong to the local row partition of mat
-    */
-    PetscScalar *vals_gsv_mat_seq, *vals_gsv_mat_loc;
-    ierr = MatDenseGetArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
-    ierr = MatDenseGetArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
-    for (PetscInt Icol = 0; Icol < N; ++Icol)
+    if(nrows > 0)
     {
-        ierr = PetscMemcpy(&vals_gsv_mat_loc[Icol*nrows],&vals_gsv_mat_seq[Istart+Icol*M], nrows*sizeof(PetscScalar));
-        CHKERRQ(ierr);
+        /*
+            Create a matrix object that handles the local portion of mat
+        */
+        ierr = MatDenseGetLocalMatrix(mat, &mat_local); CHKERRQ(ierr);
+        /*
+            Create a copy of the portion of gsv_mat that mimics the local row partition of mat
+        */
+        ierr = MatCreateSeqDense(PETSC_COMM_SELF, nrows, N, NULL, &gsv_mat_loc); CHKERRQ(ierr);
+        /*
+            Fill gsv_mat_loc with column slices of gsv_mat_seq that belong to the local row partition of mat
+        */
+        PetscScalar *vals_gsv_mat_seq, *vals_gsv_mat_loc;
+        ierr = MatDenseGetArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
+        ierr = MatDenseGetArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
+        for (PetscInt Icol = 0; Icol < N; ++Icol)
+        {
+            ierr = PetscMemcpy(&vals_gsv_mat_loc[Icol*nrows],&vals_gsv_mat_seq[Istart+Icol*M], nrows*sizeof(PetscScalar));
+            CHKERRQ(ierr);
+        }
+        ierr = MatDenseRestoreArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
+        ierr = MatDenseRestoreArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
+
+        ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc); CHKERRQ(ierr);
+        ierr = MatMatMult(gsv_mat_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_local); CHKERRQ(ierr);
     }
-    ierr = MatDenseRestoreArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
-    ierr = MatDenseRestoreArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
-
-    ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc); CHKERRQ(ierr);
-
-    ierr = MatMatMult(gsv_mat_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_local); CHKERRQ(ierr);
 
     if(gsv_mat_loc) {ierr = MatDestroy(&gsv_mat_loc); CHKERRQ(ierr);}
     if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
