@@ -216,10 +216,13 @@ int main(int argc, char **argv)
 
     double gse_site_theor =  -0.4431471805599;
 
-    heis.BuildBlockLeft();
+    for (PetscInt i = 0; i < 3; ++i){
+        heis.BuildBlockLeft();
+        heis.BuildBlockRight();
+    }
 
     PetscInt superblocklength;
-    for (PetscInt i = 0; i < 2; ++i)
+    for (PetscInt i = 0; i < 4; ++i)
     {
         heis.BuildBlockRight();
         heis.BuildBlockLeft();
