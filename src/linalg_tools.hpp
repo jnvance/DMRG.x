@@ -4,29 +4,127 @@
 #include <slepceps.h>
 
 
+/**
+    @defgroup   linalg_tools    Linear Algebra Tools
+
+    @brief      Collection of useful functions for the input, output and manipulation of
+                Petsc Vector and Matrix objects.
+
+    In the following functions, the input parameter **comm** is the MPI communicator in which the matrices and vectors reside.
+    For distributed matrices this is usually `PETSC_COMM_WORLD`, and for sequential matrices this is `PETSC_COMM_SELF`.
+
+    TODO:
+    - For `Mat___Create` operations, if the matrices have been initialized, destroy them.
+
+
+    @addtogroup linalg_tools
+    @{
+ */
+
+
+/**
+    Creates an identity matrix of size `dim`\f$\times\f$`dim`.
+
+    @param[in]   comm   MPI communicator
+    @param[out]  eye    Output matrix
+    @param[in]   dim    dimensions of the identity matrix
+
+ */
 PetscErrorCode MatEyeCreate(MPI_Comm comm, Mat& eye, PetscInt dim);
 
 
+/**
+    Creates the two-by-two matrix representation of a single-site \f$ S_z \f$ operator.
+
+    @param[in]   comm   MPI communicator
+    @param[out]  Sz     Output matrix
+
+    The operator has the matrix form
+    \f[
+        S_z =   \frac{1}{2}
+                \begin{pmatrix}
+                    1 & 0  \\
+                    0 & -1
+                \end{pmatrix}
+    \f]
+ */
 PetscErrorCode MatSzCreate(MPI_Comm comm, Mat& Sz);
 
 
+/**
+    Creates the two-by-two matrix representation of a single-site \f$ S_+ \f$ operator.
+
+    @param[in]   comm   MPI communicator
+    @param[out]  Sp     Output matrix
+
+    The operator has the matrix form
+    \f[
+        S_+ =   \begin{pmatrix}
+                    0 & 1  \\
+                    0 & 0
+                \end{pmatrix}
+    \f]
+
+    The \f$ S_- \f$ operator may be obtained as the transpose of this matrix.
+ */
 PetscErrorCode MatSpCreate(MPI_Comm comm, Mat& Sp);
 
 
+/**
+    Prints a matrix to standard output
+
+    @param[in]   comm   MPI communicator
+    @param[in]   mat    Input matrix
+    @param[in]   label  Label or title of the matrix
+ */
 PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label);
 
 
+/**
+    Saves a matrix to file
+
+    @param[in]   comm       MPI communicator
+    @param[in]   mat        Input matrix
+    @param[in]   filename   filename/location of output file
+ */
 PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename);
 
 
-PetscErrorCode VecWrite(const MPI_Comm& comm, const Vec& vec, const char* filename);
+/**
+    Prints a vector to standard output
 
-
+    @param[in]   comm   MPI communicator
+    @param[in]   vec    Input vector
+    @param[in]   label  Label or title of the vector
+ */
 PetscErrorCode VecPeek(const MPI_Comm& comm, const Vec& vec, const char* label);
 
 
 /**
- * Reshape m*n vector to m x n array
+    Saves a vector to file
+
+    @param[in]   comm       MPI communicator
+    @param[in]   vec        Input vector
+    @param[in]   filename   filename/location of output file
+ */
+PetscErrorCode VecWrite(const MPI_Comm& comm, const Vec& vec, const char* filename);
+
+
+
+/**
+    Reshape an \f$ (M \cdot N) \f$-length vector to an \f$ M \times N \f$ matrix
+
+    @param[in]   comm           MPI communicator
+    @param[in]   vec            Input vector
+    @param[out]  mat            Output matrix
+    @param[in]   M              number of rows of output matrix
+    @param[in]   N              number of columns of output matrix
+    @param[in]   mat_is_local   whether to create a local sequential matrix
+
+    Using this function with `mat_is_local = PETSC_TRUE` to create a sequential matrix is inefficient.
+    Use VecReshapeToLocalMat() instead.
+
+
  */
 PetscErrorCode VecReshapeToMat(
     const MPI_Comm& comm, const Vec& vec, Mat& mat,
@@ -34,23 +132,29 @@ PetscErrorCode VecReshapeToMat(
 
 
 /**
- * Reshape m*n vector to m x n array and store array locally
+    Reshape an \f$ (M \cdot N) \f$-length distributed vector to an \f$ M \times N \f$ sequential
+    matrix with a full copy on each MPI process.
  */
 PetscErrorCode VecReshapeToLocalMat(
     const MPI_Comm& comm, const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N);
 
 
 /**
- *  Reshapes a vector into a matrix and multiplies the matrix to its own Hermitian transpose
- *
- *  This function reshapes the vector vec = vec_r + i*vec_i into matrix A with shape (M,N).
- *  With transpose_right = PETSC_TRUE, the output is mat = A * A^dag with shape (M,M), where dag is
- *  the Hermitian conjugate. Otherwise, mat = A^dag * A with shape (N,N)
- *
- *  Note: This function is implemented only for complex scalars so that vec_i is ignored.
+    Reshapes a vector into a matrix and multiplies the matrix to its own Hermitian conjugate.
+
+    This function reshapes the \f$ M \cdot N \f$-length vector
+    \f$\mathsf{vec} = \mathsf{vec}_r + i\mathsf{vec}_i \f$ into matrix A with shape \f$ M \times N \f$ and calculates
+    its Hermitian conjugate \f$\mathsf{A}^\dag = \mathsf{A}^{T*} \f$.
+
+    If `hc_right = PETSC_TRUE`, the output is \f$ \mathsf{mat} = \mathsf{A} * \mathsf{A}^\dag \f$
+    with shape \f$ M \times M \f$. Otherwise, mat = A^dag * A with shape \f$ N \times N \f$ (not yet implemented).
+
+    Note: This function is implemented only for complex scalars so that vec_i is ignored.
  */
 PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec& vec_i,
     Mat& mat, const PetscInt M, const PetscInt N, const PetscBool hc_right);
 
+
+/** @} */
 
 #endif // __LINALG_TOOLS_HPP__

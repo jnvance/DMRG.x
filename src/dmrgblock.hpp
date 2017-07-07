@@ -1,9 +1,9 @@
 #ifndef __DMRGBLOCK_HPP__
 #define __DMRGBLOCK_HPP__
 
-/** @defgroup DMRG
-
-    @brief Implementation of the DMRGBlock and iDMRG classes
+/**
+    @defgroup   dmrgblock   DMRG Block
+    @brief      Implementation of the DMRGBlock class
 
  */
 
@@ -12,60 +12,134 @@
 #include <petscmat.h>
 
 
-#define     DMRGBLOCK_DEFAULT_LENGTH        1
-#define     DMRGBLOCK_DEFAULT_BASIS_SIZE    2
-#define     DMRG_DEFAULT_MPI_COMM           PETSC_COMM_WORLD
+/**
+    Contains the matrix representations of the operators of a block of spins
+    and some useful information on its state.
 
-/** @defgroup DMRG
+    _Note:_ This class is currently implemented with the Heisenberg model in mind.
 
+    _TODO:_ Further generalizations of the class must be done as more site operators
+    are introduced for other spin systems.
  */
 class DMRGBlock
 {
-    Mat             H_;     /* Hamiltonian of entire block */
-    Mat             Sz_;    /* Operators of rightmost/leftmost spin */
-    Mat             Sp_;
+    Mat             H_;             /**< Hamiltonian of entire block */
+    Mat             Sz_;            /**< Sz operator of rightmost/leftmost spin */
+    Mat             Sp_;            /**< S+ operator of rightmost/leftmost spin */
 
-    PetscInt        length_;
-    PetscInt        basis_size_;
+    PetscInt        length_;        /**< Number of sites within the blocks */
+    PetscInt        basis_size_;    /**< Number of states used to represent the operators */
 
-    MPI_Comm        comm_;
+    /** MPI communicator for distributed arrays */
+    MPI_Comm        comm_ = PETSC_COMM_WORLD;
+
+    /** Default length for 1D spin-1/2 Heisenberg model */
+    static const PetscInt DMRGBLOCK_DEFAULT_LENGTH = 1;
+
+    /** Default basis size for 1D spin-1/2 Heisenberg model */
+    static const PetscInt DMRGBLOCK_DEFAULT_BASIS_SIZE = 2;
 
 public:
 
-    DMRGBlock() :   length_(DMRGBLOCK_DEFAULT_LENGTH),
-                    basis_size_(DMRGBLOCK_DEFAULT_BASIS_SIZE),
-                    comm_(DMRG_DEFAULT_MPI_COMM)
-                    {}  // constructor with spin 1/2 defaults
+    /** Constructor with spin-\f$1/2\f$ defaults */
+    DMRGBlock() :
+        length_(DMRGBLOCK_DEFAULT_LENGTH),
+        basis_size_(DMRGBLOCK_DEFAULT_LENGTH),
+        comm_(PETSC_COMM_WORLD) { }
 
     ~DMRGBlock(){}
 
-    // PetscErrorCode  init(MPI_Comm, PetscInt, PetscInt);     /* explicit initializer */
-    PetscErrorCode init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
-                                PetscInt length = DMRGBLOCK_DEFAULT_LENGTH,
-                                PetscInt basis_size = DMRGBLOCK_DEFAULT_BASIS_SIZE);
+    /** Explicit initializer */
+    PetscErrorCode init(MPI_Comm comm = PETSC_COMM_WORLD,
+                        PetscInt length = DMRGBLOCK_DEFAULT_LENGTH,
+                        PetscInt basis_size = DMRGBLOCK_DEFAULT_BASIS_SIZE);
 
-    PetscErrorCode  destroy();                              /* explicit destructor */
+    /** Explicit destructor */
+    PetscErrorCode destroy();
 
-    Mat  H()        {return H_;}
-    Mat  Sz()       {return Sz_;}
-    Mat  Sp()       {return Sp_;}
+    /**
+        Returns a reference to the block Hamiltonian matrix.
+        Set to `nullptr` when not in use.
+     */
+    Mat H()
+    {
+        return H_;
+    }
 
+    /**
+        Returns a reference to the \f$S_z\f$ matrix.
+        Set to `nullptr` when not in use.
+     */
+    Mat Sz()
+    {
+        return Sz_;
+    }
+
+    /**
+        Returns a reference to the \f$S_+\f$ matrix.
+        Set to `nullptr` when not in use.
+     */
+    Mat Sp()
+    {
+        return Sp_;
+    }
+
+    /**
+        Update operators simultaneously
+
+        @param[in]   H_new  Replaces \f$H\f$ matrix
+        @param[in]   Sz_new Replaces \f$S_z\f$ matrix
+        @param[in]   Sp_new Replaces \f$S_+\f$ matrix
+
+     */
     PetscErrorCode  update_operators(Mat H_new, Mat Sz_new, Mat Sp_new);
 
+    /**
+        Update \f$H\f$ matrix
+
+        @param[in]   H_new  Replaces \f$H\f$ matrix
+     */
     PetscErrorCode  update_H(Mat H_new);
+
+    /**
+        Update \f$S_z\f$ matrix
+
+        @param[in]   Sz_new  Replaces \f$S_z\f$ matrix
+     */
     PetscErrorCode  update_Sz(Mat Sz_new);
+
+    /**
+        Update \f$S_+\f$ matrix
+
+        @param[in]   Sp_new  Replaces \f$S_+\f$ matrix
+    */
     PetscErrorCode  update_Sp(Mat Sp_new);
 
+    /**
+        Returns the number of sites within the blocks
+     */
+    PetscInt length()
+    {
+        return length_;
+    }
 
-    PetscInt        length(){return length_;}
-    PetscInt        basis_size(){return basis_size_;}
+    /**
+        Returns the number of states used to represent the operators
+     */
+    PetscInt basis_size()
+    {
+        return basis_size_;
+    }
 
-    void            length(PetscInt _length){length_ = _length;}
+    /**
+        Updates the length of the block
+     */
+    void length(PetscInt _length)
+    {
+        length_ = _length;
+    }
 
 };
-
-
-/*--------------------------------------------------------------------------------*/
 
 
 #endif // __DMRGBLOCK_HPP__

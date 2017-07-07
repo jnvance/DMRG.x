@@ -1,9 +1,6 @@
 #include "dmrgblock.hpp"
 
 
-// PetscErrorCode DMRGBlock::init( MPI_Comm comm = DMRG_DEFAULT_MPI_COMM,
-//                                 PetscInt length = DMRGBLOCK_DEFAULT_LENGTH,
-//                                 PetscInt basis_size = DMRGBLOCK_DEFAULT_BASIS_SIZE)
 PetscErrorCode DMRGBlock::init( MPI_Comm comm, PetscInt length, PetscInt basis_size)
 {
     PetscErrorCode  ierr = 0;
@@ -67,6 +64,7 @@ PetscErrorCode DMRGBlock::destroy()
     return ierr;
 }
 
+
 PetscErrorCode DMRGBlock::update_operators(Mat H_new, Mat Sz_new, Mat Sp_new)
 {
     PetscErrorCode  ierr = 0;
@@ -76,20 +74,56 @@ PetscErrorCode DMRGBlock::update_operators(Mat H_new, Mat Sz_new, Mat Sp_new)
     return ierr;
 }
 
-#define UPDATE_OPERATOR(MATRIX) \
-PetscErrorCode DMRGBlock::update_ ## MATRIX(Mat MATRIX ## _new)         \
-{                                                                       \
-    PetscErrorCode  ierr = 0;                                           \
-    if (MATRIX ## _ == MATRIX ## _new) /* Check whether same matrix */  \
-        return ierr;                                                    \
-    Mat MATRIX ## _temp = MATRIX ## _;                                  \
-    MATRIX ## _ = MATRIX ## _new;                                       \
-    ierr = MatDestroy(&MATRIX ## _temp); CHKERRQ(ierr);                 \
-    return ierr;                                                        \
+
+// PetscErrorCode DMRGBlock::update_MATRIX(Mat MATRIX_new)
+// {
+//     PetscErrorCode  ierr = 0;
+//     if (MATRIX_ == MATRIX_new)
+//         return ierr;
+//     Mat MATRIX_temp = MATRIX_;
+//     MATRIX_ = MATRIX_new;
+//     ierr = MatDestroy(&MATRIX_temp); CHKERRQ(ierr);
+//     return ierr;
+// }
+
+
+PetscErrorCode DMRGBlock::update_H(Mat H_new)
+{
+    PetscErrorCode  ierr = 0;
+    if (H_ == H_new)
+        return ierr;
+    Mat H_temp = H_;
+    H_ = H_new;
+    ierr = MatDestroy(&H_temp); CHKERRQ(ierr);
+    return ierr;
 }
 
-UPDATE_OPERATOR(H)
-UPDATE_OPERATOR(Sz)
-UPDATE_OPERATOR(Sp)
 
-#undef UPDATE_OPERATOR
+PetscErrorCode DMRGBlock::update_Sz(Mat Sz_new)
+{
+    PetscErrorCode  ierr = 0;
+    if (Sz_ == Sz_new)
+        return ierr;
+    Mat Sz_temp = Sz_;
+    Sz_ = Sz_new;
+    ierr = MatDestroy(&Sz_temp); CHKERRQ(ierr);
+    return ierr;
+}
+
+
+PetscErrorCode DMRGBlock::update_Sp(Mat Sp_new)
+{
+    PetscErrorCode  ierr = 0;
+    if (Sp_ == Sp_new)
+        return ierr;
+    Mat Sp_temp = Sp_;
+    Sp_ = Sp_new;
+    ierr = MatDestroy(&Sp_temp); CHKERRQ(ierr);
+    return ierr;
+}
+
+
+
+
+
+

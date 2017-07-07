@@ -3,7 +3,12 @@
 
 #include <slepceps.h>
 #include "dmrgblock.hpp"
-// #include "linalg_tools.hpp"
+
+/*
+    @defgroup   idmrg   iDMRG
+    @brief      Implementation of the iDMRG class
+
+ */
 
 class iDMRG
 {

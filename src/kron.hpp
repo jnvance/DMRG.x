@@ -6,8 +6,8 @@
 
 
 /**
-    @defgroup KroneckerProduct
-    @brief    Implementation of the Kronecker product with distributed sparse matrices
+    @defgroup   kron    Kronecker Product
+    @brief      Implementation of the Kronecker product with distributed sparse matrices
 
     Given an \f$m_A \times n_A\f$ matrix \f$\mathsf{A}\f$ and \f$m_B \times n_B\f$ matrix \f$\mathsf{B}\f$,
     their Kronecker product \f$ \mathsf{C} = \mathsf{A} \otimes \mathsf{B} \f$ is an \f$(m_A m_B) \times (n_A n_B)\f$ matrix with elements
@@ -23,7 +23,7 @@
     In this implementation, we require that each process have a local copy of the parallel matrix B.
     This is achieved by obtaining \f$ \mathsf{B} \f$ on each process using a submatrix with [MatGetSubMatrix](http://www.mcs.anl.gov/petsc/petsc-current/docs/manualpages/Mat/MatGetSubMatrix.html).
 
-    TODO:
+    #### TODO:
         - Implement overloading for when one or more arguments is the identity matrix
         - Implement overloading for when one or more arguments is the Sz, Sp, or Sm
         - Reduce communication.
@@ -40,13 +40,19 @@
 
 
 /**
-    \addtogroup KroneckerProduct
+    @addtogroup kron
     @{
  */
 
 
 /**
     Implements the Kronecker product between matrices A and B and puts the result in a new matrix C.
+
+    @param[in]   A      Input matrix
+    @param[in]   B      Input matrix
+    @param[out]  C      Output matrix
+    @param[in]   comm   MPI communicator (usually `PETSC_COMM_WORLD` or `PETSC_COMM_SELF`)
+
     This function performs
     \f[
         \mathsf{C} = \mathsf{A} \otimes \mathsf{B}.
@@ -58,6 +64,12 @@ PetscErrorCode MatKron(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
 
 /**
     Implements the Kronecker product between matrices A and B and adds the result to matrix C.
+
+    @param[in]   A      Input matrix
+    @param[in]   B      Input matrix
+    @param[out]  C      Output matrix
+    @param[in]   comm   MPI communicator (usually `PETSC_COMM_WORLD` or `PETSC_COMM_SELF`)
+
     This function performs
     \f[
         \mathsf{C} = \mathsf{C} + \mathsf{A} \otimes \mathsf{B}.
@@ -70,6 +82,14 @@ PetscErrorCode MatKronAdd(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& co
 /**
     Implements the Kronecker product between matrices `A` and `B` multiplied by a scale factor `a`
     and adds the result to matrix `C`.
+
+    @param[in]   a      Scaling factor
+    @param[in]   A      Input matrix
+    @param[in]   B      Input matrix
+    @param[out]  C      Output matrix
+    @param[in]   comm   MPI communicator (usually `PETSC_COMM_WORLD` or `PETSC_COMM_SELF`)
+
+
     This function performs
     \f[
         \mathsf{C} = \mathsf{C} + a \cdot (\mathsf{A} \otimes \mathsf{B}).
