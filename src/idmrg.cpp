@@ -2,7 +2,7 @@
 #include "linalg_tools.hpp"
 
 
-PetscErrorCode iDMRG::init(MPI_Comm comm=DMRG_DEFAULT_MPI_COMM)
+PetscErrorCode iDMRG::init(MPI_Comm comm)
 {
     PetscErrorCode  ierr = 0;
     comm_ = comm;
@@ -36,11 +36,11 @@ PetscErrorCode iDMRG::destroy()
     MatDestroy(&Sm1_);
     MatDestroy(&superblock_H_); /* Do a check whether matrix is in the correct state */
 
-    eye1_ = NULL;
-    Sz1_ = NULL;
-    Sp1_ = NULL;
-    Sm1_ = NULL;
-    superblock_H_ = NULL;
+    eye1_ = nullptr;
+    Sz1_ = nullptr;
+    Sp1_ = nullptr;
+    Sm1_ = nullptr;
+    superblock_H_ = nullptr;
 
     return ierr;
 }
@@ -69,7 +69,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 
     EPS eps;
     ierr = EPSCreate(comm_, &eps); CHKERRQ(ierr);
-    ierr = EPSSetOperators(eps, superblock_H_, NULL); CHKERRQ(ierr);
+    ierr = EPSSetOperators(eps, superblock_H_, nullptr); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
     ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
     ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
@@ -82,13 +82,13 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 
     if (gsv_r_) VecDestroy(&gsv_r_);
     if (gsv_i_) VecDestroy(&gsv_i_);
-    ierr = MatCreateVecs(superblock_H_,NULL,&gsv_r_); CHKERRQ(ierr);
+    ierr = MatCreateVecs(superblock_H_,nullptr,&gsv_r_); CHKERRQ(ierr);
 
     /* TODO: Verify that this works */
     #if defined(PETSC_USE_COMPLEX)
-        gsv_i_ = NULL;
+        gsv_i_ = nullptr;
     #else
-        ierr = MatCreateVecs(superblock_H_,NULL,&gsv_i_); CHKERRQ(ierr);
+        ierr = MatCreateVecs(superblock_H_,nullptr,&gsv_i_); CHKERRQ(ierr);
     #endif
 
     PetscScalar kr, ki;
@@ -107,7 +107,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         */
 
         #if defined(PETSC_USE_COMPLEX)
-            ierr = EPSGetEigenpair(eps, 0, &kr, &ki, gsv_r_, NULL); CHKERRQ(ierr);
+            ierr = EPSGetEigenpair(eps, 0, &kr, &ki, gsv_r_, nullptr); CHKERRQ(ierr);
             gse_r = PetscRealPart(kr);
             gse_i = PetscImaginaryPart(kr);
         #else
@@ -142,8 +142,8 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     PetscInt    size_left, size_right;
     // Mat         gsv_mat, gsv_mat_hc;
 
-    ierr = MatGetSize(BlockLeft_.H(), &size_left, NULL); CHKERRQ(ierr);
-    ierr = MatGetSize(BlockRight_.H(), &size_right, NULL); CHKERRQ(ierr);
+    ierr = MatGetSize(BlockLeft_.H(), &size_left, nullptr); CHKERRQ(ierr);
+    ierr = MatGetSize(BlockRight_.H(), &size_right, nullptr); CHKERRQ(ierr);
 
     /* Reshape the vector to a matrix of size (size_left, size_right) */
     // VecReshapeToMat(comm_, gsv_r_, gsv_mat, size_left, size_right );
