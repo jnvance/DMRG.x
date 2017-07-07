@@ -6,7 +6,7 @@ CXXFLAGS=-O3 -std=c++11 -D__TESTING
 all: ${TARGETS}
 
 test_dmrg.x: test_dmrg.o dmrgblock.o idmrg.o linalg_tools.o kron.o chkopts
-	-${CLINKER} -o test_dmrg.x test_dmrg.o dmrgblock.o idmrg.o linalg_tools.o kron.o ${SLEPC_EPS_LIB}
+	-${CLINKER} -o test_dmrg.x test_dmrg.o dmrgblock.o kron.o idmrg.o linalg_tools.o ${SLEPC_EPS_LIB}
 	${RM} test_dmrg.o
 
 test_kron.x: test_kron.o linalg_tools.o kron.o chkopts
