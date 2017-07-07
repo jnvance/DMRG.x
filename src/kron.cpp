@@ -10,25 +10,29 @@ MatKron(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
 
     PetscMPIInt     nprocs, rank;           // MPI comm variables
     PetscInt        M_A, N_A, M_B, N_B, M_C, N_C;
-
-    // Get information from MPI
+    /*
+        Get information from MPI
+    */
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
-
-    // Put input matrices in correct state for submatrix extraction
+    /*
+        Put input matrices in correct state for submatrix extraction
+    */
     ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-    // Determine dimensions of C and initialize
+    /*
+        Determine dimensions of C and initialize
+    */
     MatGetSize(A, &M_A, &N_A);
     MatGetSize(B, &M_B, &N_B);
     M_C = M_A * M_B;
     N_C = N_A * N_B;
-
-    // Setup matrix C
-    // TODO: maybe hardcode some setup options
+    /*
+        Setup matrix C
+        TODO: maybe hardcode some setup options
+    */
     MatCreate(comm, &C);
     MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C);
     MatSetFromOptions(C);
@@ -292,6 +296,5 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 
     MatDestroy(&submat_A);
     MatDestroy(&submat_B);
-    // if(submat_C) MatDestroy(&submat_C);
     return ierr;
 }
