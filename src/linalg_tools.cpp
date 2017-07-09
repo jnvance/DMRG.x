@@ -3,7 +3,7 @@
 
 #undef __FUNCT__
 #define __FUNCT__ "MatEyeCreate"
-PetscErrorCode MatEyeCreate(MPI_Comm comm, Mat& eye, PetscInt dim)
+PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim)
 {
     PetscErrorCode  ierr = 0;
 
@@ -24,7 +24,7 @@ PetscErrorCode MatEyeCreate(MPI_Comm comm, Mat& eye, PetscInt dim)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatSzCreate"
-PetscErrorCode MatSzCreate(MPI_Comm comm, Mat& Sz)
+PetscErrorCode MatSzCreate(const MPI_Comm& comm, Mat& Sz)
 {
     PetscErrorCode  ierr = 0;
 
@@ -46,7 +46,7 @@ PetscErrorCode MatSzCreate(MPI_Comm comm, Mat& Sz)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatSpCreate"
-PetscErrorCode MatSpCreate(MPI_Comm comm, Mat& Sp)
+PetscErrorCode MatSpCreate(const MPI_Comm& comm, Mat& Sp)
 {
     PetscErrorCode  ierr = 0;
 
@@ -70,7 +70,7 @@ PetscErrorCode MatSpCreate(MPI_Comm comm, Mat& Sp)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatPeek"
-PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label)
+PetscErrorCode MatPeek(const MPI_Comm& comm, const Mat mat, const char* label)
 {
     PetscErrorCode  ierr = 0;
 
@@ -91,7 +91,7 @@ PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatWrite"
-PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename)
+PetscErrorCode MatWrite(const MPI_Comm& comm, const Mat mat, const char* filename)
 {
     PetscErrorCode  ierr = 0;
 

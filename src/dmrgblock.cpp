@@ -65,7 +65,7 @@ PetscErrorCode DMRGBlock::destroy()
 }
 
 
-PetscErrorCode DMRGBlock::update_operators(Mat H_new, Mat Sz_new, Mat Sp_new)
+PetscErrorCode DMRGBlock::update_operators(const Mat& H_new, const Mat& Sz_new, const Mat& Sp_new)
 {
     PetscErrorCode  ierr = 0;
     ierr = update_H(H_new); CHKERRQ(ierr);
@@ -87,7 +87,7 @@ PetscErrorCode DMRGBlock::update_operators(Mat H_new, Mat Sz_new, Mat Sp_new)
 // }
 
 
-PetscErrorCode DMRGBlock::update_H(Mat H_new)
+PetscErrorCode DMRGBlock::update_H(const Mat& H_new)
 {
     PetscErrorCode  ierr = 0;
     if (H_ == H_new)
@@ -99,7 +99,7 @@ PetscErrorCode DMRGBlock::update_H(Mat H_new)
 }
 
 
-PetscErrorCode DMRGBlock::update_Sz(Mat Sz_new)
+PetscErrorCode DMRGBlock::update_Sz(const Mat& Sz_new)
 {
     PetscErrorCode  ierr = 0;
     if (Sz_ == Sz_new)
@@ -111,7 +111,7 @@ PetscErrorCode DMRGBlock::update_Sz(Mat Sz_new)
 }
 
 
-PetscErrorCode DMRGBlock::update_Sp(Mat Sp_new)
+PetscErrorCode DMRGBlock::update_Sp(const Mat& Sp_new)
 {
     PetscErrorCode  ierr = 0;
     if (Sp_ == Sp_new)

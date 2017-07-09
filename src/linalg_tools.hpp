@@ -30,7 +30,7 @@
     @param[in]   dim    dimensions of the identity matrix
 
  */
-PetscErrorCode MatEyeCreate(MPI_Comm comm, Mat& eye, PetscInt dim);
+PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim);
 
 
 /**
@@ -48,7 +48,7 @@ PetscErrorCode MatEyeCreate(MPI_Comm comm, Mat& eye, PetscInt dim);
                 \end{pmatrix}
     \f]
  */
-PetscErrorCode MatSzCreate(MPI_Comm comm, Mat& Sz);
+PetscErrorCode MatSzCreate(const MPI_Comm& comm, Mat& Sz);
 
 
 /**
@@ -67,7 +67,7 @@ PetscErrorCode MatSzCreate(MPI_Comm comm, Mat& Sz);
 
     The \f$ S_- \f$ operator may be obtained as the transpose of this matrix.
  */
-PetscErrorCode MatSpCreate(MPI_Comm comm, Mat& Sp);
+PetscErrorCode MatSpCreate(const MPI_Comm& comm, Mat& Sp);
 
 
 /**
@@ -77,7 +77,7 @@ PetscErrorCode MatSpCreate(MPI_Comm comm, Mat& Sp);
     @param[in]   mat    Input matrix
     @param[in]   label  Label or title of the matrix
  */
-PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label);
+PetscErrorCode MatPeek(const MPI_Comm& comm, Mat mat, const char* label);
 
 
 /**
@@ -87,7 +87,7 @@ PetscErrorCode MatPeek(MPI_Comm comm, Mat mat, const char* label);
     @param[in]   mat        Input matrix
     @param[in]   filename   filename/location of output file
  */
-PetscErrorCode MatWrite(const MPI_Comm comm, const Mat mat, const char* filename);
+PetscErrorCode MatWrite(const MPI_Comm& comm, const Mat mat, const char* filename);
 
 
 /**
