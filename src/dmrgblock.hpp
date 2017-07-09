@@ -13,6 +13,11 @@
 
 
 /**
+    @addtogroup dmrgblock
+    @{
+ */
+
+/**
     Contains the matrix representations of the operators of a block of spins
     and some useful information on its state.
 
@@ -141,5 +146,8 @@ public:
 
 };
 
+/**
+    @}
+ */
 
 #endif // __DMRGBLOCK_HPP__

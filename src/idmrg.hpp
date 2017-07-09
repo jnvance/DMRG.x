@@ -4,12 +4,22 @@
 #include <slepceps.h>
 #include "dmrgblock.hpp"
 
-/*
+/**
     @defgroup   idmrg   iDMRG
-    @brief      Implementation of the iDMRG class
+    @brief      Implements the iDMRG class
 
+    @addtogroup idmrg
+    @{
  */
 
+/**
+    Contains the objects needed to perform the infinite-size DMRG
+
+    _Note:_ This class is currently implemented in 1D
+
+    _TODO:_ Further generalizations of the class must be done as more site operators
+    are introduced for other spin systems.
+ */
 class iDMRG
 {
 
@@ -25,22 +35,51 @@ protected:
     Mat         superblock_H_ = nullptr;
     PetscBool   superblock_set_ = PETSC_FALSE;
 
-    /* Ground state */
+    /**
+        Real part of ground state eigenvector, or the full complex-valued vector.
+
+        When compiled with real PetscScalar (the default configuration), this contains only the real part of the vector.
+        Otherwise, if the current PetscArch is compiled with the flag `--with-scalar-type=complex`,
+        this vector contains the full complex-valued vector.
+     */
     Vec         gsv_r_ = nullptr;
+
+    /**
+        Imaginary part of the ground state eigenvector.
+        When compiled with real PetscScalar, this contains only the real part of the vector.
+        Otherwise, with complex PetscScalar, this is ignored during the entire program.
+     */
     Vec         gsv_i_ = nullptr;
+
+    /**
+        Tells whether SolveGroundState() has been succesfully run. Also it indicates whether
+        the groundstate in gsv_r and/or gsv_i have been succesfully solved
+     */
     PetscBool   groundstate_solved_ = PETSC_FALSE;
 
+    /** Density matrix for the left block */
     Mat         dm_left = nullptr;
+
+    /** Density matrix for the right block */
     Mat         dm_right = nullptr;
 
-    MPI_Comm    comm_;
+    MPI_Comm    comm_ = PETSC_COMM_WORLD; /** MPI communicator for distributed arrays */
 
-    /* Matrices of the single-site operators */
-    Mat eye1_, Sz1_, Sp1_, Sm1_;
+    Mat eye1_;  /**< 2x2 identity matrix */
+    Mat Sz1_;   /**< Single-site \f$ S_z \f$ operator as a 2x2 matrix */
+    Mat Sp1_;   /**< Single-site \f$ S_+ \f$ operator as a 2x2 matrix */
+    Mat Sm1_;   /**< Single-site \f$ S_- \f$ operator as a 2x2 matrix */
 
 public:
 
-    PetscErrorCode init(MPI_Comm);
+    /**
+        Explicit initializer
+     */
+    PetscErrorCode init(MPI_Comm = PETSC_COMM_WORLD);
+
+    /**
+        Explicit destructor
+     */
     PetscErrorCode destroy();
 
     PetscInt LengthBlockLeft(){ return BlockLeft_.length(); }
@@ -51,7 +90,9 @@ public:
     virtual PetscErrorCode BuildBlockRight()=0;
     virtual PetscErrorCode BuildSuperBlock()=0;
 
-    /* Solve states */
+    /**
+        Solve the eigenenergy and eigenvector of the ground state.
+     */
     PetscErrorCode SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error);
 
     /* From ground state, construct the left and right reduced density matrices */
@@ -63,5 +104,7 @@ public:
     PetscErrorCode MatSaveOperators();
 
 };
+
+/** @}*/
 
 #endif // __IDMRG_HPP__
