@@ -22,6 +22,9 @@ tests: test_dmrg.x test_kron.x test_reshape.x
 	python test_kron.py
 	mpirun -np 2 ./test_reshape.x
 
+docs:
+	cd .. && doxygen Doxyfile
+
 flush: clean
 	${RM} ${TARGETS} *.dat *.dat.info *.x
 	${RM} -rf test_kron/*
