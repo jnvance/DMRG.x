@@ -70,12 +70,12 @@ PetscErrorCode MatSpCreate(const MPI_Comm& comm, Mat& Sp)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatPeek"
-PetscErrorCode MatPeek(const MPI_Comm& comm, const Mat mat, const char* label)
+PetscErrorCode MatPeek(const Mat mat, const char* label)
 {
     PetscErrorCode  ierr = 0;
-
-    // Peek into values
+    const MPI_Comm comm = PetscObjectComm((PetscObject) mat);
     PetscViewer fd = nullptr;
+
     ierr = MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
@@ -91,10 +91,10 @@ PetscErrorCode MatPeek(const MPI_Comm& comm, const Mat mat, const char* label)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatWrite"
-PetscErrorCode MatWrite(const MPI_Comm& comm, const Mat mat, const char* filename)
+PetscErrorCode MatWrite(const Mat mat, const char* filename)
 {
     PetscErrorCode  ierr = 0;
-
+    const MPI_Comm comm = PetscObjectComm((PetscObject) mat);
     PetscViewer writer = nullptr;
 
     MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
@@ -177,13 +177,11 @@ PetscErrorCode MatWrite(const MPI_Comm& comm, const Mat mat, const char* filenam
 
 #undef __FUNCT__
 #define __FUNCT__ "VecWrite"
-PetscErrorCode VecWrite(const MPI_Comm& comm, const Vec& vec, const char* filename)
+PetscErrorCode VecWrite(const Vec& vec, const char* filename)
 {
     PetscErrorCode  ierr = 0;
-
+    const MPI_Comm comm = PetscObjectComm((PetscObject) vec);
     PetscViewer writer = nullptr;
-    // MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
-    // MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
     PetscViewerBinaryOpen(comm, filename, FILE_MODE_WRITE, &writer);
     VecView(vec, writer);
     PetscViewerDestroy(&writer);
@@ -195,29 +193,22 @@ PetscErrorCode VecWrite(const MPI_Comm& comm, const Vec& vec, const char* filena
 
 #undef __FUNCT__
 #define __FUNCT__ "VecPeek"
-PetscErrorCode VecPeek(const MPI_Comm& comm, const Vec& vec, const char* label)
+PetscErrorCode VecPeek(const Vec& vec, const char* label)
 {
     PetscErrorCode  ierr = 0;
-
-    // PetscViewer viewer = nullptr;
-    // MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY);
-    // MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
-    // PetscViewerBinaryOpen(comm, filename, FILE_MODE_WRITE, &viewer);
+    const MPI_Comm comm = PetscObjectComm((PetscObject) vec);
     ierr = PetscPrintf(comm, "\n%s\n", label); CHKERRQ(ierr);
     ierr = VecView(vec, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
-    // PetscViewerDestroy(&viewer);
-    // viewer = nullptr;
-
     return ierr;
 }
 
 
 #undef __FUNCT__
 #define __FUNCT__ "VecReshapeToMat"
-PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N, const PetscBool mat_is_local)
+PetscErrorCode VecReshapeToMat(const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N, const PetscBool mat_is_local)
 {
-
     PetscErrorCode  ierr = 0;
+    const MPI_Comm comm = PetscObjectComm((PetscObject) vec);
 
     /*
         Get the size of vec and determine whether the size of the ouput matrix
@@ -287,8 +278,7 @@ PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, c
 
 #undef __FUNCT__
 #define __FUNCT__ "VecReshapeToLocalMat"
-PetscErrorCode VecReshapeToLocalMat(const MPI_Comm& comm, const Vec& vec,
-    Mat& mat, const PetscInt M, const PetscInt N)
+PetscErrorCode VecReshapeToLocalMat(const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N)
 {
     PetscErrorCode ierr = 0;
 
@@ -329,11 +319,12 @@ PetscErrorCode VecReshapeToLocalMat(const MPI_Comm& comm, const Vec& vec,
 
 #undef __FUNCT__
 #define __FUNCT__ "VecToMatMultHC"
-PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec& vec_i,
-    Mat& mat, const PetscInt M, const PetscInt N, const PetscBool hc_right = PETSC_TRUE)
+PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
+    const PetscInt M, const PetscInt N, const PetscBool hc_right = PETSC_TRUE)
 {
-
     PetscErrorCode  ierr = 0;
+
+    const MPI_Comm comm = PetscObjectComm((PetscObject) vec_r);
 
     #ifndef PETSC_USE_COMPLEX
         SETERRQ(comm, 1, "Not implemented for real scalars.");
@@ -354,7 +345,7 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
     Mat gsv_mat_hc  = nullptr;
 
     #ifdef __BUILD_SEQUENTIAL
-        ierr = VecReshapeToMat(comm, vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
+        ierr = VecReshapeToMat(vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
         ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc);
         ierr = MatMatMult(gsv_mat_seq, gsv_mat_hc, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &mat); CHKERRQ(ierr);
         if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
@@ -363,7 +354,7 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
     #endif // __BUILD_SEQUENTIAL
 
 
-    ierr = VecReshapeToLocalMat(comm, vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
+    ierr = VecReshapeToLocalMat(vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
 
     /*
         Create the resultant matrix mat with the correct dimensions
@@ -432,18 +423,21 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
 
 #undef __FUNCT__
 #define __FUNCT__ "MatGetSVD"
-PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat)
+// PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat)
+PetscErrorCode MatGetSVD(const Mat& mat)
 {
-
     PetscErrorCode  ierr = 0;
 
     #ifndef PETSC_USE_COMPLEX
         SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
+
+    MPI_Comm comm = PetscObjectComm((PetscObject)mat);
+
     /*
         Determine the number of singular values to compute
         based on the size of the input matrix.
-    */
+     */
     PetscInt nsv;
     MatGetSize(mat, &nsv, nullptr);
 
@@ -478,7 +472,7 @@ PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat)
         ierr = SVDGetTolerances(svd,&tol,&maxit);CHKERRQ(ierr);
         ierr = PetscPrintf(comm," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);CHKERRQ(ierr);
         /*
-         * Show detailed info unless -terse option is given by user
+            Show detailed info unless -terse option is given by user
          */
         ierr = PetscOptionsHasName(NULL,NULL,"-terse",&terse);CHKERRQ(ierr);
         if (terse) {
@@ -491,8 +485,14 @@ PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat)
         }
     #endif
     /*
+        TODO: Implement an output object, decide whether to use explicit matrix
+        or return the svd object.
+     */
+
+
+    /*
         Destroy all created objects
-    */
+     */
     if (svd) SVDDestroy(&svd);
 
     return ierr;

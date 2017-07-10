@@ -151,14 +151,14 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
         Collect entire groundstate vector to all processes
      */
     #ifdef PETSC_USE_COMPLEX
-        ierr = VecToMatMultHC(comm_, gsv_r_, nullptr, dm_left, size_left, size_right, PETSC_TRUE);
+        ierr = VecToMatMultHC(gsv_r_, nullptr, dm_left, size_left, size_right, PETSC_TRUE);
         CHKERRQ(ierr);
     #else
         SETERRQ(comm_, 1, "Not implemented for real scalars.");
     #endif
 
     #ifdef __TESTING
-        ierr = VecWrite(comm_, gsv_r_, "data/gsv_r_.dat"); CHKERRQ(ierr);
+        ierr = VecWrite(gsv_r_, "data/gsv_r_.dat"); CHKERRQ(ierr);
     #endif
     /*
         Toggle switches
@@ -181,10 +181,10 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
     if(! (dm_left && dm_solved))
         SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
-    MatGetSVD(comm_, dm_left);
+    MatGetSVD(dm_left);
 
     #ifdef __TESTING
-        ierr = MatWrite(comm_, dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
     #endif
 
     dm_solved = PETSC_FALSE;
@@ -200,18 +200,18 @@ PetscErrorCode iDMRG::MatPeekOperators()
     PetscErrorCode  ierr = 0;
 
     PetscPrintf(comm_, "\nLeft Block Operators\nBlock Length = %d\n", BlockLeft_.length());
-    ierr = MatPeek(comm_, BlockLeft_.H(), "H (left)");
-    ierr = MatPeek(comm_, BlockLeft_.Sz(), "Sz (left)");
-    ierr = MatPeek(comm_, BlockLeft_.Sp(), "Sp (left)");
+    ierr = MatPeek(BlockLeft_.H(), "H (left)");
+    ierr = MatPeek(BlockLeft_.Sz(), "Sz (left)");
+    ierr = MatPeek(BlockLeft_.Sp(), "Sp (left)");
 
     PetscPrintf(comm_, "\nRight Block Operators\nBlock Length = %d\n", BlockRight_.length());
-    ierr = MatPeek(comm_, BlockRight_.H(), "H (right)");
-    ierr = MatPeek(comm_, BlockRight_.Sz(), "Sz (right)");
-    ierr = MatPeek(comm_, BlockRight_.Sp(), "Sp (right)");
+    ierr = MatPeek(BlockRight_.H(), "H (right)");
+    ierr = MatPeek(BlockRight_.Sz(), "Sz (right)");
+    ierr = MatPeek(BlockRight_.Sp(), "Sp (right)");
 
     if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
         PetscPrintf(comm_, "\nSuperblock\nBlock Length = %d\n", BlockLeft_.length() + BlockRight_.length());
-        ierr = MatPeek(comm_, superblock_H_, "H (superblock)"); CHKERRQ(ierr);
+        ierr = MatPeek(superblock_H_, "H (superblock)"); CHKERRQ(ierr);
     }
 
     return ierr;
@@ -222,16 +222,16 @@ PetscErrorCode iDMRG::MatSaveOperators()
 {
     PetscErrorCode  ierr = 0;
 
-    ierr = MatWrite(comm_, BlockLeft_.H(), "data/H_left.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(comm_, BlockLeft_.Sz(), "data/Sz_left.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(comm_, BlockLeft_.Sp(), "data/Sp_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(BlockLeft_.H(), "data/H_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(BlockLeft_.Sz(), "data/Sz_left.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(BlockLeft_.Sp(), "data/Sp_left.dat"); CHKERRQ(ierr);
 
-    ierr = MatWrite(comm_, BlockRight_.H(), "data/H_right.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(comm_, BlockRight_.Sz(), "data/Sz_right.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(comm_, BlockRight_.Sp(), "data/Sp_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(BlockRight_.H(), "data/H_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(BlockRight_.Sz(), "data/Sz_right.dat"); CHKERRQ(ierr);
+    ierr = MatWrite(BlockRight_.Sp(), "data/Sp_right.dat"); CHKERRQ(ierr);
 
     if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
-        ierr = MatWrite(comm_, superblock_H_, "data/H_superblock.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(superblock_H_, "data/H_superblock.dat"); CHKERRQ(ierr);
     }
 
     return ierr;

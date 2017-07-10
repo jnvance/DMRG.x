@@ -44,9 +44,9 @@ int main(int argc, char **argv)
     ierr = VecView(vec, fd); CHKERRQ(ierr);
     PetscViewerDestroy(&fd);
 
-    Mat         mat;
+    Mat mat;
 
-    VecReshapeToMat(comm, vec, mat, 12, 3);
+    VecReshapeToMat(vec, mat, 12, 3);
 
     PetscPrintf(comm, "Matrix\n");
     ierr = MatView(mat, fd); CHKERRQ(ierr);
