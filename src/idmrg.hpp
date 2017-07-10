@@ -57,14 +57,34 @@ protected:
      */
     PetscBool   groundstate_solved_ = PETSC_FALSE;
 
-    /** Density matrix for the left block */
+    /**
+        Density matrix for the left block
+     */
     Mat         dm_left = nullptr;
 
-    /** Density matrix for the right block */
+    /**
+        Density matrix for the right block
+     */
     Mat         dm_right = nullptr;
 
-    MPI_Comm    comm_ = PETSC_COMM_WORLD; /** MPI communicator for distributed arrays */
+    /**
+        Tells whether BuildReducedDensityMatrices() has been succesfully run
+        and dm_left and dm_right are in the correct state
+     */
+    PetscBool   dm_solved = PETSC_FALSE;
 
+    /**
+        Tells whether SVDReducedDensityMatrices() has been succesfully run
+        and the SVD of the reduced density matrices has been solved
+     */
+    PetscBool   dm_svd = PETSC_FALSE;
+
+    /**
+        MPI communicator for distributed arrays
+    */
+    MPI_Comm    comm_ = PETSC_COMM_WORLD;
+
+    /*----- Miscellaneous matrices -----*/
     Mat eye1_;  /**< 2x2 identity matrix */
     Mat Sz1_;   /**< Single-site \f$ S_z \f$ operator as a 2x2 matrix */
     Mat Sp1_;   /**< Single-site \f$ S_+ \f$ operator as a 2x2 matrix */
@@ -82,12 +102,35 @@ public:
      */
     PetscErrorCode destroy();
 
-    PetscInt LengthBlockLeft(){ return BlockLeft_.length(); }
-    PetscInt LengthBlockRight(){ return BlockRight_.length(); }
+    /**
+        Returns the number of sites in the left block;
+     */
+    PetscInt LengthBlockLeft()
+    {
+        return BlockLeft_.length();
+    }
 
-    /* Block enlargement to be implemented in inherited classes */
+    /**
+        Returns the number of sites in the right block;
+     */
+    PetscInt LengthBlockRight()
+    {
+        return BlockRight_.length();
+    }
+
+    /**
+        Left block enlargement. To be implemented in inherited classes
+     */
     virtual PetscErrorCode BuildBlockLeft()=0;
+
+    /**
+        Right block enlargement. To be implemented in inherited classes
+     */
     virtual PetscErrorCode BuildBlockRight()=0;
+
+    /**
+        Right block enlargement. To be implemented in inherited classes
+     */
     virtual PetscErrorCode BuildSuperBlock()=0;
 
     /**
@@ -95,12 +138,24 @@ public:
      */
     PetscErrorCode SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error);
 
-    /* From ground state, construct the left and right reduced density matrices */
+    /**
+        From ground state, construct the left and right reduced density matrices
+     */
     PetscErrorCode BuildReducedDensityMatrices();
 
+    /**
+        Get the SVD of the left and right reduced density matrices.
+     */
+    PetscErrorCode SVDReducedDensityMatrices();
 
-    /* Miscellaneous functions */
+    /**
+        Printout operator matrices to standard output
+     */
     PetscErrorCode MatPeekOperators();
+
+    /**
+        Save operator matrices to subfolder
+     */
     PetscErrorCode MatSaveOperators();
 
 };

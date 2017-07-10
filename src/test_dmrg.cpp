@@ -253,6 +253,7 @@ int main(int argc, char **argv)
         }
 
         heis.BuildReducedDensityMatrices();
+        heis.SVDReducedDensityMatrices();
 
     }
 

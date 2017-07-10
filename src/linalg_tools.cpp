@@ -101,7 +101,7 @@ PetscErrorCode MatWrite(const MPI_Comm& comm, const Mat mat, const char* filenam
     MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY);
 
     PetscMPIInt rank;
-    MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+    MPI_Comm_rank(comm, &rank);
 
     PetscBool flg;
     ierr = PetscObjectTypeCompare((PetscObject)mat,MATMPIDENSE,&flg);CHKERRQ(ierr);
@@ -212,7 +212,6 @@ PetscErrorCode VecPeek(const MPI_Comm& comm, const Vec& vec, const char* label)
 }
 
 
-/* Reshape m*n vector to m x n array */
 #undef __FUNCT__
 #define __FUNCT__ "VecReshapeToMat"
 PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, const PetscInt M, const PetscInt N, const PetscBool mat_is_local)
@@ -286,6 +285,8 @@ PetscErrorCode VecReshapeToMat(const MPI_Comm& comm, const Vec& vec, Mat& mat, c
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "VecReshapeToLocalMat"
 PetscErrorCode VecReshapeToLocalMat(const MPI_Comm& comm, const Vec& vec,
     Mat& mat, const PetscInt M, const PetscInt N)
 {
@@ -418,9 +419,81 @@ PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec&
         ierr = MatMatMult(gsv_mat_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_local); CHKERRQ(ierr);
     }
 
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
     if(gsv_mat_loc) {ierr = MatDestroy(&gsv_mat_loc); CHKERRQ(ierr);}
     if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
     if(gsv_mat_hc ) {ierr = MatDestroy(&gsv_mat_hc ); CHKERRQ(ierr);}
+
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatGetSVD"
+PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat)
+{
+
+    PetscErrorCode  ierr = 0;
+
+    #ifndef PETSC_USE_COMPLEX
+        SETERRQ(comm, 1, "Not implemented for real scalars.");
+    #endif
+    /*
+        Determine the number of singular values to compute
+        based on the size of the input matrix.
+    */
+    PetscInt nsv;
+    MatGetSize(mat, &nsv, nullptr);
+
+    /*
+        Get the SVD of the reduced density matrix corresponding
+        to the left block system
+     */
+    SVD svd = nullptr;
+    ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
+    ierr = SVDSetOperator(svd, mat); CHKERRQ(ierr);
+    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
+    ierr = SVDSetType(svd, SVDTRLANCZOS);
+    ierr = SVDSetDimensions(svd, nsv, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
+    ierr = SVDSolve(svd);CHKERRQ(ierr);
+    /*
+        Optional: Get some information from the solver and display it
+     */
+    #ifdef __TESTING
+        SVDType        type;
+        PetscReal      tol;
+        PetscInt       maxit,its;
+        PetscBool      terse;
+
+        ierr = SVDGetIterationNumber(svd,&its);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of iterations of the method: %D\n",its);CHKERRQ(ierr);
+
+        ierr = SVDGetType(svd,&type);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Solution method: %s\n\n",type);CHKERRQ(ierr);
+        ierr = SVDGetDimensions(svd,&nsv,NULL,NULL);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of requested singular values: %D\n",nsv);CHKERRQ(ierr);
+        ierr = SVDGetTolerances(svd,&tol,&maxit);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);CHKERRQ(ierr);
+        /*
+         * Show detailed info unless -terse option is given by user
+         */
+        ierr = PetscOptionsHasName(NULL,NULL,"-terse",&terse);CHKERRQ(ierr);
+        if (terse) {
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,NULL);CHKERRQ(ierr);
+        } else {
+            ierr = PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);CHKERRQ(ierr);
+            ierr = SVDReasonView(svd,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+        }
+    #endif
+    /*
+        Destroy all created objects
+    */
+    if (svd) SVDDestroy(&svd);
 
     return ierr;
 }

@@ -132,55 +132,65 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 }
 
 
-/* NOTE: Routine assumes ground state eigenvector is purely real */
 PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 {
     PetscErrorCode  ierr = 0;
-
-    if(groundstate_solved_ == PETSC_FALSE) SETERRQ(comm_, 1, "Ground state not yet solved.");
-
-    PetscInt    size_left, size_right;
-    // Mat         gsv_mat, gsv_mat_hc;
-
+    /*
+        Determine whether ground state has been solved with SolveGroundState()
+     */
+    if(groundstate_solved_ == PETSC_FALSE)
+        SETERRQ(comm_, 1, "Ground state not yet solved.");
+    /*
+        Collect information regarding the basis size of the
+        left and right blocks
+     */
+    PetscInt size_left, size_right;
     ierr = MatGetSize(BlockLeft_.H(), &size_left, nullptr); CHKERRQ(ierr);
     ierr = MatGetSize(BlockRight_.H(), &size_right, nullptr); CHKERRQ(ierr);
-
-    /* Reshape the vector to a matrix of size (size_left, size_right) */
-    // VecReshapeToMat(comm_, gsv_r_, gsv_mat, size_left, size_right );
-
-    /* Obtain the conjugate transpose */
-    // MatCreateHermitianTranspose(gsv_mat, &gsv_mat_hc);
-    // MatCreateTranspose(gsv_mat, &gsv_mat_hc);
-    // MatHermitianTranspose(gsv_mat, MAT_INITIAL_MATRIX, &gsv_mat_hc);
-
-
-    /* Trace out the other block (fastest-changing index in gsv_mat) */
-    // MatMatMult(gsv_mat, gsv_mat_hc, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &dm_left);
-
-
-    // MatPeek(comm_, gsv_mat, "gsv_mat");
-    // MatPeek(comm_, gsv_mat_hc, "gsv_mat_hc");
-
-    /* Brute-force implementation */
-    /* Collect entire groundstate vector to all processes */
-
-
-    #if defined(PETSC_USE_COMPLEX)
-        ierr = VecToMatMultHC(comm_, gsv_r_, nullptr, dm_left, size_left, size_right, PETSC_TRUE); CHKERRQ(ierr);
+    /*
+        Collect entire groundstate vector to all processes
+     */
+    #ifdef PETSC_USE_COMPLEX
+        ierr = VecToMatMultHC(comm_, gsv_r_, nullptr, dm_left, size_left, size_right, PETSC_TRUE);
+        CHKERRQ(ierr);
     #else
         SETERRQ(comm_, 1, "Not implemented for real scalars.");
     #endif
 
     #ifdef __TESTING
-        MatWrite(comm_, dm_left, "data/dm_left.dat");
-        VecWrite(comm_, gsv_r_, "data/gsv_r_.dat");
+        ierr = VecWrite(comm_, gsv_r_, "data/gsv_r_.dat"); CHKERRQ(ierr);
     #endif
-
+    /*
+        Toggle switches
+    */
+    groundstate_solved_ = PETSC_FALSE;
+    dm_solved = PETSC_TRUE;
+    /*
+        Destroy ground state vectors
+    */
     if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
     if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
-    if (dm_left) MatDestroy(&dm_left); dm_left = nullptr;
-    if (dm_right) MatDestroy(&dm_right); dm_right = nullptr;
+    return ierr;
+}
 
+
+PetscErrorCode iDMRG::SVDReducedDensityMatrices()
+{
+    PetscErrorCode  ierr = 0;
+
+    if(! (dm_left && dm_solved))
+        SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
+
+    MatGetSVD(comm_, dm_left);
+
+    #ifdef __TESTING
+        ierr = MatWrite(comm_, dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
+    #endif
+
+    dm_solved = PETSC_FALSE;
+    dm_svd    = PETSC_TRUE;
+
+    MatDestroy(&dm_left);
     return ierr;
 }
 

@@ -1,8 +1,8 @@
 #ifndef __LINALG_TOOLS_HPP__
 #define __LINALG_TOOLS_HPP__
 
-#include <slepceps.h>
-
+// #include <slepceps.h>
+#include <slepcsvd.h>
 
 /**
     @defgroup   linalg_tools    Linear Algebra Tools
@@ -153,6 +153,19 @@ PetscErrorCode VecReshapeToLocalMat(
  */
 PetscErrorCode VecToMatMultHC(const MPI_Comm& comm, const Vec& vec_r, const Vec& vec_i,
     Mat& mat, const PetscInt M, const PetscInt N, const PetscBool hc_right);
+
+
+
+
+/**
+ * @brief      Calculates the singular value decomposition of a matrix
+ *
+ * @param[in]  comm  The communications
+ * @param      mat   The matrix
+ *
+ * @return     { description_of_the_return_value }
+ */
+PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat);
 
 
 /** @} */
