@@ -19,20 +19,47 @@
 
     _TODO:_ Further generalizations of the class must be done as more site operators
     are introduced for other spin systems.
+
+    _TODO:_ Implement iteration memeber using final_nsites_, nsteps_ and iter_
  */
 class iDMRG
 {
 
 protected:
 
+    /**
+        Target number of sites.
+    */
     PetscInt    final_nsites_;
+
+    /**
+        Target number of steps.
+    */
     PetscInt    nsteps_;
+
+    /**
+        Completed number of steps.
+    */
     PetscInt    iter_;
 
+    /**
+        DMRGBlock object representing the left block of sites
+     */
     DMRGBlock   BlockLeft_;
+
+    /**
+        DMRGBlock object representing the right block of sites
+     */
     DMRGBlock   BlockRight_;
 
+    /**
+        Matrix operator containing the superblock Hamiltonian
+     */
     Mat         superblock_H_ = nullptr;
+
+    /**
+        Tells whether the superblock Hamiltonian has been successfully constructed
+     */
     PetscBool   superblock_set_ = PETSC_FALSE;
 
     /**
@@ -84,11 +111,22 @@ protected:
     */
     MPI_Comm    comm_ = PETSC_COMM_WORLD;
 
-    /*----- Miscellaneous matrices -----*/
-    Mat eye1_;  /**< 2x2 identity matrix */
-    Mat Sz1_;   /**< Single-site \f$ S_z \f$ operator as a 2x2 matrix */
-    Mat Sp1_;   /**< Single-site \f$ S_+ \f$ operator as a 2x2 matrix */
-    Mat Sm1_;   /**< Single-site \f$ S_- \f$ operator as a 2x2 matrix */
+    /**
+        2x2 identity matrix
+    */
+    Mat eye1_;
+    /**
+        Single-site \f$ S_z \f$ operator as a 2x2 matrix
+    */
+    Mat Sz1_;
+    /**
+        Single-site \f$ S_+ \f$ operator as a 2x2 matrix
+    */
+    Mat Sp1_;
+    /**
+        Single-site \f$ S_- \f$ operator as a 2x2 matrix
+    */
+    Mat Sm1_;
 
 public:
 
