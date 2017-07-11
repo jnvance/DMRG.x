@@ -346,7 +346,7 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
 
     #ifdef __BUILD_SEQUENTIAL
         ierr = VecReshapeToMat(vec_r, gsv_mat_seq, M, N); CHKERRQ(ierr);
-        ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc);
+        ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc); CHKERRQ(ierr);
         ierr = MatMatMult(gsv_mat_seq, gsv_mat_hc, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &mat); CHKERRQ(ierr);
         if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
         if(gsv_mat_hc ) {ierr = MatDestroy(&gsv_mat_hc ); CHKERRQ(ierr);}
@@ -375,8 +375,8 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
     ierr = MatGetOwnershipRange(mat, &Istart, &Iend); CHKERRQ(ierr);
     nrows = Iend - Istart;
 
-    Mat gsv_mat_loc = nullptr;
-    Mat mat_local = nullptr;
+    Mat mat_in_loc = nullptr;
+    Mat mat_out_loc = nullptr;
 
     /*
         Some processes may not have been assigned any rows.
@@ -387,35 +387,132 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
         /*
             Create a matrix object that handles the local portion of mat
         */
-        ierr = MatDenseGetLocalMatrix(mat, &mat_local); CHKERRQ(ierr);
+        ierr = MatDenseGetLocalMatrix(mat, &mat_out_loc); CHKERRQ(ierr);
         /*
             Create a copy of the portion of gsv_mat that mimics the local row partition of mat
         */
-        ierr = MatCreateSeqDense(PETSC_COMM_SELF, nrows, N, NULL, &gsv_mat_loc); CHKERRQ(ierr);
+        ierr = MatCreateSeqDense(PETSC_COMM_SELF, nrows, N, NULL, &mat_in_loc); CHKERRQ(ierr);
         /*
-            Fill gsv_mat_loc with column slices of gsv_mat_seq that belong to the local row partition of mat
+            Fill mat_in_loc with column slices of gsv_mat_seq that belong to the local row partition of mat
         */
-        PetscScalar *vals_gsv_mat_seq, *vals_gsv_mat_loc;
+        PetscScalar *vals_gsv_mat_seq, *vals_mat_in_loc;
         ierr = MatDenseGetArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
-        ierr = MatDenseGetArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
+        ierr = MatDenseGetArray(mat_in_loc, &vals_mat_in_loc); CHKERRQ(ierr);
         for (PetscInt Icol = 0; Icol < N; ++Icol)
         {
-            ierr = PetscMemcpy(&vals_gsv_mat_loc[Icol*nrows],&vals_gsv_mat_seq[Istart+Icol*M], nrows*sizeof(PetscScalar));
+            ierr = PetscMemcpy(&vals_mat_in_loc[Icol*nrows],&vals_gsv_mat_seq[Istart+Icol*M], nrows*sizeof(PetscScalar));
             CHKERRQ(ierr);
         }
         ierr = MatDenseRestoreArray(gsv_mat_seq, &vals_gsv_mat_seq); CHKERRQ(ierr);
-        ierr = MatDenseRestoreArray(gsv_mat_loc, &vals_gsv_mat_loc); CHKERRQ(ierr);
+        ierr = MatDenseRestoreArray(mat_in_loc, &vals_mat_in_loc); CHKERRQ(ierr);
 
         ierr = MatHermitianTranspose(gsv_mat_seq, MAT_INITIAL_MATRIX, &gsv_mat_hc); CHKERRQ(ierr);
-        ierr = MatMatMult(gsv_mat_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_local); CHKERRQ(ierr);
+        ierr = MatMatMult(mat_in_loc,gsv_mat_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_out_loc); CHKERRQ(ierr);
     }
 
     ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
-    if(gsv_mat_loc) {ierr = MatDestroy(&gsv_mat_loc); CHKERRQ(ierr);}
+    if(mat_in_loc) {ierr = MatDestroy(&mat_in_loc); CHKERRQ(ierr);}
     if(gsv_mat_seq) {ierr = MatDestroy(&gsv_mat_seq); CHKERRQ(ierr);}
     if(gsv_mat_hc ) {ierr = MatDestroy(&gsv_mat_hc ); CHKERRQ(ierr);}
+
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatMultSelfHC"
+PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_right)
+{
+    PetscErrorCode  ierr = 0;
+    /*
+        The resulting matrix will be created in PETSC_COMM_WORLD
+    */
+    MPI_Comm comm = PETSC_COMM_WORLD;
+    #ifndef PETSC_USE_COMPLEX
+        SETERRQ(comm, 1, "Not implemented for real scalars.");
+    #endif
+    /*
+        Impose that the input matrix be of type seqdense
+    */
+    PetscBool flg;
+    ierr = PetscObjectTypeCompare((PetscObject)mat_in,MATSEQDENSE,&flg);CHKERRQ(ierr);
+    if(!flg) SETERRQ(comm, 1, "Input matrix must be of type seqdense.\n");
+    /*
+        Create the resultant matrix mat with the correct dimensions
+    */
+    PetscInt    mat_dim, M, N;
+    MatGetSize(mat_in, &M, &N);
+    if (hc_right == PETSC_TRUE){
+        mat_dim = M;
+    }
+    else {
+        mat_dim = N;
+    }
+    ierr = MatCreateDense(comm, PETSC_DECIDE, PETSC_DECIDE, mat_dim, mat_dim, NULL, &mat); CHKERRQ(ierr);
+    /*
+        Get ownership info
+    */
+    PetscInt    Istart, Iend, nrows;
+    ierr = MatGetOwnershipRange(mat, &Istart, &Iend); CHKERRQ(ierr);
+    nrows = Iend - Istart;
+
+    Mat mat_in_loc = nullptr;
+    Mat mat_out_loc = nullptr;
+    Mat mat_in_hc  = nullptr;
+    PetscScalar *vals_mat_in, *vals_mat_in_loc;
+    /*
+        Some processes may not have been assigned any rows.
+        Otherwise, "Intel MKL ERROR: Parameter 8 was incorrect on entry to ZGEMM ." is produced
+    */
+    if(nrows > 0)
+    {
+        /*
+            Create a matrix object that handles the local portion of mat
+        */
+        ierr = MatDenseGetLocalMatrix(mat, &mat_out_loc); CHKERRQ(ierr);
+        /*
+            Create a copy of the portion of mat_in that mimics the local row partition of mat
+        */
+        ierr = MatCreateSeqDense(PETSC_COMM_SELF, nrows, hc_right ? N : M , NULL, &mat_in_loc); CHKERRQ(ierr);
+        /*
+            Get the Hermitian conjugate of mat_in
+        */
+        ierr = MatHermitianTranspose(mat_in, MAT_INITIAL_MATRIX, &mat_in_hc); CHKERRQ(ierr);
+        /*
+            Fill mat_in_loc with column slices of mat_in that belong to the local row partition of mat_in/mat_in_hc
+        */
+        ierr = MatDenseGetArray(mat_in_loc, &vals_mat_in_loc); CHKERRQ(ierr);
+
+        if (hc_right == PETSC_TRUE){
+            ierr = MatDenseGetArray(mat_in, &vals_mat_in); CHKERRQ(ierr);
+            for (PetscInt Icol = 0; Icol < N; ++Icol)
+            {
+                ierr = PetscMemcpy(&vals_mat_in_loc[Icol*nrows],&vals_mat_in[Istart+Icol*M], nrows*sizeof(PetscScalar));
+                CHKERRQ(ierr);
+            }
+            ierr = MatDenseRestoreArray(mat_in, &vals_mat_in); CHKERRQ(ierr);
+            ierr = MatMatMult(mat_in_loc,mat_in_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_out_loc); CHKERRQ(ierr);
+        } else
+        {
+            ierr = MatDenseGetArray(mat_in_hc, &vals_mat_in); CHKERRQ(ierr);
+            for (PetscInt Icol = 0; Icol < M; ++Icol)
+            {
+                ierr = PetscMemcpy(&vals_mat_in_loc[Icol*nrows],&vals_mat_in[Istart+Icol*N], nrows*sizeof(PetscScalar));
+                CHKERRQ(ierr);
+            }
+            ierr = MatDenseRestoreArray(mat_in, &vals_mat_in); CHKERRQ(ierr);
+            ierr = MatMatMult(mat_in_loc,mat_in,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_out_loc); CHKERRQ(ierr);
+        }
+        ierr = MatDenseRestoreArray(mat_in_loc, &vals_mat_in_loc); CHKERRQ(ierr);
+    }
+
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    if(mat_in_loc) {ierr = MatDestroy(&mat_in_loc); CHKERRQ(ierr);}
+    if(mat_in_hc ) {ierr = MatDestroy(&mat_in_hc ); CHKERRQ(ierr);}
 
     return ierr;
 }

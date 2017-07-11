@@ -150,12 +150,9 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     /*
         Collect entire groundstate vector to all processes
      */
-    #ifdef PETSC_USE_COMPLEX
-        ierr = VecToMatMultHC(gsv_r_, nullptr, dm_left, size_left, size_right, PETSC_TRUE);
-        CHKERRQ(ierr);
-    #else
-        SETERRQ(comm_, 1, "Not implemented for real scalars.");
-    #endif
+    ierr = VecReshapeToLocalMat(gsv_r_, gsv_mat_seq, size_left, size_right); CHKERRQ(ierr);
+    ierr = MatMultSelfHC(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatMultSelfHC(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
     #ifdef __TESTING
         ierr = VecWrite(gsv_r_, "data/gsv_r_.dat"); CHKERRQ(ierr);
@@ -166,10 +163,11 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     groundstate_solved_ = PETSC_FALSE;
     dm_solved = PETSC_TRUE;
     /*
-        Destroy ground state vectors
+        Destroy ground state vectors and matrix
     */
     if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
     if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
+    if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
     return ierr;
 }
 
@@ -182,9 +180,11 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
         SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
     MatGetSVD(dm_left);
+    MatGetSVD(dm_right);
 
     #ifdef __TESTING
         ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(dm_right, "data/dm_right.dat"); CHKERRQ(ierr);
     #endif
 
     dm_solved = PETSC_FALSE;

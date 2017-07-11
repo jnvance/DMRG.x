@@ -75,6 +75,9 @@ protected:
         Imaginary part of the ground state eigenvector.
         When compiled with real PetscScalar, this contains only the real part of the vector.
         Otherwise, with complex PetscScalar, this is ignored during the entire program.
+
+        Note: The current implementation only handles the complex PetscScalar and will continue to
+        do so. Thus, this object will be removed in the future.
      */
     Vec         gsv_i_ = nullptr;
 
@@ -83,6 +86,13 @@ protected:
         the groundstate in gsv_r and/or gsv_i have been succesfully solved
      */
     PetscBool   groundstate_solved_ = PETSC_FALSE;
+
+    /**
+        Stores the ground state vector as a C-style or row-based matrix which may be populated
+        using VecReshapeToLocalMat
+     */
+    Mat         gsv_mat_seq;
+
 
     /**
         Density matrix for the left block

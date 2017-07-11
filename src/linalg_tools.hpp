@@ -148,13 +148,32 @@ PetscErrorCode VecReshapeToLocalMat(
     If `hc_right = PETSC_TRUE`, the output is \f$ \mathsf{mat} = \mathsf{A} * \mathsf{A}^\dag \f$
     with shape \f$ M \times M \f$. Otherwise, mat = A^dag * A with shape \f$ N \times N \f$ (not yet implemented).
 
-    _TODO:_ Implement the case `hc_right = PETSC_FALSE`
+    _TODO:_ Implement the case `hc_right = PETSC_FALSE` (_DONE_ using MatMultSelfHC)
 
     Note: This function is implemented only for complex scalars so that vec_i is ignored.
 
  */
 PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i,
     Mat& mat, const PetscInt M, const PetscInt N, const PetscBool hc_right);
+
+
+/**
+    Multiplies a local duplicate seqdense matrix to its own Hermitian conjugate and constructs a global result
+
+    @param[in]   mat_in         Input matrix  (must be sequential dense matrix)
+    @param[out]  mat            Output matrix (w)
+    @param[in]   hc_right       whether the Hermitian conjugate is applied to the right matrix
+
+    This function takes a matrix \f$ \mathsf{A} \f$ with shape \f$ M \times N \f$ and calculates
+    its Hermitian conjugate \f$\mathsf{A}^\dag = \mathsf{A}^{T*} \f$.
+
+    If `hc_right = PETSC_TRUE`, the output is \f$ \mathsf{mat} = \mathsf{A} * \mathsf{A}^\dag \f$
+    with shape \f$ M \times M \f$. Otherwise, mat = A^dag * A with shape \f$ N \times N \f$ (not yet implemented).
+
+    Note: This function is implemented only for complex scalars so that vec_i is ignored.
+
+ */
+PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_right);
 
 
 /**
