@@ -25,7 +25,8 @@
 /**
     Creates an identity matrix of size `dim`\f$\times\f$`dim`.
 
-    @param[out]  eye    Output matrix
+    @param[in]   comm   the MPI communicator
+    @param[out]  eye    the output matrix
     @param[in]   dim    dimensions of the identity matrix
 
  */
@@ -35,7 +36,8 @@ PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim);
 /**
     Creates the two-by-two matrix representation of a single-site \f$ S_z \f$ operator.
 
-    @param[out]  Sz     Output matrix
+    @param[in]   comm   the MPI communicator
+    @param[out]  Sz     the output matrix
 
     The operator has the matrix form
     \f[
@@ -52,7 +54,8 @@ PetscErrorCode MatSzCreate(const MPI_Comm& comm, Mat& Sz);
 /**
     Creates the two-by-two matrix representation of a single-site \f$ S_+ \f$ operator.
 
-    @param[out]  Sp     Output matrix
+    @param[in]   comm   the MPI communicator
+    @param[out]  Sp     the output matrix
 
     The operator has the matrix form
     \f[
