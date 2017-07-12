@@ -2,8 +2,6 @@ static char help[] =
     "Test Code for DMRG\n";
 
 #include <iostream>
-#include <slepceps.h>
-
 #include "dmrg.hpp"
 
 /*
@@ -18,9 +16,9 @@ public:
         Overload base class implementation
         with the Heisenberg Hamiltonian
     */
-    PetscErrorCode BuildBlockLeft();
-    PetscErrorCode BuildBlockRight();
-    PetscErrorCode BuildSuperBlock();
+    PetscErrorCode BuildBlockLeft() final;
+    PetscErrorCode BuildBlockRight() final;
+    PetscErrorCode BuildSuperBlock() final;
 
 };
 
@@ -209,145 +207,59 @@ int main(int argc, char **argv)
 
     iDMRG_Heisenberg heis;
     heis.init(comm);
-
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
-
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
-
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
-
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
-
-    heis.BuildBlockRight();
-    heis.BuildBlockLeft();
-
-    heis.BuildSuperBlock();
-
-    heis.MatSaveOperators();
-    heis.MatPeekOperators();
-    heis.destroy();
-
-
-
-
-
-    // #define __TEST_01__
-    #ifdef __TEST_01__
-
-    DMRGBlock block;
-    block.init();
     /*
-        Build the Hamiltonian for a two-spin system
-        B(L,1) + S(1)
+        Determine from options how many times the left and right blocks are grown
+        before solving for the ground state of the superblock Hamiltonian
     */
-    Mat eye1, Sz1, Sp1, Sm1;
-    MatEyeCreate(comm, eye1, 2);
-    MatSzCreate(comm, Sz1);
-    MatSpCreate(comm, Sp1);
-    MatTranspose(Sp1, MAT_INITIAL_MATRIX, &Sm1);
+    PetscInt n_pre = 2;
+    PetscInt n_solve = 3;
 
+    ierr = PetscOptionsGetInt(NULL,NULL,"-pre",&n_pre,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetInt(NULL,NULL,"-solve",&n_solve,NULL); CHKERRQ(ierr);
 
-    Mat H_temp;
-    Mat block_Sm;
+    PetscPrintf(comm, "pre: %-3d\nsolve: %-3d \n\n", n_pre, n_solve);
 
-    ierr = MatAssemblyBegin(block.Sp(), MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(block.Sp(), MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-    MatTranspose(block.Sp(), MAT_INITIAL_MATRIX, &block_Sm);
-
-    MatKron(block.H(), eye1, H_temp, comm);
-    MatKronAdd(block.Sz(), Sz1, H_temp, comm);
-
-    MatKronScaleAdd(0.5, block.Sp(), Sm1, H_temp, comm);
-    MatKronScaleAdd(0.5, block_Sm, Sp1, H_temp, comm);
-
-    MatPeek(comm, eye1,   "eye1");
-    MatPeek(comm, Sp1, "Sp1");
-    MatPeek(comm, Sm1, "Sm1");
-    MatPeek(comm, H_temp, "H_temp");
-
-    /*------ Solver ------*/
-
-    EPS eps;
-    EPSCreate(comm,&eps);
-    EPSSetOperators(eps,H_temp,NULL);
-    EPSSetProblemType(eps,EPS_HEP);
-
-    /*
-        Set solver parameters at runtime
-    */
-    ierr = EPSSetFromOptions(eps);CHKERRQ(ierr);
-    ierr = EPSSolve(eps);CHKERRQ(ierr);
-
-
-    /*
-        Get number of converged approximate eigenpairs
-    */
-    PetscInt nconv;
-    ierr = EPSGetConverged(eps,&nconv);CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_WORLD," Number of converged eigenpairs: %D\n\n",nconv);CHKERRQ(ierr);
-
-    PetscReal re, im, error;
-    PetscScalar    kr,ki;
-    PetscInt i;
-    Vec xr, xi;
-
-
-    ierr = MatCreateVecs(H_temp,NULL,&xr);CHKERRQ(ierr);
-    ierr = MatCreateVecs(H_temp,NULL,&xi);CHKERRQ(ierr);
-
-    if (nconv>0) {
-    /*
-       Display eigenvalues and relative errors
-    */
     ierr = PetscPrintf(PETSC_COMM_WORLD,
-         "           k          ||Ax-kx||/||kx||\n"
-         "   ----------------- ------------------\n");CHKERRQ(ierr);
+            "   nsites   gs energy   gs energy /site    rel error      ||Ax-kx||/||kx||\n"
+            "  -------- ----------- -----------------  -----------     ------------------\n");CHKERRQ(ierr);
 
-        for (i=0;i<nconv;i++) {
-            /*
-              Get converged eigenpairs: i-th eigenvalue is stored in kr (real part) and
-              ki (imaginary part)
-            */
-            ierr = EPSGetEigenpair(eps,i,&kr,&ki,xr,xi);CHKERRQ(ierr);
-            /*
-               Compute the relative error associated to each eigenpair
-            */
-            ierr = EPSComputeError(eps,i,EPS_ERROR_RELATIVE,&error);CHKERRQ(ierr);
+    PetscReal gse_r, gse_i, error;
 
-            #if defined(PETSC_USE_COMPLEX)
-                re = PetscRealPart(kr);
-                im = PetscImaginaryPart(kr);
-            #else
-                re = kr;
-                im = ki;
-            #endif
+    double gse_site_theor =  -0.4431471805599;
 
-            if (im!=0.0) {
-                ierr = PetscPrintf(PETSC_COMM_WORLD," %9f%+9fi %12g\n",(double)re,(double)im,(double)error);CHKERRQ(ierr);
-            } else {
-                ierr = PetscPrintf(PETSC_COMM_WORLD,"   %12f       %12g\n",(double)re,(double)error);CHKERRQ(ierr);
-            }
-        }
-        ierr = PetscPrintf(PETSC_COMM_WORLD,"\n");CHKERRQ(ierr);
+    for (PetscInt i = 0; i < n_pre; ++i){
+        heis.BuildBlockLeft();
+        heis.BuildBlockRight();
     }
 
+    PetscInt superblocklength;
+    for (PetscInt i = 0; i < n_solve; ++i)
+    {
+        heis.BuildBlockRight();
+        heis.BuildBlockLeft();
+        heis.BuildSuperBlock();
+        // heis.MatSaveOperators();
+        heis.SolveGroundState(gse_r, gse_i, error);
 
+        superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
 
-    MatDestroy(&eye1);
-    MatDestroy(&Sz1);
-    MatDestroy(&Sp1);
-    MatDestroy(&Sm1);
-    MatDestroy(&H_temp);
-    MatDestroy(&block_Sm);
+        if (gse_i!=0.0) {
+            // TODO: Implement error printing for complex values
+            ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n", superblocklength, (double)gse_r/((double)(superblocklength)), (double)gse_i/((double)(superblocklength)),(double)error);CHKERRQ(ierr);
+        } else {
+            double gse_site  = (double)gse_r/((double)(superblocklength));
+            double error_rel = (gse_site - gse_site_theor) / gse_site_theor;
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d%12f    %12f       %9f    %12g\n", superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
+        }
 
-    block.destroy();
-    #endif // __TEST_01__
-    #undef __TEST_01__
+        heis.BuildReducedDensityMatrices();
+        heis.SVDReducedDensityMatrices();
+
+    }
+
+    // heis.MatSaveOperators();
+    // heis.MatPeekOperators();
+    heis.destroy();
 
     SlepcFinalize();
     return ierr;

@@ -44,17 +44,18 @@ int main(int argc, char **argv)
     MatGetOwnershipRange(B,&Istart,&Iend);
 
     // Matrix B is tridiagonal with constant diagonal and subdiagonal entries
-    MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY);
+    // MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY);
     // for (PetscInt i = Istart; i < Iend; ++i){
     //     MatSetValue(B, i, i, 2, INSERT_VALUES);
     //     // if (i<size_B-1) MatSetValue(B, i, i+1, -1, INSERT_VALUES);
     //     if (i>0)        MatSetValue(B, i, i-1, -1, INSERT_VALUES);
     // }
     MatSetRandom(B, NULL);
+    MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY);
 
     // Matrix A is diagonal with varying entries
-    ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    // ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     // ierr = MatGetOwnershipRange(A, &Istart, &Iend); CHKERRQ(ierr);
     // for (PetscInt i = Istart; i < Iend; ++i){
     //     ierr = MatSetValue(A, i, i, i, INSERT_VALUES); CHKERRQ(ierr);
@@ -62,8 +63,8 @@ int main(int argc, char **argv)
     //     if (i%2 == 1) {ierr = MatSetValue(A, i, i-1, -1, INSERT_VALUES); CHKERRQ(ierr);}
     // }
     MatSetRandom(A, NULL);
-    MatTranspose(A, MAT_REUSE_MATRIX, &A);
-    ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY);
 
     MatKron(A, B, C, comm);
 
