@@ -122,6 +122,18 @@ protected:
     PetscBool   dm_svd = PETSC_FALSE;
 
     /**
+        Rotation matrix formed from the singular vectors of the largest
+        singular values of dm_left
+     */
+    Mat         U_left_ = nullptr;
+
+    /**
+        Rotation matrix formed from the singular vectors of the largest
+        singular values of dm_right
+     */
+    Mat         U_right_ = nullptr;
+
+    /**
         MPI communicator for distributed arrays
     */
     MPI_Comm    comm_ = PETSC_COMM_WORLD;

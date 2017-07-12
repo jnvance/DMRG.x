@@ -181,8 +181,6 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
         SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
     SVD         svd = nullptr;
-    Mat         U_left_ = nullptr;
-    Mat         U_right_ = nullptr;
     PetscScalar trunc_error;
     /**
         ISSUE: Kron may not work for dense matrices so store rotation matrix as
@@ -206,6 +204,7 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
         ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
         ierr = MatWrite(dm_right, "data/dm_right.dat"); CHKERRQ(ierr);
         ierr = MatWrite(U_left_, "data/U_left.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(U_right_, "data/U_right.dat"); CHKERRQ(ierr);
     #endif
 
     dm_solved = PETSC_FALSE;
