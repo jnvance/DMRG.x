@@ -2,10 +2,11 @@
 #include "linalg_tools.hpp"
 
 
-PetscErrorCode iDMRG::init(MPI_Comm comm)
+PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt mstates)
 {
     PetscErrorCode  ierr = 0;
     comm_ = comm;
+    mstates_ = mstates;
 
     /* Initialize block objects */
     ierr = BlockLeft_.init(comm_); CHKERRQ(ierr);
@@ -179,18 +180,41 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
     if(! (dm_left && dm_solved))
         SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
-    MatGetSVD(dm_left);
-    MatGetSVD(dm_right);
+    SVD         svd = nullptr;
+    Mat         U_left_ = nullptr;
+    Mat         U_right_ = nullptr;
+    PetscScalar trunc_error;
+    /**
+        ISSUE: Kron may not work for dense matrices so store rotation matrix as
+        sparse matrix
+     */
+
+    /*
+        Extract all singular values and a portion of the left-singular vectors
+     */
+    MatGetSVD(dm_left, svd);
+    SVDGetTruncatedSingularValues(dm_left, svd, mstates_, trunc_error, U_left_);
+    PetscPrintf(comm_, "(Left block)  Truncation error: %e\n", trunc_error);
+    SVDDestroy(&svd);
+
+    MatGetSVD(dm_right, svd);
+    SVDGetTruncatedSingularValues(dm_right, svd, mstates_, trunc_error, U_right_);
+    PetscPrintf(comm_, "(Right block) Truncation error: %e\n", trunc_error);
+    SVDDestroy(&svd);
 
     #ifdef __TESTING
         ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
         ierr = MatWrite(dm_right, "data/dm_right.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(U_left_, "data/U_left.dat"); CHKERRQ(ierr);
     #endif
 
     dm_solved = PETSC_FALSE;
     dm_svd    = PETSC_TRUE;
 
-    MatDestroy(&dm_left);
+    if (dm_left)  {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
+    if (dm_right) {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
+    if (U_left_)   {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
+    if (U_right_)  {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
     return ierr;
 }
 

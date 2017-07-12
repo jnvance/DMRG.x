@@ -520,8 +520,7 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
 
 #undef __FUNCT__
 #define __FUNCT__ "MatGetSVD"
-// PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat)
-PetscErrorCode MatGetSVD(const Mat& mat)
+PetscErrorCode MatGetSVD(const Mat& mat, SVD& svd)
 {
     PetscErrorCode  ierr = 0;
 
@@ -542,7 +541,6 @@ PetscErrorCode MatGetSVD(const Mat& mat)
         Get the SVD of the reduced density matrix corresponding
         to the left block system
      */
-    SVD svd = nullptr;
     ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
     ierr = SVDSetOperator(svd, mat); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
@@ -581,16 +579,96 @@ PetscErrorCode MatGetSVD(const Mat& mat)
             ierr = PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
         }
     #endif
-    /*
-        TODO: Implement an output object, decide whether to use explicit matrix
-        or return the svd object.
-     */
+    return ierr;
+}
 
 
-    /*
-        Destroy all created objects
+#undef __FUNCT__
+#define __FUNCT__ "SVDGetTruncatedSingularValues"
+PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, const PetscInt mstates, PetscScalar& error, Mat& mat)
+{
+    PetscErrorCode ierr = 0;
+
+    MPI_Comm    comm = PetscObjectComm((PetscObject)mat_in);
+    PetscInt    nconv, mat_nrows, mat_ncols;
+    PetscInt    Istart_vec, Iend_vec, Istart_mat, Iend_mat;
+    PetscReal   sigma;
+    PetscScalar *vals;
+    Vec         u = nullptr;
+    Vec         v = nullptr;
+    PetscInt    u_size = 0;
+
+    ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
+    if (nconv < mstates)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Number of converged singular values (%d) is less than mstates (%d).", nconv, mstates);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    /**
+        The output matrix is a dense matrix but stored as SPARSE.
      */
-    if (svd) SVDDestroy(&svd);
+    ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
+
+    /*
+        Setup the sizes
+     */
+    ierr = MatGetSize(mat_in, &mat_nrows, nullptr); CHKERRQ(ierr);
+    mat_ncols = mstates;
+    ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_nrows, mat_ncols); CHKERRQ(ierr);
+
+    /*
+        Setup the matrix
+     */
+    ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
+    ierr = MatSetUp(mat); CHKERRQ(ierr);
+    ierr = MatZeroEntries(mat); CHKERRQ(ierr);
+
+    /*
+        First m singular triplets contribute to the rotation matrix
+     */
+    ierr = MatCreateVecs(mat_in,nullptr,&u); CHKERRQ(ierr);
+    ierr = MatGetOwnershipRange(mat, &Istart_mat, &Iend_mat); CHKERRQ(ierr);
+    ierr = VecGetSize(u, &u_size); CHKERRQ(ierr);
+    ierr = VecGetOwnershipRange(u, &Istart_vec, &Iend_vec); CHKERRQ(ierr);
+
+    if (!(Istart_vec == Istart_mat && Iend_vec == Iend_mat))
+        SETERRQ(comm, 1, "Matrix and vector layout do not match.");
+
+    for (PetscInt Icol = 0; Icol < mstates; ++Icol)
+    {
+        ierr = SVDGetSingularTriplet(svd, Icol, &sigma, u, nullptr); CHKERRQ(ierr);
+        ierr = VecGetArray(u, &vals);
+
+        /*
+            Load vector as a column of mat
+         */
+        for (int Irow = Istart_vec; Irow < Iend_vec; ++Irow)
+        {
+            ierr = MatSetValue(mat, Irow, Icol, vals[Irow - Istart_vec], INSERT_VALUES); CHKERRQ(ierr);
+            // printf("%f\n", PetscRealPart(vals[Irow - Istart_vec]));
+        }
+
+        ierr = VecRestoreArray(u, &vals);
+    }
+
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    /*;
+        Remaining singular values add up to the error
+     */
+    error = 0;
+    for (PetscInt Icol = mstates; Icol < nconv; ++Icol)
+    {
+        ierr = SVDGetSingularTriplet(svd, Icol, &sigma, nullptr, nullptr); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "xx %18e\n", sigma); CHKERRQ(ierr);
+        error += sigma;
+    }
+
+    if(u) {ierr = VecDestroy(&u); CHKERRQ(ierr);}
+    if(v) {ierr = VecDestroy(&v); CHKERRQ(ierr);}
 
     return ierr;
 }

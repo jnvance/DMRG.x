@@ -177,13 +177,28 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
 
 
 /**
-    Calculates the singular value decomposition of a matrix
+    Calculates the singular value decomposition of a matrix sorted from
+    highest to lowest singular values
 
+    @param[in]   mat            Input matrix (may be dense)
+    @param[out]  svd            Output svd object
 
  */
-PetscErrorCode MatGetSVD(const Mat& mat);
-// PetscErrorCode MatGetSVD(const MPI_Comm& comm, const Mat& mat);
+PetscErrorCode MatGetSVD(const Mat& mat, SVD& svd);
 
+/**
+    Takes the first mstates singular vectors of mat_in as calculated in svd,
+    places them as columns of a matrix, and calculates the truncation error
+
+    @param[in]   mat_in         Input matrix of size \f$ n \times n \f$
+    @param[in]   svd            Corresponding SVD of mat_in
+    @param[in]   mstates        Number of singular values and vectors to be extracted, i.e. \f$m\f$
+    @param[out]  error          Truncation error calculated from the sum of the
+                                residual singular values
+    @param[out]  mat            Output matrix of size \f$ m \times n \f$
+
+ */
+PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, const PetscInt mstates, PetscScalar& error, Mat& mat);
 
 /** @} */
 

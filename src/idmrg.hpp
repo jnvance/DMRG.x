@@ -33,6 +33,11 @@ protected:
     PetscInt    final_nsites_;
 
     /**
+        Target number of states.
+    */
+    PetscInt    mstates_;
+
+    /**
         Target number of steps.
     */
     PetscInt    nsteps_;
@@ -143,7 +148,7 @@ public:
     /**
         Explicit initializer
      */
-    PetscErrorCode init(MPI_Comm = PETSC_COMM_WORLD);
+    PetscErrorCode init(MPI_Comm comm = PETSC_COMM_WORLD, PetscInt mstates = 20);
 
     /**
         Explicit destructor
