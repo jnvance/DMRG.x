@@ -644,7 +644,7 @@ PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, 
         /*
             Load vector as a column of mat
          */
-        for (int Irow = Istart_vec; Irow < Iend_vec; ++Irow)
+        for (PetscInt Irow = Istart_vec; Irow < Iend_vec; ++Irow)
         {
             ierr = MatSetValue(mat, Irow, Icol, vals[Irow - Istart_vec], INSERT_VALUES); CHKERRQ(ierr);
             // printf("%f\n", PetscRealPart(vals[Irow - Istart_vec]));
@@ -656,7 +656,7 @@ PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, 
     ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
-    /*;
+    /*
         Remaining singular values add up to the error
      */
     error = 0;
