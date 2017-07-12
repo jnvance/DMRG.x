@@ -65,7 +65,7 @@ PetscErrorCode DMRGBlock::destroy()
 }
 
 
-PetscErrorCode DMRGBlock::update_operators(const Mat& H_new, const Mat& Sz_new, const Mat& Sp_new)
+PetscErrorCode DMRGBlock::update_operators(Mat& H_new, Mat& Sz_new, Mat& Sp_new)
 {
     PetscErrorCode  ierr = 0;
     ierr = update_H(H_new); CHKERRQ(ierr);
@@ -87,41 +87,64 @@ PetscErrorCode DMRGBlock::update_operators(const Mat& H_new, const Mat& Sz_new, 
 // }
 
 
-PetscErrorCode DMRGBlock::update_H(const Mat& H_new)
+PetscErrorCode DMRGBlock::update_H(Mat& H_new)
 {
     PetscErrorCode  ierr = 0;
     if (H_ == H_new)
         return ierr;
     Mat H_temp = H_;
     H_ = H_new;
+    H_new = nullptr;
     ierr = MatDestroy(&H_temp); CHKERRQ(ierr);
     return ierr;
 }
 
 
-PetscErrorCode DMRGBlock::update_Sz(const Mat& Sz_new)
+PetscErrorCode DMRGBlock::update_Sz(Mat& Sz_new)
 {
     PetscErrorCode  ierr = 0;
     if (Sz_ == Sz_new)
         return ierr;
     Mat Sz_temp = Sz_;
     Sz_ = Sz_new;
+    Sz_new = nullptr;
     ierr = MatDestroy(&Sz_temp); CHKERRQ(ierr);
     return ierr;
 }
 
 
-PetscErrorCode DMRGBlock::update_Sp(const Mat& Sp_new)
+PetscErrorCode DMRGBlock::update_Sp(Mat& Sp_new)
 {
     PetscErrorCode  ierr = 0;
     if (Sp_ == Sp_new)
         return ierr;
     Mat Sp_temp = Sp_;
     Sp_ = Sp_new;
+    Sp_new = nullptr;
     ierr = MatDestroy(&Sp_temp); CHKERRQ(ierr);
     return ierr;
 }
 
+
+PetscBool DMRGBlock::is_valid()
+{
+    PetscInt size1, size2, size3;
+
+    MatGetSize(H_, &size1, &size2);
+    if(size1 != size2) return PETSC_FALSE;
+
+    MatGetSize(Sz_, &size2, &size3);
+    if(size1 != size2) return PETSC_FALSE;
+    if(size2 != size3) return PETSC_FALSE;
+
+    MatGetSize(Sp_, &size2, &size3);
+    if(size1 != size2) return PETSC_FALSE;
+    if(size2 != size3) return PETSC_FALSE;
+
+    basis_size_ = size1;
+
+    return PETSC_TRUE;
+}
 
 
 
