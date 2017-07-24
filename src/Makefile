@@ -1,12 +1,14 @@
 
 TARGETS = test_dmrg.x test_kron.x test_reshape.x
 
-CXXFLAGS=-O3 -std=c++11 -D__TESTING
+CXXFLAGS = -O3 -std=c++11 -D__TESTING
+
+TEST_DMRG_DEPS = test_dmrg.o idmrg_1d_heisenberg.o dmrgblock.o kron.o idmrg.o linalg_tools.o
 
 all: ${TARGETS}
 
-test_dmrg.x: test_dmrg.o dmrgblock.o idmrg.o linalg_tools.o kron.o chkopts
-	-${CLINKER} -o test_dmrg.x test_dmrg.o dmrgblock.o kron.o idmrg.o linalg_tools.o ${SLEPC_EPS_LIB}
+test_dmrg.x: ${TEST_DMRG_DEPS} chkopts
+	-${CLINKER} -o test_dmrg.x ${TEST_DMRG_DEPS} ${SLEPC_EPS_LIB}
 	${RM} test_dmrg.o
 
 test_kron.x: test_kron.o linalg_tools.o kron.o chkopts
