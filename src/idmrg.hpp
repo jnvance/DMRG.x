@@ -50,7 +50,7 @@ protected:
     /**
         Completed number of steps.
     */
-    PetscInt    iter_;
+    PetscInt    iter_ = 0;
 
     /**
         DMRGBlock object representing the left block of sites
@@ -230,6 +230,14 @@ public:
     PetscInt local_dim()
     {
         return local_dim_;
+    }
+
+    /**
+     *  Reference to iteration number
+     */
+    PetscInt& iter()
+    {
+        return iter_;
     }
 
     /**

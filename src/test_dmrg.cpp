@@ -34,37 +34,31 @@ int main(int argc, char **argv)
     PetscPrintf(comm, "nsites  %-10d\n" "mstates %-10d \n\n", nsites, mstates);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
-            "   nsites   gs energy   gs energy /site    rel error      ||Ax-kx||/||kx||\n"
-            "  -------- ----------- -----------------  -----------     ------------------\n");CHKERRQ(ierr);
-
+            "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"
+            "  -------- -------- ----------- ----------------- ----------- ------------------\n");CHKERRQ(ierr);
     PetscReal gse_r, gse_i, error;
 
     double gse_site_theor =  -0.4431471805599;
 
-
-    PetscInt iter = 0;
-    while(heis.TotalLength() < heis.TargetLength() && iter < heis.TargetLength()){
+    while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
+    {
         heis.BuildBlockLeft();
         heis.BuildBlockRight();
 
-        heis.BuildSuperBlock();
-        heis.SolveGroundState(gse_r, gse_i, error);
-
         if (heis.TotalBasisSize() >= heis.mstates()*heis.mstates())
         {
-            // heis.BuildSuperBlock();
-            // heis.SolveGroundState(gse_r, gse_i, error);
-
-
+            heis.BuildSuperBlock();
+            heis.SolveGroundState(gse_r, gse_i, error);
             PetscInt superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
 
             if (gse_i!=0.0) {
                 // TODO: Implement error printing for complex values
+                SETERRQ(comm,1,"Not implemented for complex ground state energy.\n");
                 ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n", superblocklength, (double)gse_r/((double)(superblocklength)), (double)gse_i/((double)(superblocklength)),(double)error);CHKERRQ(ierr);
             } else {
                 double gse_site  = (double)gse_r/((double)(superblocklength));
                 double error_rel = (gse_site - gse_site_theor) / gse_site_theor;
-                ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d%12f    %12f       %9f    %12g\n", superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
+                ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n", heis.iter(), superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
             }
 
             heis.BuildReducedDensityMatrices();
@@ -72,9 +66,8 @@ int main(int argc, char **argv)
             heis.TruncateOperators();
         }
 
-
         PetscPrintf(comm, "Total sites: %d\n", heis.TotalLength());
-        ++iter;
+        heis.iter()++;
     }
 
     // heis.MatSaveOperators();
