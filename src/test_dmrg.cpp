@@ -5,6 +5,13 @@ static char help[] =
 #include "idmrg_1d_heisenberg.hpp"
 
 
+#if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
+    #define PRINT_EMPTY_LINE PetscPrintf(comm,"\n");
+#else
+    #define PRINT_EMPTY_LINE
+#endif
+
+
 #undef __FUNCT__
 #define __FUNCT__ "main"
 int main(int argc, char **argv)
@@ -46,9 +53,7 @@ int main(int argc, char **argv)
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
-        #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
-            PetscPrintf(comm,"\n");
-        #endif
+        PRINT_EMPTY_LINE;
 
         heis.BuildBlockLeft();
         heis.BuildBlockRight();
@@ -59,9 +64,7 @@ int main(int argc, char **argv)
             heis.SolveGroundState(gse_r, gse_i, error);
             superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
 
-            #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
-                PetscPrintf(comm,"\n");
-            #endif
+            PRINT_EMPTY_LINE;
 
             if (gse_i!=0.0) {
                 // TODO: Implement error printing for complex values
@@ -73,9 +76,7 @@ int main(int argc, char **argv)
                 ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n", heis.iter(), superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
             }
 
-            #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
-                PetscPrintf(comm,"\n");
-            #endif
+            PRINT_EMPTY_LINE;
 
             heis.BuildReducedDensityMatrices();
             heis.GetRotationMatrices();
@@ -89,8 +90,6 @@ int main(int argc, char **argv)
         heis.iter()++;
     }
 
-    // heis.MatSaveOperators();
-    // heis.MatPeekOperators();
     heis.destroy();
 
     SlepcFinalize();
