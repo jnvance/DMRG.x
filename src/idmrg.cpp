@@ -203,13 +203,19 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
      */
     MatGetSVD(dm_left, svd);
     SVDGetTruncatedSingularValues(dm_left, svd, mstates_, trunc_error, U_left_);
-    PetscPrintf(comm_, "(Left block)  Truncation error: %e\n", trunc_error);
     SVDDestroy(&svd);
+
+    #ifdef __PRINT_TRUNCATION_ERROR
+        PetscPrintf(comm_, "%12s(Left block)  Truncation error: %e\n", "", trunc_error);
+    #endif
 
     MatGetSVD(dm_right, svd);
     SVDGetTruncatedSingularValues(dm_right, svd, mstates_, trunc_error, U_right_);
-    PetscPrintf(comm_, "(Right block) Truncation error: %e\n", trunc_error);
     SVDDestroy(&svd);
+
+    #ifdef __PRINT_TRUNCATION_ERROR
+        PetscPrintf(comm_, "%12s(Right block) Truncation error: %e\n", "", trunc_error);
+    #endif
 
     #ifdef __TESTING
         ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
@@ -239,19 +245,22 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     EPS eps;
 
     PetscScalar trunc_error;
-    ierr =  EPSLargestEigenpairs(dm_left, mstates_, trunc_error, U_left_, eps); CHKERRQ(ierr);
-    ierr = PetscPrintf(comm_, "Truncation error (left):  %12e\n", trunc_error); CHKERRQ(ierr);
+    ierr = EPSLargestEigenpairs(dm_left, mstates_, trunc_error, U_left_, eps); CHKERRQ(ierr);
+    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
 
-    EPSDestroy(&eps);
+    #ifdef __PRINT_TRUNCATION_ERROR
+        ierr = PetscPrintf(comm_, "%12sTruncation error (left):  %12e\n", "", trunc_error); CHKERRQ(ierr);
+    #endif
 
-    ierr =  EPSLargestEigenpairs(dm_right, mstates_, trunc_error, U_right_, eps); CHKERRQ(ierr);
-    ierr = PetscPrintf(comm_, "Truncation error (right): %12e\n", trunc_error); CHKERRQ(ierr);
+    ierr = EPSLargestEigenpairs(dm_right, mstates_, trunc_error, U_right_, eps); CHKERRQ(ierr);
+    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
 
-    EPSDestroy(&eps);
+    #ifdef __PRINT_TRUNCATION_ERROR
+        ierr = PetscPrintf(comm_, "%12sTruncation error (right): %12e\n", "", trunc_error); CHKERRQ(ierr);
+    #endif
 
     dm_solved = PETSC_FALSE;
     dm_svd = PETSC_TRUE;
-
 
     #define __CHECK_TRUNCATION
     #ifdef __CHECK_TRUNCATION
@@ -295,22 +304,22 @@ PetscErrorCode iDMRG::TruncateOperators()
     ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
-    BlockLeft_.update_H(mat_temp);
+    ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
     ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
-    BlockLeft_.update_Sz(mat_temp);
+    ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
     ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
-    BlockLeft_.update_Sp(mat_temp);
+    ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
 
     ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
 
     ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
 
     ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
-    BlockRight_.update_H(mat_temp);
+    ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
     ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
-    BlockRight_.update_Sz(mat_temp);
+    ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
     ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
-    BlockRight_.update_Sp(mat_temp);
+    ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
 
     ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
 

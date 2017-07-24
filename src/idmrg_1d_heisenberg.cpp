@@ -25,7 +25,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = MatKronScaleAdd(0.5, BlockLeft_.Sp(), Sm1_, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = MatKronScaleAdd(0.5, BlockLeft_Sm, Sp1_, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(Mat_temp); /* H_temp is destroyed here */ CHKERRQ(ierr);
-    ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
     Mat_temp = NULL;
 
     /*
@@ -45,8 +44,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     BlockLeft_.length(BlockLeft_.length() + 1);
 
     if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
-    #ifdef __TESTING
-        PetscPrintf(comm_, "Left       basis size: %-5d nsites: %-5d \n", BlockLeft_.basis_size(), BlockLeft_.length());
+    #ifdef __PRINT_SIZES
+        PetscPrintf(comm_, "%12sLeft       basis size: %-5d nsites: %-5d \n", "", BlockLeft_.basis_size(), BlockLeft_.length());
     #endif
     ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
 
@@ -93,8 +92,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 
     BlockRight_.length(BlockRight_.length() + 1);
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
-    #ifdef __TESTING
-        PetscPrintf(comm_, "Right      basis size: %-5d nsites: %-5d \n", BlockRight_.basis_size(), BlockRight_.length());
+    #ifdef __PRINT_SIZES
+        PetscPrintf(comm_, "%12sRight      basis size: %-5d nsites: %-5d \n", "", BlockRight_.basis_size(), BlockRight_.length());
     #endif
     ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
 
@@ -174,10 +173,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     ierr = MatGetSize(superblock_H_, &M_superblock, nullptr); CHKERRQ(ierr);
     if(M_superblock != TotalBasisSize()) SETERRQ(comm_, 1, "Basis size mismatch.\n");
-    #ifdef __TESTING
-        PetscPrintf(comm_, "Superblock basis size: %-5d nsites: %-5d \n", M_superblock, BlockLeft_.length() + BlockRight_.length());
+    #ifdef __PRINT_SIZES
+        PetscPrintf(comm_, "%12sSuperblock basis size: %-5d nsites: %-5d \n", "", M_superblock, BlockLeft_.length() + BlockRight_.length());
     #endif
-
 
     return ierr;
 }

@@ -725,7 +725,6 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
     ierr = EPSSetDimensions(eps, mstates, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
 
-    PetscPrintf(comm, "mstates: %d\n",mstates);
 
     // ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
     ierr = EPSSolve(eps); CHKERRQ(ierr);
@@ -733,7 +732,10 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     PetscInt nconv;
     ierr = EPSGetConverged(eps, &nconv);
 
-    PetscPrintf(comm, "nconv  : %d\n",nconv  );
+    #ifdef __PRINT_CONVERGENCE
+        PetscPrintf(comm, "%12sEPS requested mstates: %d\n","",mstates);
+        PetscPrintf(comm, "%12sEPS no of conv states: %d\n","",nconv);
+    #endif
 
     if(nconv < mstates)
     {

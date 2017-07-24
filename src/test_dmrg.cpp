@@ -31,7 +31,10 @@ int main(int argc, char **argv)
     iDMRG_Heisenberg heis;
     heis.init(comm, nsites, mstates);
 
-    PetscPrintf(comm, "nsites  %-10d\n" "mstates %-10d \n\n", nsites, mstates);
+    PetscPrintf(comm,   "\n"
+                        "iDMRG of the 1D Heisenberg model\n"
+                        "Target number of sites  : %-10d\n"
+                        "Number of states to keep: %-10d\n\n", nsites, mstates);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"
@@ -39,9 +42,14 @@ int main(int argc, char **argv)
     PetscReal gse_r, gse_i, error;
 
     double gse_site_theor =  -0.4431471805599;
+    PetscInt superblocklength = 0;
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
+        #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
+            PetscPrintf(comm,"\n");
+        #endif
+
         heis.BuildBlockLeft();
         heis.BuildBlockRight();
 
@@ -49,7 +57,11 @@ int main(int argc, char **argv)
         {
             heis.BuildSuperBlock();
             heis.SolveGroundState(gse_r, gse_i, error);
-            PetscInt superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
+            superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
+
+            #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
+                PetscPrintf(comm,"\n");
+            #endif
 
             if (gse_i!=0.0) {
                 // TODO: Implement error printing for complex values
@@ -61,12 +73,19 @@ int main(int argc, char **argv)
                 ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n", heis.iter(), superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
             }
 
+            #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
+                PetscPrintf(comm,"\n");
+            #endif
+
             heis.BuildReducedDensityMatrices();
             heis.GetRotationMatrices();
             heis.TruncateOperators();
+        } else {
+            #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
+                PetscPrintf(PETSC_COMM_WORLD,"   %6d\n", heis.iter());
+            #endif
         }
 
-        PetscPrintf(comm, "Total sites: %d\n", heis.TotalLength());
         heis.iter()++;
     }
 
