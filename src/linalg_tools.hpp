@@ -1,7 +1,7 @@
 #ifndef __LINALG_TOOLS_HPP__
 #define __LINALG_TOOLS_HPP__
 
-// #include <slepceps.h>
+#include <slepceps.h>
 #include <slepcsvd.h>
 
 /**
@@ -199,6 +199,20 @@ PetscErrorCode MatGetSVD(const Mat& mat, SVD& svd);
 
  */
 PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, const PetscInt mstates, PetscScalar& error, Mat& mat);
+
+/**
+    Takes the first mstates eigenpairs of mat_in with highest eigenvalues and calculates it with eps,
+    places them as columns of a matrix, and calculates the truncation error.
+
+    @param[in]  mat_in   The matrix in
+    @param[in]  mstates  The mstates
+    @param      error    The error
+    @param      mat      The matrix
+    @param      eps      The eps
+
+    @return     { description_of_the_return_value }
+ */
+PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, PetscScalar& error, Mat& mat, EPS& eps);
 
 /** @} */
 

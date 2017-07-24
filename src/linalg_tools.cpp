@@ -672,3 +672,134 @@ PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, 
 
     return ierr;
 }
+
+
+
+#undef __FUNCT__
+#define __FUNCT__ "EPSLargestEigenpairs"
+PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, EPS& eps)
+{
+    PetscErrorCode  ierr = 0;
+
+    MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
+
+    #ifndef PETSC_USE_COMPLEX
+        SETERRQ(comm, 1, "Not implemented for real scalars.");
+    #endif
+
+    PetscBool assembled;
+    ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(mat_in, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(mat_in, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    PetscInt mat_in_nrows, mat_in_ncols;
+    ierr = MatGetSize(mat_in, &mat_in_nrows, &mat_in_ncols);
+    if(mat_in_nrows != mat_in_ncols)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Matrix dimension mismatch. "
+                         "Number of rows (%d) is not equal to number of columns (%d).",
+                         mat_in_nrows, mat_in_ncols);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    // PetscInt mstates = mat_in_nrows < mstates_in ? mat_in_nrows : mstates_in;
+
+    PetscInt mstates = mstates_in;
+
+    if(mat_in_nrows < mstates)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Matrix dimension too small. "
+                         "Matrix size (%d) must at least be equal to mstates (%d).",
+                         mat_in_nrows, mstates);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    // EPS eps = nullptr;
+    ierr = EPSCreate(comm, &eps); CHKERRQ(ierr);
+    ierr = EPSSetOperators(eps, mat_in, nullptr); CHKERRQ(ierr);
+    // ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
+    ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
+    ierr = EPSSetDimensions(eps, mstates, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
+
+    PetscPrintf(comm, "mstates: %d\n",mstates);
+
+    // ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
+    ierr = EPSSolve(eps); CHKERRQ(ierr);
+
+    PetscInt nconv;
+    ierr = EPSGetConverged(eps, &nconv);
+
+    PetscPrintf(comm, "nconv  : %d\n",nconv  );
+
+    if(nconv < mstates)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Number of converged eigenpairs (%d) less than requested mstates (%d)", nconv, mstates);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    /**
+        The output matrix is a dense matrix but stored as SPARSE.
+     */
+    Vec Vr;
+    PetscInt    Istart, Iend, Istart_mat, Iend_mat;
+    ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
+    ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_in_nrows, mstates); CHKERRQ(ierr);
+    ierr = MatCreateVecs(mat_in, &Vr, nullptr); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
+    ierr = MatSetUp(mat); CHKERRQ(ierr);
+    ierr = VecGetOwnershipRange(Vr,  &Istart, &Iend); CHKERRQ(ierr);
+    ierr = MatGetOwnershipRange(mat, &Istart_mat, &Iend_mat); CHKERRQ(ierr);
+
+    if (!(Istart == Istart_mat && Iend == Iend_mat))
+        SETERRQ(comm, 1, "Matrix and vector layout do not match.");
+
+    /* Prepare row indices */
+    PetscInt mrows = Iend - Istart;
+    PetscInt idxm[mrows];
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow) idxm[Irow - Istart] = Irow;
+
+    PetscScalar sum_first_mstates = 0;
+    PetscScalar eigr;
+    const PetscScalar *vals;
+    for (PetscInt Istate = 0; Istate < mstates; ++Istate)
+    {
+        ierr = EPSGetEigenpair(eps, Istate, &eigr, nullptr, Vr, nullptr); CHKERRQ(ierr);
+        sum_first_mstates += eigr;
+        ierr = VecGetArrayRead(Vr, &vals); CHKERRQ(ierr);
+        ierr = MatSetValues(mat, mrows, idxm, 1, &Istate, vals, INSERT_VALUES); CHKERRQ(ierr);
+        ierr = VecRestoreArrayRead(Vr, &vals); CHKERRQ(ierr);
+    }
+    error = 1.0 - sum_first_mstates;
+
+    ierr = MatAssembled(mat, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    // #define __PRINTOUT
+    #ifdef __PRINTOUT
+        PetscBool terse;
+        PetscOptionsHasName(NULL,NULL,"-terse",&terse);
+        if (terse)
+        {
+            EPSErrorView(eps,EPS_ERROR_RELATIVE,NULL);
+        }
+        else
+        {
+            PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);
+            EPSReasonView(eps,PETSC_VIEWER_STDOUT_WORLD);
+            EPSErrorView(eps,EPS_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);
+            PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);
+        }
+    #endif
+
+    // if(eps) {ierr = EPSDestroy(&eps); CHKERRQ(ierr);}
+
+    return ierr;
+}
