@@ -9,6 +9,7 @@ static char help[] =
 */
 class iDMRG_Heisenberg: public iDMRG
 {
+    // PetscInt local_dim_ = 2;
 
 public:
 
@@ -67,6 +68,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
 
     BlockLeft_.length(BlockLeft_.length() + 1);
 
+    if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
+    #ifdef __TESTING
+        PetscPrintf(comm_, "Left       basis size: %-5d nsites: %-5d \n", BlockLeft_.basis_size(), BlockLeft_.length());
+    #endif
     ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
 
     return ierr;
@@ -111,7 +116,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     ierr = BlockRight_.update_Sp(Mat_temp); CHKERRQ(ierr);
 
     BlockRight_.length(BlockRight_.length() + 1);
-
+    if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
+    #ifdef __TESTING
+        PetscPrintf(comm_, "Right      basis size: %-5d nsites: %-5d \n", BlockRight_.basis_size(), BlockRight_.length());
+    #endif
     ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
 
     return ierr;
@@ -123,7 +131,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;
     Mat             mat_temp;
-    PetscInt        M_left, M_right;
+    PetscInt        M_left, M_right, M_superblock;
 
     /*
         TODO: Impose a checkpoint correctness of blocks
@@ -188,6 +196,13 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     superblock_set_ = PETSC_TRUE;
 
+    ierr = MatGetSize(superblock_H_, &M_superblock, nullptr); CHKERRQ(ierr);
+    if(M_superblock != TotalBasisSize()) SETERRQ(comm_, 1, "Basis size mismatch.\n");
+    #ifdef __TESTING
+        PetscPrintf(comm_, "Superblock basis size: %-5d nsites: %-5d \n", M_superblock, BlockLeft_.length() + BlockRight_.length());
+    #endif
+
+
     return ierr;
 }
 
@@ -205,19 +220,20 @@ int main(int argc, char **argv)
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
-    iDMRG_Heisenberg heis;
-    heis.init(comm);
     /*
-        Determine from options how many times the left and right blocks are grown
-        before solving for the ground state of the superblock Hamiltonian
+        Determine from options the target number of sites
+        and number of states retained at each truncation
     */
-    PetscInt n_pre = 2;
-    PetscInt n_solve = 3;
+    PetscInt nsites = 12;
+    PetscInt mstates = 15;
 
-    ierr = PetscOptionsGetInt(NULL,NULL,"-pre",&n_pre,NULL); CHKERRQ(ierr);
-    ierr = PetscOptionsGetInt(NULL,NULL,"-solve",&n_solve,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetInt(NULL,NULL,"-nsites",&nsites,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
 
-    PetscPrintf(comm, "pre: %-3d\nsolve: %-3d \n\n", n_pre, n_solve);
+    iDMRG_Heisenberg heis;
+    heis.init(comm, nsites, mstates);
+
+    PetscPrintf(comm, "nsites  %-10d\n" "mstates %-10d \n\n", nsites, mstates);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   nsites   gs energy   gs energy /site    rel error      ||Ax-kx||/||kx||\n"
@@ -227,6 +243,44 @@ int main(int argc, char **argv)
 
     double gse_site_theor =  -0.4431471805599;
 
+
+    PetscInt iter = 0;
+    while(heis.TotalLength() < heis.TargetLength() && iter < heis.TargetLength()){
+        heis.BuildBlockLeft();
+        heis.BuildBlockRight();
+
+        heis.BuildSuperBlock();
+        heis.SolveGroundState(gse_r, gse_i, error);
+
+        if (heis.TotalBasisSize() >= heis.mstates()*heis.mstates())
+        {
+            // heis.BuildSuperBlock();
+            // heis.SolveGroundState(gse_r, gse_i, error);
+
+
+            PetscInt superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
+
+            if (gse_i!=0.0) {
+                // TODO: Implement error printing for complex values
+                ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n", superblocklength, (double)gse_r/((double)(superblocklength)), (double)gse_i/((double)(superblocklength)),(double)error);CHKERRQ(ierr);
+            } else {
+                double gse_site  = (double)gse_r/((double)(superblocklength));
+                double error_rel = (gse_site - gse_site_theor) / gse_site_theor;
+                ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d%12f    %12f       %9f    %12g\n", superblocklength, (double)gse_r, gse_site,  error_rel, (double)(error)); CHKERRQ(ierr);
+            }
+
+            heis.BuildReducedDensityMatrices();
+            heis.GetRotationMatrices();
+            heis.TruncateOperators();
+        }
+
+
+        PetscPrintf(comm, "Total sites: %d\n", heis.TotalLength());
+        ++iter;
+    }
+
+
+    #ifdef __TRASH
     for (PetscInt i = 0; i < n_pre; ++i){
         heis.BuildBlockLeft();
         heis.BuildBlockRight();
@@ -253,9 +307,12 @@ int main(int argc, char **argv)
         }
 
         heis.BuildReducedDensityMatrices();
-        heis.SVDReducedDensityMatrices();
+        // heis.SVDReducedDensityMatrices();
+        heis.GetRotationMatrices();
+        heis.TruncateOperators();
 
     }
+    #endif
 
     // heis.MatSaveOperators();
     // heis.MatPeekOperators();

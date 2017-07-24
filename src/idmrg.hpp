@@ -28,6 +28,11 @@ class iDMRG
 protected:
 
     /**
+        Dimension of the local hilbert space
+    */
+    PetscInt    local_dim_;
+
+    /**
         Target number of sites.
     */
     PetscInt    final_nsites_;
@@ -160,7 +165,7 @@ public:
     /**
         Explicit initializer
      */
-    PetscErrorCode init(MPI_Comm comm = PETSC_COMM_WORLD, PetscInt mstates = 20);
+    PetscErrorCode init(MPI_Comm comm = PETSC_COMM_WORLD, PetscInt nsites = 100, PetscInt mstates = 20);
 
     /**
         Explicit destructor
@@ -168,7 +173,7 @@ public:
     PetscErrorCode destroy();
 
     /**
-        Returns the number of sites in the left block;
+        Returns the number of sites in the left block
      */
     PetscInt LengthBlockLeft()
     {
@@ -176,11 +181,55 @@ public:
     }
 
     /**
-        Returns the number of sites in the right block;
+        Returns the number of sites in the right block
      */
     PetscInt LengthBlockRight()
     {
         return BlockRight_.length();
+    }
+
+    /**
+        Returns the total number of sites
+     */
+     PetscInt TotalLength()
+    {
+        return LengthBlockLeft() + LengthBlockRight();
+    }
+
+    /**
+        Returns the total basis size
+     */
+    PetscInt TotalBasisSize()
+    {
+        if(BlockLeft_.is_valid() && BlockRight_.is_valid()){
+            return BlockLeft_.basis_size() * BlockRight_.basis_size();
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+        Returns the target number of sites
+     */
+    PetscInt TargetLength()
+    {
+        return final_nsites_;
+    }
+
+    /**
+        Returns the target number of states
+     */
+    PetscInt mstates()
+    {
+        return mstates_;
+    }
+
+    /**
+        Returns the number of dimensions of the local Hilbert space
+     */
+    PetscInt local_dim()
+    {
+        return local_dim_;
     }
 
     /**
@@ -212,6 +261,16 @@ public:
         Get the SVD of the left and right reduced density matrices.
      */
     PetscErrorCode SVDReducedDensityMatrices();
+
+    /**
+        Construct the rotation matrices for truncating the block and spin operators.
+     */
+    PetscErrorCode GetRotationMatrices();
+
+    /**
+
+     */
+    PetscErrorCode TruncateOperators();
 
     /**
         Printout operator matrices to standard output

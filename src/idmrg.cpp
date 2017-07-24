@@ -2,11 +2,12 @@
 #include "linalg_tools.hpp"
 
 
-PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt mstates)
+PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
 {
     PetscErrorCode  ierr = 0;
     comm_ = comm;
     mstates_ = mstates;
+    final_nsites_ = nsites;
 
     /* Initialize block objects */
     ierr = BlockLeft_.init(comm_); CHKERRQ(ierr);
@@ -83,13 +84,13 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 
     if (gsv_r_) VecDestroy(&gsv_r_);
     if (gsv_i_) VecDestroy(&gsv_i_);
-    ierr = MatCreateVecs(superblock_H_,nullptr,&gsv_r_); CHKERRQ(ierr);
+    ierr = MatCreateVecs(superblock_H_, &gsv_r_, nullptr); CHKERRQ(ierr);
 
     /* TODO: Verify that this works */
     #if defined(PETSC_USE_COMPLEX)
         gsv_i_ = nullptr;
     #else
-        ierr = MatCreateVecs(superblock_H_,nullptr,&gsv_i_); CHKERRQ(ierr);
+        ierr = MatCreateVecs(superblock_H_,&gsv_i_,nullptr); CHKERRQ(ierr);
     #endif
 
     PetscScalar kr, ki;
@@ -125,6 +126,16 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     {
         PetscPrintf(PETSC_COMM_WORLD,"Warning: EPS did not converge.");
     }
+
+    #define __SAVE_SUPERBLOCK
+    #ifdef __SAVE_SUPERBLOCK
+
+        MatWrite(superblock_H_,"data/superblock_H.dat");
+        VecWrite(gsv_r_,"data/gsv_r.dat");
+
+    #endif // __SAVE_SUPERBLOCK
+
+
 
     MatDestroy(&superblock_H_);
     EPSDestroy(&eps);
@@ -214,6 +225,113 @@ PetscErrorCode iDMRG::SVDReducedDensityMatrices()
     if (dm_right) {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
     if (U_left_)   {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
     if (U_right_)  {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::GetRotationMatrices()
+{
+    PetscErrorCode  ierr = 0;
+
+    if(!(dm_left && dm_right && dm_solved))
+        SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
+
+    EPS eps;
+
+    PetscScalar trunc_error;
+    ierr =  EPSLargestEigenpairs(dm_left, mstates_, trunc_error, U_left_, eps); CHKERRQ(ierr);
+    ierr = PetscPrintf(comm_, "Truncation error (left):  %12e\n", trunc_error); CHKERRQ(ierr);
+
+    EPSDestroy(&eps);
+
+    ierr =  EPSLargestEigenpairs(dm_right, mstates_, trunc_error, U_right_, eps); CHKERRQ(ierr);
+    ierr = PetscPrintf(comm_, "Truncation error (right): %12e\n", trunc_error); CHKERRQ(ierr);
+
+    EPSDestroy(&eps);
+
+    dm_solved = PETSC_FALSE;
+    dm_svd = PETSC_TRUE;
+
+
+    #define __CHECK_TRUNCATION
+    #ifdef __CHECK_TRUNCATION
+        ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(dm_right, "data/dm_right.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(U_left_, "data/U_left.dat"); CHKERRQ(ierr);
+        ierr = MatWrite(U_right_, "data/U_right.dat"); CHKERRQ(ierr);
+    #endif // __CHECK_TRUNCATION
+
+
+    if (dm_left)   {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
+    if (dm_right)  {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
+
+    return ierr;
+}
+
+
+PetscErrorCode iDMRG::TruncateOperators()
+{
+    PetscErrorCode ierr = 0;
+
+    if(!(dm_svd && U_left_ && U_right_))
+        SETERRQ(comm_, 1, "SVD of reduced density matrices not yet solved.");
+
+    /* Save operator state before rotation */
+    #define __CHECK_ROTATION
+    #ifdef __CHECK_ROTATION
+        MatWrite(BlockLeft_.H(), "data/H_left_pre.dat");
+        MatWrite(BlockLeft_.Sz(), "data/Sz_left_pre.dat");
+        MatWrite(BlockLeft_.Sp(), "data/Sp_left_pre.dat");
+        MatWrite(BlockRight_.H(), "data/H_right_pre.dat");
+        MatWrite(BlockRight_.Sz(), "data/Sz_right_pre.dat");
+        MatWrite(BlockRight_.Sp(), "data/Sp_right_pre.dat");
+    #endif // __CHECK_ROTATION
+
+
+    /* Rotation */
+    Mat mat_temp = nullptr;
+    Mat U_hc = nullptr;
+
+    ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
+
+    ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    BlockLeft_.update_H(mat_temp);
+    ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    BlockLeft_.update_Sz(mat_temp);
+    ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    BlockLeft_.update_Sp(mat_temp);
+
+    ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
+
+    ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
+
+    ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    BlockRight_.update_H(mat_temp);
+    ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    BlockRight_.update_Sz(mat_temp);
+    ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    BlockRight_.update_Sp(mat_temp);
+
+    ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
+
+    if(mat_temp)    {ierr = MatDestroy(&mat_temp); CHKERRQ(ierr);}
+    if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
+    if(U_right_)    {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
+
+
+    /* Save operator state after rotation */
+
+    #ifdef __CHECK_ROTATION
+        MatWrite(BlockLeft_.H(), "data/H_left_post.dat");
+        MatWrite(BlockLeft_.Sz(), "data/Sz_left_post.dat");
+        MatWrite(BlockLeft_.Sp(), "data/Sp_left_post.dat");
+        MatWrite(BlockRight_.H(), "data/H_right_post.dat");
+        MatWrite(BlockRight_.Sz(), "data/Sz_right_post.dat");
+        MatWrite(BlockRight_.Sp(), "data/Sp_right_post.dat");
+    #endif // __CHECK_ROTATION
+    #undef __CHECK_ROTATION
+
+
     return ierr;
 }
 
