@@ -127,12 +127,16 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         PetscPrintf(PETSC_COMM_WORLD,"Warning: EPS did not converge.");
     }
 
-    #define __SAVE_SUPERBLOCK
+    #ifdef __TESTING
+        #define __SAVE_SUPERBLOCK
+    #endif
+
     #ifdef __SAVE_SUPERBLOCK
-
-        MatWrite(superblock_H_,"data/superblock_H.dat");
-        VecWrite(gsv_r_,"data/gsv_r.dat");
-
+        char filename[PETSC_MAX_PATH_LEN];
+        sprintf(filename,"data/superblock_H_%06d.dat",iter());
+        MatWrite(superblock_H_,filename);
+        sprintf(filename,"data/gsv_r_%06d.dat",iter());
+        VecWrite(gsv_r_,filename);
     #endif // __SAVE_SUPERBLOCK
 
 
@@ -166,9 +170,6 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     ierr = MatMultSelfHC(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatMultSelfHC(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
-    #ifdef __TESTING
-        ierr = VecWrite(gsv_r_, "data/gsv_r_.dat"); CHKERRQ(ierr);
-    #endif
     /*
         Toggle switches
     */
@@ -180,57 +181,6 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
     if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
     if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
-    return ierr;
-}
-
-
-PetscErrorCode iDMRG::SVDReducedDensityMatrices()
-{
-    PetscErrorCode  ierr = 0;
-
-    if(! (dm_left && dm_solved))
-        SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
-
-    SVD         svd = nullptr;
-    PetscScalar trunc_error;
-    /**
-        ISSUE: Kron may not work for dense matrices so store rotation matrix as
-        sparse matrix
-     */
-
-    /*
-        Extract all singular values and a portion of the left-singular vectors
-     */
-    MatGetSVD(dm_left, svd);
-    SVDGetTruncatedSingularValues(dm_left, svd, mstates_, trunc_error, U_left_);
-    SVDDestroy(&svd);
-
-    #ifdef __PRINT_TRUNCATION_ERROR
-        PetscPrintf(comm_, "%12s(Left block)  Truncation error: %e\n", "", trunc_error);
-    #endif
-
-    MatGetSVD(dm_right, svd);
-    SVDGetTruncatedSingularValues(dm_right, svd, mstates_, trunc_error, U_right_);
-    SVDDestroy(&svd);
-
-    #ifdef __PRINT_TRUNCATION_ERROR
-        PetscPrintf(comm_, "%12s(Right block) Truncation error: %e\n", "", trunc_error);
-    #endif
-
-    #ifdef __TESTING
-        ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
-        ierr = MatWrite(dm_right, "data/dm_right.dat"); CHKERRQ(ierr);
-        ierr = MatWrite(U_left_, "data/U_left.dat"); CHKERRQ(ierr);
-        ierr = MatWrite(U_right_, "data/U_right.dat"); CHKERRQ(ierr);
-    #endif
-
-    dm_solved = PETSC_FALSE;
-    dm_svd    = PETSC_TRUE;
-
-    if (dm_left)  {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
-    if (dm_right) {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
-    if (U_left_)   {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
-    if (U_right_)  {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
     return ierr;
 }
 
@@ -262,14 +212,17 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     dm_solved = PETSC_FALSE;
     dm_svd = PETSC_TRUE;
 
-    #define __CHECK_TRUNCATION
-    #ifdef __CHECK_TRUNCATION
-        ierr = MatWrite(dm_left, "data/dm_left.dat"); CHKERRQ(ierr);
-        ierr = MatWrite(dm_right, "data/dm_right.dat"); CHKERRQ(ierr);
-        ierr = MatWrite(U_left_, "data/U_left.dat"); CHKERRQ(ierr);
-        ierr = MatWrite(U_right_, "data/U_right.dat"); CHKERRQ(ierr);
-    #endif // __CHECK_TRUNCATION
-
+    #ifdef __TESTING
+        char filename[PETSC_MAX_PATH_LEN];
+        sprintf(filename,"data/dm_left_%06d.dat",iter());
+        ierr = MatWrite(dm_left, filename); CHKERRQ(ierr);
+        sprintf(filename,"data/dm_right_%06d.dat",iter());
+        ierr = MatWrite(dm_right, filename); CHKERRQ(ierr);
+        sprintf(filename,"data/U_left_%06d.dat",iter());
+        ierr = MatWrite(U_left_, filename); CHKERRQ(ierr);
+        sprintf(filename,"data/U_right_%06d.dat",iter());
+        ierr = MatWrite(U_right_, filename); CHKERRQ(ierr);
+    #endif
 
     if (dm_left)   {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
     if (dm_right)  {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
@@ -286,14 +239,27 @@ PetscErrorCode iDMRG::TruncateOperators()
         SETERRQ(comm_, 1, "SVD of reduced density matrices not yet solved.");
 
     /* Save operator state before rotation */
-    #define __CHECK_ROTATION
     #ifdef __CHECK_ROTATION
-        MatWrite(BlockLeft_.H(), "data/H_left_pre.dat");
-        MatWrite(BlockLeft_.Sz(), "data/Sz_left_pre.dat");
-        MatWrite(BlockLeft_.Sp(), "data/Sp_left_pre.dat");
-        MatWrite(BlockRight_.H(), "data/H_right_pre.dat");
-        MatWrite(BlockRight_.Sz(), "data/Sz_right_pre.dat");
-        MatWrite(BlockRight_.Sp(), "data/Sp_right_pre.dat");
+        char filename[PETSC_MAX_PATH_LEN];
+
+        sprintf(filename,"data/H_left_pre_%06d.dat",iter());
+        MatWrite(BlockLeft_.H(), filename);
+
+        sprintf(filename,"data/Sz_left_pre_%06d.dat",iter());
+        MatWrite(BlockLeft_.Sz(), filename);
+
+        sprintf(filename,"data/Sp_left_pre_%06d.dat",iter());
+        MatWrite(BlockLeft_.Sp(), filename);
+
+        sprintf(filename,"data/H_right_pre_%06d.dat",iter());
+        MatWrite(BlockRight_.H(), filename);
+
+        sprintf(filename,"data/Sz_right_pre_%06d.dat",iter());
+        MatWrite(BlockRight_.Sz(), filename);
+
+        sprintf(filename,"data/Sp_right_pre_%06d.dat",iter());
+        MatWrite(BlockRight_.Sp(), filename);
+
     #endif // __CHECK_ROTATION
 
 
@@ -331,12 +297,23 @@ PetscErrorCode iDMRG::TruncateOperators()
     /* Save operator state after rotation */
 
     #ifdef __CHECK_ROTATION
-        MatWrite(BlockLeft_.H(), "data/H_left_post.dat");
-        MatWrite(BlockLeft_.Sz(), "data/Sz_left_post.dat");
-        MatWrite(BlockLeft_.Sp(), "data/Sp_left_post.dat");
-        MatWrite(BlockRight_.H(), "data/H_right_post.dat");
-        MatWrite(BlockRight_.Sz(), "data/Sz_right_post.dat");
-        MatWrite(BlockRight_.Sp(), "data/Sp_right_post.dat");
+        sprintf(filename,"data/H_left_post_%06d.dat",iter());
+        MatWrite(BlockLeft_.H(), filename);
+
+        sprintf(filename,"data/Sz_left_post_%06d.dat",iter());
+        MatWrite(BlockLeft_.Sz(), filename);
+
+        sprintf(filename,"data/Sp_left_post_%06d.dat",iter());
+        MatWrite(BlockLeft_.Sp(), filename);
+
+        sprintf(filename,"data/H_right_post_%06d.dat",iter());
+        MatWrite(BlockRight_.H(), filename);
+
+        sprintf(filename,"data/Sz_right_post_%06d.dat",iter());
+        MatWrite(BlockRight_.Sz(), filename);
+
+        sprintf(filename,"data/Sp_right_post_%06d.dat",iter());
+        MatWrite(BlockRight_.Sp(), filename);
     #endif // __CHECK_ROTATION
     #undef __CHECK_ROTATION
 
@@ -371,17 +348,29 @@ PetscErrorCode iDMRG::MatPeekOperators()
 PetscErrorCode iDMRG::MatSaveOperators()
 {
     PetscErrorCode  ierr = 0;
+    char filename[PETSC_MAX_PATH_LEN];
 
-    ierr = MatWrite(BlockLeft_.H(), "data/H_left.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(BlockLeft_.Sz(), "data/Sz_left.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(BlockLeft_.Sp(), "data/Sp_left.dat"); CHKERRQ(ierr);
+    sprintf(filename,"data/H_left_%06d.dat",iter());
+    ierr = MatWrite(BlockLeft_.H(), filename); CHKERRQ(ierr);
 
-    ierr = MatWrite(BlockRight_.H(), "data/H_right.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(BlockRight_.Sz(), "data/Sz_right.dat"); CHKERRQ(ierr);
-    ierr = MatWrite(BlockRight_.Sp(), "data/Sp_right.dat"); CHKERRQ(ierr);
+    sprintf(filename,"data/Sz_left_%06d.dat",iter());
+    ierr = MatWrite(BlockLeft_.Sz(), filename); CHKERRQ(ierr);
+
+    sprintf(filename,"data/Sp_left_%06d.dat",iter());
+    ierr = MatWrite(BlockLeft_.Sp(), filename); CHKERRQ(ierr);
+
+    sprintf(filename,"data/H_right_%06d.dat",iter());
+    ierr = MatWrite(BlockRight_.H(), filename); CHKERRQ(ierr);
+
+    sprintf(filename,"data/Sz_right_%06d.dat",iter());
+    ierr = MatWrite(BlockRight_.Sz(), filename); CHKERRQ(ierr);
+
+    sprintf(filename,"data/Sp_right_%06d.dat",iter());
+    ierr = MatWrite(BlockRight_.Sp(), filename); CHKERRQ(ierr);
 
     if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){
-        ierr = MatWrite(superblock_H_, "data/H_superblock.dat"); CHKERRQ(ierr);
+        sprintf(filename,"data/H_superblock_%06d.dat",iter());
+        ierr = MatWrite(superblock_H_, filename); CHKERRQ(ierr);
     }
 
     return ierr;
