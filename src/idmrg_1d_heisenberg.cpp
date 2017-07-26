@@ -42,7 +42,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     Mat_temp = NULL;
 
     BlockLeft_.length(BlockLeft_.length() + 1);
-
     if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
     #ifdef __PRINT_SIZES
         PetscPrintf(comm_, "%12sLeft       basis size: %-5d nsites: %-5d \n", "", BlockLeft_.basis_size(), BlockLeft_.length());
@@ -111,6 +110,13 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     /*
         TODO: Impose a checkpoint correctness of blocks
     */
+    if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
+    if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
+
+    if(superblock_set_==PETSC_TRUE || superblock_H_)
+    {
+        ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
+    }
 
     /*
         Update the Hamiltonian
