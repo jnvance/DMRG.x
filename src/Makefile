@@ -3,6 +3,7 @@ TARGETS = test_dmrg.x test_kron.x test_reshape.x
 
 CXXFLAGS  = -O3 -std=c++11
 CXXFLAGS += -D__TESTING -D__PRINT_SIZES -D__PRINT_TRUNCATION_ERROR
+# CXXFLAGS += -D__PRINTOUT_EPS_LARGEST
 
 TEST_DMRG_DEPS = test_dmrg.o idmrg_1d_heisenberg.o dmrgblock.o kron.o idmrg.o linalg_tools.o
 
