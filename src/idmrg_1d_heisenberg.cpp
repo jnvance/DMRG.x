@@ -2,6 +2,11 @@
 
 /* Implementation of the Heisenberg Hamiltonian */
 
+/** TODO:
+ *  Implement coupling J
+ *  Change values and observe degeneracies
+ */
+
 PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
 {
     PetscErrorCode  ierr = 0;

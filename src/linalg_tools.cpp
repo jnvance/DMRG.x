@@ -519,165 +519,8 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
 
 
 #undef __FUNCT__
-#define __FUNCT__ "MatGetSVD"
-PetscErrorCode MatGetSVD(const Mat& mat, SVD& svd)
-{
-    PetscErrorCode  ierr = 0;
-
-    #ifndef PETSC_USE_COMPLEX
-        SETERRQ(comm, 1, "Not implemented for real scalars.");
-    #endif
-
-    MPI_Comm comm = PetscObjectComm((PetscObject)mat);
-
-    /*
-        Determine the number of singular values to compute
-        based on the size of the input matrix.
-     */
-    PetscInt nsv;
-    MatGetSize(mat, &nsv, nullptr);
-
-    /*
-        Get the SVD of the reduced density matrix corresponding
-        to the left block system
-     */
-    ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
-    ierr = SVDSetOperator(svd, mat); CHKERRQ(ierr);
-    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
-    ierr = SVDSetType(svd, SVDTRLANCZOS);
-    ierr = SVDSetDimensions(svd, nsv, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
-    ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
-    ierr = SVDSolve(svd);CHKERRQ(ierr);
-    /*
-        Optional: Get some information from the solver and display it
-     */
-    #ifdef __TESTING
-        SVDType        type;
-        PetscReal      tol;
-        PetscInt       maxit,its;
-        PetscBool      terse;
-
-        ierr = SVDGetIterationNumber(svd,&its);CHKERRQ(ierr);
-        ierr = PetscPrintf(comm," Number of iterations of the method: %D\n",its);CHKERRQ(ierr);
-
-        ierr = SVDGetType(svd,&type);CHKERRQ(ierr);
-        ierr = PetscPrintf(comm," Solution method: %s\n\n",type);CHKERRQ(ierr);
-        ierr = SVDGetDimensions(svd,&nsv,NULL,NULL);CHKERRQ(ierr);
-        ierr = PetscPrintf(comm," Number of requested singular values: %D\n",nsv);CHKERRQ(ierr);
-        ierr = SVDGetTolerances(svd,&tol,&maxit);CHKERRQ(ierr);
-        ierr = PetscPrintf(comm," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);CHKERRQ(ierr);
-        /*
-            Show detailed info unless -terse option is given by user
-         */
-        ierr = PetscOptionsHasName(NULL,NULL,"-terse",&terse);CHKERRQ(ierr);
-        if (terse) {
-            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,NULL);CHKERRQ(ierr);
-        } else {
-            ierr = PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);CHKERRQ(ierr);
-            ierr = SVDReasonView(svd,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-            ierr = PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-        }
-    #endif
-    return ierr;
-}
-
-
-#undef __FUNCT__
-#define __FUNCT__ "SVDGetTruncatedSingularValues"
-PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, const PetscInt mstates, PetscScalar& error, Mat& mat)
-{
-    PetscErrorCode ierr = 0;
-
-    MPI_Comm    comm = PetscObjectComm((PetscObject)mat_in);
-    PetscInt    nconv, mat_nrows, mat_ncols;
-    PetscInt    Istart_vec, Iend_vec, Istart_mat, Iend_mat;
-    PetscReal   sigma;
-    PetscScalar *vals;
-    Vec         u = nullptr;
-    Vec         v = nullptr;
-    PetscInt    u_size = 0;
-
-    ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
-    if (nconv < mstates)
-    {
-        char errormsg[80];
-        sprintf(errormsg,"Number of converged singular values (%d) is less than mstates (%d).", nconv, mstates);
-        SETERRQ(comm, 1, errormsg);
-    }
-
-    /**
-        The output matrix is a dense matrix but stored as SPARSE.
-     */
-    ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
-
-    /*
-        Setup the sizes
-     */
-    ierr = MatGetSize(mat_in, &mat_nrows, nullptr); CHKERRQ(ierr);
-    mat_ncols = mstates;
-    ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_nrows, mat_ncols); CHKERRQ(ierr);
-
-    /*
-        Setup the matrix
-     */
-    ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
-    ierr = MatSetUp(mat); CHKERRQ(ierr);
-    ierr = MatZeroEntries(mat); CHKERRQ(ierr);
-
-    /*
-        First m singular triplets contribute to the rotation matrix
-     */
-    ierr = MatCreateVecs(mat_in,nullptr,&u); CHKERRQ(ierr);
-    ierr = MatGetOwnershipRange(mat, &Istart_mat, &Iend_mat); CHKERRQ(ierr);
-    ierr = VecGetSize(u, &u_size); CHKERRQ(ierr);
-    ierr = VecGetOwnershipRange(u, &Istart_vec, &Iend_vec); CHKERRQ(ierr);
-
-    if (!(Istart_vec == Istart_mat && Iend_vec == Iend_mat))
-        SETERRQ(comm, 1, "Matrix and vector layout do not match.");
-
-    for (PetscInt Icol = 0; Icol < mstates; ++Icol)
-    {
-        ierr = SVDGetSingularTriplet(svd, Icol, &sigma, u, nullptr); CHKERRQ(ierr);
-        ierr = VecGetArray(u, &vals);
-
-        /*
-            Load vector as a column of mat
-         */
-        for (PetscInt Irow = Istart_vec; Irow < Iend_vec; ++Irow)
-        {
-            ierr = MatSetValue(mat, Irow, Icol, vals[Irow - Istart_vec], INSERT_VALUES); CHKERRQ(ierr);
-            // printf("%f\n", PetscRealPart(vals[Irow - Istart_vec]));
-        }
-
-        ierr = VecRestoreArray(u, &vals);
-    }
-
-    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-    /*
-        Remaining singular values add up to the error
-     */
-    error = 0;
-    for (PetscInt Icol = mstates; Icol < nconv; ++Icol)
-    {
-        ierr = SVDGetSingularTriplet(svd, Icol, &sigma, nullptr, nullptr); CHKERRQ(ierr);
-        ierr = PetscPrintf(comm, "xx %18e\n", sigma); CHKERRQ(ierr);
-        error += sigma;
-    }
-
-    if(u) {ierr = VecDestroy(&u); CHKERRQ(ierr);}
-    if(v) {ierr = VecDestroy(&v); CHKERRQ(ierr);}
-
-    return ierr;
-}
-
-
-
-#undef __FUNCT__
-#define __FUNCT__ "EPSLargestEigenpairs"
-PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, EPS& eps)
+#define __FUNCT__ "SVDLargestStates"
+PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp)
 {
     PetscErrorCode  ierr = 0;
 
@@ -718,10 +561,156 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
         SETERRQ(comm, 1, errormsg);
     }
 
-    // EPS eps = nullptr;
+    SVD svd = nullptr;
+    ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
+    ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
+    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
+    ierr = SVDSetType(svd, SVDTRLANCZOS);
+    ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
+    ierr = SVDSolve(svd);CHKERRQ(ierr);
+
+    PetscInt nconv;
+    ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
+    if (nconv < mstates)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Number of converged singular values (%d) is less than mstates (%d).", nconv, mstates);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    #ifdef __PRINT_SVD_CONVERGENCE
+        PetscPrintf(comm, "%12sSVD requested mstates: %d\n","",mstates);
+        PetscPrintf(comm, "%12sSVD no of conv states: %d\n","",nconv);
+    #endif
+
+    /**
+        The output matrix is a dense matrix but stored as SPARSE.
+     */
+    Vec Vr;
+    PetscInt    Istart, Iend, Istart_mat, Iend_mat;
+    ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
+    ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_in_nrows, mstates); CHKERRQ(ierr);
+    ierr = MatCreateVecs(mat_in, &Vr, nullptr); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
+    ierr = MatSetUp(mat); CHKERRQ(ierr);
+    ierr = VecGetOwnershipRange(Vr,  &Istart, &Iend); CHKERRQ(ierr);
+    ierr = MatGetOwnershipRange(mat, &Istart_mat, &Iend_mat); CHKERRQ(ierr);
+
+    if (!(Istart == Istart_mat && Iend == Iend_mat))
+        SETERRQ(comm, 1, "Matrix and vector layout do not match.");
+
+    /* Prepare row indices */
+    PetscInt mrows = Iend - Istart;
+    PetscInt idxm[mrows];
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow) idxm[Irow - Istart] = Irow;
+
+    PetscReal sum_first_mstates = 0;
+    PetscReal eigr;
+    const PetscScalar *vals;
+    for (PetscInt Istate = 0; Istate < mstates; ++Istate)
+    {
+        ierr = SVDGetSingularTriplet(svd, Istate, &eigr, Vr, nullptr); CHKERRQ(ierr);
+        sum_first_mstates += eigr;
+        #ifdef __TESTING
+            ierr = PetscFPrintf(comm, fp, "%.20g+0.0j\n",eigr);
+        #endif
+        ierr = VecGetArrayRead(Vr, &vals); CHKERRQ(ierr);
+        ierr = MatSetValues(mat, mrows, idxm, 1, &Istate, vals, INSERT_VALUES); CHKERRQ(ierr);
+        ierr = VecRestoreArrayRead(Vr, &vals); CHKERRQ(ierr);
+    }
+    error = 1.0 - sum_first_mstates;
+
+    ierr = MatAssembled(mat, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    #ifdef __PRINT_SVD_LARGEST
+        SVDType        type;
+        PetscReal      tol;
+        PetscInt       maxit,its,nsv;
+        PetscBool      terse;
+
+        ierr = SVDGetIterationNumber(svd,&its);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of iterations of the method: %D\n",its);CHKERRQ(ierr);
+
+        ierr = SVDGetType(svd,&type);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Solution method: %s\n\n",type);CHKERRQ(ierr);
+        ierr = SVDGetDimensions(svd,&nsv,NULL,NULL);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of requested singular values: %D\n",nsv);CHKERRQ(ierr);
+        ierr = SVDGetTolerances(svd,&tol,&maxit);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);CHKERRQ(ierr);
+        /*
+            Show detailed info unless -terse option is given by user
+         */
+        ierr = PetscOptionsHasName(NULL,NULL,"-terse",&terse);CHKERRQ(ierr);
+        if (terse) {
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,NULL);CHKERRQ(ierr);
+        } else {
+            ierr = PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);CHKERRQ(ierr);
+            ierr = SVDReasonView(svd,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+        }
+    #endif
+
+    ierr = SVDDestroy(&svd);
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "EPSLargestEigenpairs"
+PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp)
+{
+    PetscErrorCode  ierr = 0;
+
+    MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
+
+    #ifndef PETSC_USE_COMPLEX
+        SETERRQ(comm, 1, "Not implemented for real scalars.");
+    #endif
+
+    PetscBool assembled;
+    ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(mat_in, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(mat_in, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    PetscInt mat_in_nrows, mat_in_ncols;
+    ierr = MatGetSize(mat_in, &mat_in_nrows, &mat_in_ncols);
+    if(mat_in_nrows != mat_in_ncols)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Matrix dimension mismatch. "
+                         "Number of rows (%d) is not equal to number of columns (%d).",
+                         mat_in_nrows, mat_in_ncols);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    // PetscInt mstates = mat_in_nrows < mstates_in ? mat_in_nrows : mstates_in;
+
+    PetscInt mstates = mstates_in;
+
+    if(mat_in_nrows < mstates)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Matrix dimension too small. "
+                         "Matrix size (%d) must at least be equal to mstates (%d).",
+                         mat_in_nrows, mstates);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    EPS eps = nullptr;
     ierr = EPSCreate(comm, &eps); CHKERRQ(ierr);
     ierr = EPSSetOperators(eps, mat_in, nullptr); CHKERRQ(ierr);
-    // ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
+    ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
+    // ierr = EPSSetType(eps,EPSKRYLOVSCHUR); /* May be removed/changed */
+    ierr = EPSSetType(eps,EPSLANCZOS); /* May be removed/changed */
+    // ierr = EPSSetTolerances(eps,1e-14,PETSC_DEFAULT);
     ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
     ierr = EPSSetDimensions(eps, mstates, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
 
@@ -732,7 +721,7 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     PetscInt nconv;
     ierr = EPSGetConverged(eps, &nconv);
 
-    #ifdef __PRINT_CONVERGENCE
+    #ifdef __PRINT_EPS_CONVERGENCE
         PetscPrintf(comm, "%12sEPS requested mstates: %d\n","",mstates);
         PetscPrintf(comm, "%12sEPS no of conv states: %d\n","",nconv);
     #endif
@@ -772,6 +761,9 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     {
         ierr = EPSGetEigenpair(eps, Istate, &eigr, nullptr, Vr, nullptr); CHKERRQ(ierr);
         sum_first_mstates += eigr;
+        #ifdef __TESTING
+            ierr = PetscFPrintf(comm, fp, "%.20g%+.20gj\n",PetscRealPart(eigr),PetscImaginaryPart(eigr));
+        #endif
         ierr = VecGetArrayRead(Vr, &vals); CHKERRQ(ierr);
         ierr = MatSetValues(mat, mrows, idxm, 1, &Istate, vals, INSERT_VALUES); CHKERRQ(ierr);
         ierr = VecRestoreArrayRead(Vr, &vals); CHKERRQ(ierr);
@@ -784,8 +776,7 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
         ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     }
 
-    // #define __PRINTOUT
-    #ifdef __PRINTOUT
+    #ifdef __PRINT_EPS_LARGEST
         PetscBool terse;
         PetscOptionsHasName(NULL,NULL,"-terse",&terse);
         if (terse)
@@ -799,9 +790,9 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
             EPSErrorView(eps,EPS_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);
             PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);
         }
-    #endif
+    #endif // __PRINTOUT_EPS_LARGEST
 
-    // if(eps) {ierr = EPSDestroy(&eps); CHKERRQ(ierr);}
+    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
 
     return ierr;
 }

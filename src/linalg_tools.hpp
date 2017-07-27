@@ -175,30 +175,10 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i,
  */
 PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_right);
 
-
 /**
-    Calculates the singular value decomposition of a matrix sorted from
-    highest to lowest singular values
-
-    @param[in]   mat            Input matrix (may be dense)
-    @param[out]  svd            Output svd object
 
  */
-PetscErrorCode MatGetSVD(const Mat& mat, SVD& svd);
-
-/**
-    Takes the first mstates singular vectors of mat_in as calculated in svd,
-    places them as columns of a matrix, and calculates the truncation error
-
-    @param[in]   mat_in         Input matrix of size \f$ n \times n \f$
-    @param[in]   svd            Corresponding SVD of mat_in
-    @param[in]   mstates        Number of singular values and vectors to be extracted, i.e. \f$m\f$
-    @param[out]  error          Truncation error calculated from the sum of the
-                                residual singular values
-    @param[out]  mat            Output matrix of size \f$ m \times n \f$
-
- */
-PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, const PetscInt mstates, PetscScalar& error, Mat& mat);
+PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
 
 /**
     Takes the first mstates eigenpairs of mat_in with highest eigenvalues and calculates it with eps,
@@ -208,11 +188,10 @@ PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, 
     @param[in]  mstates  The mstates
     @param      error    The error
     @param      mat      The matrix
-    @param      eps      The eps
 
     @return     { description_of_the_return_value }
  */
-PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, PetscScalar& error, Mat& mat, EPS& eps);
+PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, PetscScalar& error, Mat& mat, FILE *fp);
 
 /** @} */
 

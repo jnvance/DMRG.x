@@ -74,6 +74,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSSetOperators(eps, superblock_H_, nullptr); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
     ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
+    ierr = EPSSetType(eps, EPSKRYLOVSCHUR);
     ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
 
     ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
@@ -192,28 +193,45 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     if(!(dm_left && dm_right && dm_solved))
         SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
-    EPS eps;
+    PetscScalar trunc_error_left, trunc_error_right;
+    FILE *fp_left = nullptr, *fp_right = nullptr;
 
-    PetscScalar trunc_error;
-    ierr = EPSLargestEigenpairs(dm_left, mstates_, trunc_error, U_left_, eps); CHKERRQ(ierr);
-    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
-
-    #ifdef __PRINT_TRUNCATION_ERROR
-        ierr = PetscPrintf(comm_, "%12sTruncation error (left):  %12e\n", "", trunc_error); CHKERRQ(ierr);
+    #ifdef __TESTING
+        char filename[PETSC_MAX_PATH_LEN];
+        sprintf(filename,"data/dm_left_singularvalues_%06d.dat",iter());
+        ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_left); CHKERRQ(ierr);
+        sprintf(filename,"data/dm_right_singularvalues_%06d.dat",iter());
+        ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_right); CHKERRQ(ierr);
     #endif
 
-    ierr = EPSLargestEigenpairs(dm_right, mstates_, trunc_error, U_right_, eps); CHKERRQ(ierr);
-    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
+    #ifdef __SVD_USE_EPS
+        ierr = EPSLargestEigenpairs(dm_left, mstates_, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
+        ierr = EPSLargestEigenpairs(dm_right, mstates_, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+    #else
+        ierr = SVDLargestStates(dm_left, mstates_, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
+        ierr = SVDLargestStates(dm_right, mstates_, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+    #endif
+
+    #ifdef __TESTING
+        ierr = PetscFClose(PETSC_COMM_WORLD, fp_left); CHKERRQ(ierr);
+        ierr = PetscFClose(PETSC_COMM_WORLD, fp_right); CHKERRQ(ierr);
+    #endif
+
 
     #ifdef __PRINT_TRUNCATION_ERROR
-        ierr = PetscPrintf(comm_, "%12sTruncation error (right): %12e\n", "", trunc_error); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm_,
+            "%12sTruncation error (left):  %12e\n",
+            " ", trunc_error_left);
+
+        ierr = PetscPrintf(comm_,
+            "%12sTruncation error (right): %12e\n",
+            " ", trunc_error_right); CHKERRQ(ierr);
     #endif
 
     dm_solved = PETSC_FALSE;
     dm_svd = PETSC_TRUE;
 
     #ifdef __TESTING
-        char filename[PETSC_MAX_PATH_LEN];
         sprintf(filename,"data/dm_left_%06d.dat",iter());
         ierr = MatWrite(dm_left, filename); CHKERRQ(ierr);
         sprintf(filename,"data/dm_right_%06d.dat",iter());

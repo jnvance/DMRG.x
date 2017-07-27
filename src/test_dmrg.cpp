@@ -51,6 +51,13 @@ int main(int argc, char **argv)
     double gse_site_theor =  -0.4431471805599;
     PetscInt superblocklength = 0;
 
+    /*
+        Opens file to save eigenenergies
+        TODO: File may also be used to save other data
+     */
+    FILE *fp;
+    ierr = PetscFOpen(PETSC_COMM_WORLD, "data/eigvals.dat", "w", &fp); CHKERRQ(ierr);
+
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
         PRINT_EMPTY_LINE;
@@ -60,15 +67,28 @@ int main(int argc, char **argv)
         ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
         ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
         /*
+            Save operator states and increment
+         */
+        #ifdef __TESTING
+        ierr = heis.BuildSuperBlock(); CHKERRQ(ierr);
+        ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
+        ierr = heis.SolveGroundState(gse_r, gse_i, error); CHKERRQ(ierr);
+        #endif
+        /*
             Check whether the basis set already need truncation
          */
+        #ifndef __TESTING
         if (heis.TotalBasisSize() > heis.mstates()*heis.mstates())
         {
             /*
                 The superblock Hamiltonian is constructed and the ground state is solved
              */
+            // #ifndef __TESTING
+
             ierr = heis.BuildSuperBlock(); CHKERRQ(ierr);
             ierr = heis.SolveGroundState(gse_r, gse_i, error); CHKERRQ(ierr);
+
+        #endif
             /*
                 Printout data on ground state energy and wavevector
              */
@@ -88,8 +108,16 @@ int main(int argc, char **argv)
                 ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n",
                     heis.iter(), superblocklength, (double)gse_r, gse_site,
                     error_rel, (double)(error)); CHKERRQ(ierr);
+                ierr = PetscFPrintf(PETSC_COMM_WORLD, fp,"   %6d   %6d    %.20g    %.20g    %.20g    %.20g\n",
+                    heis.iter(), superblocklength, (double)gse_r, gse_site,
+                    error_rel, (double)(error)); CHKERRQ(ierr);
             }
             PRINT_EMPTY_LINE;
+
+        #ifdef __TESTING
+        if (heis.TotalBasisSize() > heis.mstates()*heis.mstates())
+        {
+        #endif
             /*
                 From the ground state wavevector get the reduced density matrices of the left
                 and right blocks, and construct the rectangular rotation matrices to perform the
@@ -99,19 +127,16 @@ int main(int argc, char **argv)
             ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
             ierr = heis.TruncateOperators(); CHKERRQ(ierr);
         } else {
-            #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
-                PetscPrintf(PETSC_COMM_WORLD,"   %6d\n", heis.iter());
+            #ifndef __TESTING
+                #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
+                    PetscPrintf(PETSC_COMM_WORLD,"   %6d\n", heis.iter());
+                #endif
             #endif
         }
-        /*
-            Save operator states and increment
-         */
-        #ifdef __TESTING
-            heis.MatSaveOperators();
-        #endif
         heis.iter()++;
     }
 
+    ierr = PetscFClose(PETSC_COMM_WORLD, fp); CHKERRQ(ierr);
     ierr = heis.destroy(); CHKERRQ(ierr);
 
     SlepcFinalize();
