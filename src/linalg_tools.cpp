@@ -431,7 +431,7 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
     */
     MPI_Comm comm = PETSC_COMM_WORLD;
     #ifndef PETSC_USE_COMPLEX
-        SETERRQ(comm, 1, "Not implemented for real scalars.");
+        // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
     /*
         Impose that the input matrix be of type seqdense
@@ -527,7 +527,7 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
 
     #ifndef PETSC_USE_COMPLEX
-        SETERRQ(comm, 1, "Not implemented for real scalars.");
+        // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
 
     PetscBool assembled;
@@ -565,9 +565,10 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
     ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
-    ierr = SVDSetType(svd, SVDTRLANCZOS);
+    ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
     ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
+    ierr = SVDSetTolerances(svd, 1e-16, 100); CHKERRQ(ierr);
     ierr = SVDSolve(svd);CHKERRQ(ierr);
 
     PetscInt nconv;
@@ -670,7 +671,7 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
 
     #ifndef PETSC_USE_COMPLEX
-        SETERRQ(comm, 1, "Not implemented for real scalars.");
+        // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
 
     PetscBool assembled;

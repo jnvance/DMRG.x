@@ -138,6 +138,10 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         MatWrite(superblock_H_,filename);
         sprintf(filename,"data/gsv_r_%06d.dat",iter());
         VecWrite(gsv_r_,filename);
+        #ifndef PETSC_USE_COMPLEX
+            sprintf(filename,"data/gsv_i_%06d.dat",iter());
+            VecWrite(gsv_i_,filename);
+        #endif
     #endif // __SAVE_SUPERBLOCK
 
 
