@@ -75,7 +75,9 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
     ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
     ierr = EPSSetType(eps, EPSKRYLOVSCHUR);
-    ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
+    ierr = EPSSetDimensions(eps, 4, PETSC_DECIDE, PETSC_DECIDE);
+
+    ierr = EPSSetTolerances(eps, 1.0e-20, 200);
 
     ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
     ierr = EPSSolve(eps); CHKERRQ(ierr);
@@ -371,23 +373,30 @@ PetscErrorCode iDMRG::MatSaveOperators()
 {
     PetscErrorCode  ierr = 0;
     char filename[PETSC_MAX_PATH_LEN];
+    char extended[PETSC_MAX_PATH_LEN];
 
-    sprintf(filename,"data/H_left_%06d.dat",iter());
+    if (superblock_set_==PETSC_TRUE){
+        sprintf(extended,"_ext_");
+    } else {
+        sprintf(extended,"_");
+    }
+
+    sprintf(filename,"data/H_left%s%06d.dat",extended,iter());
     ierr = MatWrite(BlockLeft_.H(), filename); CHKERRQ(ierr);
 
-    sprintf(filename,"data/Sz_left_%06d.dat",iter());
+    sprintf(filename,"data/Sz_left%s%06d.dat",extended,iter());
     ierr = MatWrite(BlockLeft_.Sz(), filename); CHKERRQ(ierr);
 
-    sprintf(filename,"data/Sp_left_%06d.dat",iter());
+    sprintf(filename,"data/Sp_left%s%06d.dat",extended,iter());
     ierr = MatWrite(BlockLeft_.Sp(), filename); CHKERRQ(ierr);
 
-    sprintf(filename,"data/H_right_%06d.dat",iter());
+    sprintf(filename,"data/H_right%s%06d.dat",extended,iter());
     ierr = MatWrite(BlockRight_.H(), filename); CHKERRQ(ierr);
 
-    sprintf(filename,"data/Sz_right_%06d.dat",iter());
+    sprintf(filename,"data/Sz_right%s%06d.dat",extended,iter());
     ierr = MatWrite(BlockRight_.Sz(), filename); CHKERRQ(ierr);
 
-    sprintf(filename,"data/Sp_right_%06d.dat",iter());
+    sprintf(filename,"data/Sp_right%s%06d.dat",extended,iter());
     ierr = MatWrite(BlockRight_.Sp(), filename); CHKERRQ(ierr);
 
     if (superblock_H_ && (superblock_set_ == PETSC_TRUE)){

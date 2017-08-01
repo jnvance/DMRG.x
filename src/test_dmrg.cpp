@@ -61,6 +61,9 @@ int main(int argc, char **argv)
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
         PRINT_EMPTY_LINE;
+        #ifdef __TESTING
+        ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
+        #endif
         /*
             Grow the left and right blocks by adding one site in the junction
          */
@@ -135,6 +138,10 @@ int main(int argc, char **argv)
         }
         heis.iter()++;
     }
+
+    #ifdef __TESTING
+    ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
+    #endif
 
     ierr = PetscFClose(PETSC_COMM_WORLD, fp); CHKERRQ(ierr);
     ierr = heis.destroy(); CHKERRQ(ierr);

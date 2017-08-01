@@ -21,6 +21,12 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = MatTranspose(BlockLeft_.Sp(), MAT_INITIAL_MATRIX, &BlockLeft_Sm); CHKERRQ(ierr);
     ierr = MatConjugate(BlockLeft_Sm); CHKERRQ(ierr);
 
+    /* Prepare the identity */
+    Mat eye_L;
+    PetscInt dim;
+    ierr = MatGetSize(BlockLeft_.H(), &dim, nullptr);
+    ierr = MatEyeCreate(comm_, eye_L, dim);
+
     /*
         Update the Hamiltonian
     */
@@ -35,14 +41,16 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     /*
         Update the Sz operator
     */
-    ierr = MatKron(eye1_, BlockLeft_.Sz(), Mat_temp, comm_); CHKERRQ(ierr);
+    // ierr = MatKron(eye1_, BlockLeft_.Sz(), Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKron(eye_L, Sz1_, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(Mat_temp); CHKERRQ(ierr);
     Mat_temp = NULL;
 
     /*
         Update the Sp operator
     */
-    ierr = MatKron(eye1_, BlockLeft_.Sp(), Mat_temp, comm_); CHKERRQ(ierr);
+    // ierr = MatKron(eye1_, BlockLeft_.Sp(), Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKron(eye_L, Sp1_, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(Mat_temp); CHKERRQ(ierr);
     Mat_temp = NULL;
 
@@ -52,7 +60,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
         PetscPrintf(comm_, "%12sLeft       basis size: %-5d nsites: %-5d \n", "", BlockLeft_.basis_size(), BlockLeft_.length());
     #endif
     ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
-
+    ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
     return ierr;
 }
 
@@ -71,6 +79,12 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     ierr = MatTranspose(BlockRight_.Sp(), MAT_INITIAL_MATRIX, &BlockRight_Sm); CHKERRQ(ierr);
     ierr = MatConjugate(BlockRight_Sm); CHKERRQ(ierr);
 
+    /* Prepare the identity */
+    Mat eye_R;
+    PetscInt dim;
+    ierr = MatGetSize(BlockRight_.H(), &dim, nullptr);
+    ierr = MatEyeCreate(comm_, eye_R, dim);
+
     /*
         Update the Hamiltonian
     */
@@ -85,13 +99,15 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     /*
         Update the Sz operator
     */
-    ierr = MatKron(BlockRight_.Sz(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
+    // ierr = MatKron(BlockRight_.Sz(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKron(Sz1_, eye_R, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(Mat_temp); CHKERRQ(ierr);
 
     /*
         Update the Sp operator
     */
-    ierr = MatKron(BlockRight_.Sp(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
+    // ierr = MatKron(BlockRight_.Sp(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKron(Sp1_, eye_R, Mat_temp, comm_); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(Mat_temp); CHKERRQ(ierr);
 
     BlockRight_.length(BlockRight_.length() + 1);
@@ -100,12 +116,12 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
         PetscPrintf(comm_, "%12sRight      basis size: %-5d nsites: %-5d \n", "", BlockRight_.basis_size(), BlockRight_.length());
     #endif
     ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
-
+    ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
     return ierr;
 }
 
 
-
+/* TODO: Insert timings */
 PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;

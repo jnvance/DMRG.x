@@ -566,9 +566,10 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
     ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
-    ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    // ierr = SVDSetType(svd, SVDLAPACK); CHKERRQ(ierr);
+    ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
-    ierr = SVDSetTolerances(svd, 1e-16, 100); CHKERRQ(ierr);
+    ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
     ierr = SVDSolve(svd);CHKERRQ(ierr);
 
     PetscInt nconv;
@@ -709,11 +710,11 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     ierr = EPSCreate(comm, &eps); CHKERRQ(ierr);
     ierr = EPSSetOperators(eps, mat_in, nullptr); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
-    // ierr = EPSSetType(eps,EPSKRYLOVSCHUR); /* May be removed/changed */
-    ierr = EPSSetType(eps,EPSLANCZOS); /* May be removed/changed */
-    // ierr = EPSSetTolerances(eps,1e-14,PETSC_DEFAULT);
+    ierr = EPSSetType(eps,EPSKRYLOVSCHUR); /* May be removed/changed */
+    // ierr = EPSSetType(eps,EPSLANCZOS); /* May be removed/changed */
+    ierr = EPSSetTolerances(eps,1.0e-20,100);
     ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
-    ierr = EPSSetDimensions(eps, mstates, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
+    ierr = EPSSetDimensions(eps, mat_in_nrows, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
 
 
     // ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
