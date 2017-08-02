@@ -208,6 +208,10 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     // #define __NO_KRON__
     #ifndef __NO_KRON__
 
+            PetscInt        max_ncols_C = N_A * N_B;
+            PetscInt*       cols_C = new PetscInt[max_ncols_C];
+            PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
+
             for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
             {
                 Arow = Irow/M_B;
@@ -226,9 +230,8 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
                     TODO: This malloc might be costly, try to estimate the max number of nonzeros
                     of the product matrix and pre-allocate outside the loop
                 */
-                PetscInt*       cols_C = new PetscInt[ncols_C];
-                PetscScalar*    vals_C = new PetscScalar[ncols_C];
-
+                // PetscInt*       cols_C = new PetscInt[ncols_C];
+                // PetscScalar*    vals_C = new PetscScalar[ncols_C];
 
                 if (a == 1.)
                 {
@@ -255,13 +258,16 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 
                 MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
 
-                delete [] cols_C;
-                delete [] vals_C;
+
 
                 MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
                 MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
             };
-    #endif
+
+            delete [] cols_C;
+            delete [] vals_C;
+
+    #endif // __NO_KRON__
 
     #ifdef __SEQ_ORDER__
         MPI_Barrier(comm);
