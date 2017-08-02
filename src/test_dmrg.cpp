@@ -137,7 +137,9 @@ int main(int argc, char **argv)
             ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
             ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
             ierr = heis.TruncateOperators(); CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"%9s>> Truncation \n"," "); CHKERRQ(ierr);
+            #ifdef __TESTING
+                ierr = PetscPrintf(PETSC_COMM_WORLD,"%9s>> Truncation \n"," "); CHKERRQ(ierr);
+            #endif
         } else {
             #ifndef __TESTING
                 #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
