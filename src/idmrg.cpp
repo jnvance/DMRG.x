@@ -25,7 +25,7 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
 
     /* Initialize log file for timings */
     #ifdef __TIMINGS
-        ierr = PetscFOpen(PETSC_COMM_WORLD, "data/timings.dat", "w", &fp_timings); CHKERRQ(ierr);
+        ierr = PetscFOpen(PETSC_COMM_WORLD, "timings.dat", "w", &fp_timings); CHKERRQ(ierr);
     #endif
 
     DMRG_TIMINGS_END(__FUNCT__);

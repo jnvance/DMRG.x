@@ -64,7 +64,7 @@ int main(int argc, char **argv)
         TODO: File may also be used to save other data
      */
     FILE *fp;
-    ierr = PetscFOpen(PETSC_COMM_WORLD, "data/eigvals.dat", "w", &fp); CHKERRQ(ierr);
+    ierr = PetscFOpen(PETSC_COMM_WORLD, "eigvals.dat", "w", &fp); CHKERRQ(ierr);
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
