@@ -2,7 +2,22 @@
 #define __IDMRG_HPP__
 
 #include <slepceps.h>
+#include <petsctime.h>
 #include "dmrgblock.hpp"
+
+#ifdef __TIMINGS
+    #define DMRG_TIMINGS_START(FUNC_NAME) \
+        PetscLogDouble funct_time0, funct_time; \
+        ierr = PetscTime(&funct_time0); CHKERRQ(ierr);
+
+    #define DMRG_TIMINGS_END(FUNC_NAME) \
+        ierr = PetscTime(&funct_time); CHKERRQ(ierr); \
+        funct_time = funct_time - funct_time0; \
+        ierr = PetscFPrintf(PETSC_COMM_WORLD, fp_timings, "%10d      %-50s %.20g\n", iter_, FUNC_NAME, funct_time);
+#else
+    #define DMRG_TIMINGS_START(FUNC_NAME)
+    #define DMRG_TIMINGS_END(FUNC_NAME)
+#endif
 
 /**
     @defgroup   idmrg   iDMRG
@@ -159,6 +174,11 @@ protected:
         Single-site \f$ S_- \f$ operator as a 2x2 matrix
     */
     Mat Sm1_;
+
+    /**
+        Timings
+     */
+    FILE *fp_timings;
 
 public:
 

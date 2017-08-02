@@ -2,9 +2,13 @@
 #include "linalg_tools.hpp"
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::init"
 PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
     comm_ = comm;
     mstates_ = mstates;
     final_nsites_ = nsites;
@@ -19,13 +23,22 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     MatSpCreate(comm, Sp1_);
     MatTranspose(Sp1_, MAT_INITIAL_MATRIX, &Sm1_);
 
+    /* Initialize log file for timings */
+    #ifdef __TIMINGS
+        ierr = PetscFOpen(PETSC_COMM_WORLD, "data/timings.dat", "w", &fp_timings); CHKERRQ(ierr);
+    #endif
+
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
-
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::destroy"
 PetscErrorCode iDMRG::destroy()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
 
     /* Destroy block objects */
     ierr = BlockLeft_.destroy(); CHKERRQ(ierr);
@@ -44,13 +57,23 @@ PetscErrorCode iDMRG::destroy()
     Sm1_ = nullptr;
     superblock_H_ = nullptr;
 
+    /* Close log files */
+    #ifdef __TIMINGS
+        ierr = PetscFClose(PETSC_COMM_WORLD, fp_timings); CHKERRQ(ierr);
+    #endif
+
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::SolveGroundState"
 PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, PetscReal& error)
 {
     PetscErrorCode ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
 
     /*
         Checkpoint whether superblock Hamiltonian has been set and assembled
@@ -151,13 +174,18 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     MatDestroy(&superblock_H_);
     EPSDestroy(&eps);
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::BuildReducedDensityMatrices"
 PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
     /*
         Determine whether ground state has been solved with SolveGroundState()
      */
@@ -188,13 +216,19 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
     if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
     if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
+
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices"
 PetscErrorCode iDMRG::GetRotationMatrices()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
 
     if(!(dm_left && dm_right && dm_solved))
         SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
@@ -251,13 +285,17 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     if (dm_left)   {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
     if (dm_right)  {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::TruncateOperators"
 PetscErrorCode iDMRG::TruncateOperators()
 {
     PetscErrorCode ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
 
     if(!(dm_svd && U_left_ && U_right_))
         SETERRQ(comm_, 1, "SVD of reduced density matrices not yet solved.");
@@ -342,13 +380,18 @@ PetscErrorCode iDMRG::TruncateOperators()
     #undef __CHECK_ROTATION
 
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::MatPeekOperators"
 PetscErrorCode iDMRG::MatPeekOperators()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
 
     PetscPrintf(comm_, "\nLeft Block Operators\nBlock Length = %d\n", BlockLeft_.length());
     ierr = MatPeek(BlockLeft_.H(), "H (left)");
@@ -365,13 +408,18 @@ PetscErrorCode iDMRG::MatPeekOperators()
         ierr = MatPeek(superblock_H_, "H (superblock)"); CHKERRQ(ierr);
     }
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::MatSaveOperators"
 PetscErrorCode iDMRG::MatSaveOperators()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
     char filename[PETSC_MAX_PATH_LEN];
     char extended[PETSC_MAX_PATH_LEN];
 
@@ -404,5 +452,6 @@ PetscErrorCode iDMRG::MatSaveOperators()
         ierr = MatWrite(superblock_H_, filename); CHKERRQ(ierr);
     }
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }

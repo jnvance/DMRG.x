@@ -7,9 +7,13 @@
  *  Change values and observe degeneracies
  */
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG_Heisenberg::BuildBlockLeft"
 PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
 {
     PetscErrorCode  ierr = 0;
+
+    DMRG_TIMINGS_START(__FUNCT__);
 
     /*
         Prepare Sm as explicit Hermitian conjugate of Sp
@@ -61,13 +65,18 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     #endif
     ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
+
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG_Heisenberg::BuildBlockRight"
 PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
 
     /*
         Prepare Sm as explicit Hermitian conjugate of Sp
@@ -116,15 +125,21 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
         PetscPrintf(comm_, "%12sRight      basis size: %-5d nsites: %-5d \n", "", BlockRight_.basis_size(), BlockRight_.length());
     #endif
     ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
-    ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
+    ierr = MatDestroy(&eye_R); CHKERRQ(ierr);
+
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
 
 /* TODO: Insert timings */
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG_Heisenberg::BuildSuperBlock"
 PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+
     Mat             mat_temp;
     PetscInt        M_left, M_right, M_superblock;
 
@@ -204,5 +219,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         PetscPrintf(comm_, "%12sSuperblock basis size: %-5d nsites: %-5d \n", "", M_superblock, BlockLeft_.length() + BlockRight_.length());
     #endif
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }

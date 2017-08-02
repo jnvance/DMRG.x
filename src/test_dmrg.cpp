@@ -24,7 +24,6 @@ int main(int argc, char **argv)
     comm = PETSC_COMM_WORLD;
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
-
     /*
         Determine from options the target number of sites
         and number of states retained at each truncation
@@ -38,10 +37,19 @@ int main(int argc, char **argv)
     iDMRG_Heisenberg heis;
     heis.init(comm, nsites, mstates);
 
+    PetscBool petsc_use_complex = PETSC_FALSE;
+    #ifdef PETSC_USE_COMPLEX
+        petsc_use_complex = PETSC_TRUE;
+    #endif
+
+    char scalar_type[80];
+    sprintf(scalar_type, (petsc_use_complex == PETSC_TRUE) ? "COMPLEX" : "REAL");
+
     ierr = PetscPrintf(comm,   "\n"
                         "iDMRG of the 1D Heisenberg model\n"
+                        "PetscScalar type        : %-20s\n"
                         "Target number of sites  : %-10d\n"
-                        "Number of states to keep: %-10d\n\n", nsites, mstates); CHKERRQ(ierr);
+                        "Number of states to keep: %-10d\n\n", scalar_type, nsites, mstates); CHKERRQ(ierr);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"
@@ -129,6 +137,7 @@ int main(int argc, char **argv)
             ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
             ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
             ierr = heis.TruncateOperators(); CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"%9s>> Truncation \n"," "); CHKERRQ(ierr);
         } else {
             #ifndef __TESTING
                 #if defined(__PRINT_SIZES) || defined(__PRINT_TRUNCATION_ERROR)
