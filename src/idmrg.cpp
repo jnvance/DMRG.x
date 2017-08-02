@@ -57,12 +57,15 @@ PetscErrorCode iDMRG::destroy()
     Sm1_ = nullptr;
     superblock_H_ = nullptr;
 
-    /* Close log files */
+    DMRG_TIMINGS_END(__FUNCT__);
+    /* 
+        Close log files after ending timings 
+        otherwise, this causes a segmentation fault
+     */
     #ifdef __TIMINGS
         ierr = PetscFClose(PETSC_COMM_WORLD, fp_timings); CHKERRQ(ierr);
     #endif
 
-    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
