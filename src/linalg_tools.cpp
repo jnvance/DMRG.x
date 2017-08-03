@@ -219,7 +219,8 @@ PetscErrorCode VecReshapeToMat(const Vec& vec, Mat& mat, const PetscInt M, const
     if( M * N != vec_size ) SETERRQ(comm, 1, "Size mismatch");
 
 
-    PetscInt    mat_Istart, mat_Iend, mat_nrows;
+    // PetscInt    mat_Istart, mat_Iend, mat_nrows;
+    PetscInt    mat_Istart, mat_Iend;
     PetscInt    subvec_Istart, subvec_Iend, subvec_nitems;
     PetscInt*   vec_idx;
     IS          vec_is;
@@ -239,7 +240,7 @@ PetscErrorCode VecReshapeToMat(const Vec& vec, Mat& mat, const PetscInt M, const
 
     MatGetOwnershipRange(mat, &mat_Istart, &mat_Iend);
 
-    mat_nrows  = mat_Iend - mat_Istart;
+    // mat_nrows  = mat_Iend - mat_Istart;
     subvec_Istart = mat_Istart*N;
     subvec_Iend   = mat_Iend*N;
     subvec_nitems = subvec_Iend - subvec_Istart;
