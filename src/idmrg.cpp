@@ -149,7 +149,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
 
         ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error);CHKERRQ(ierr);
         groundstate_solved_ = PETSC_TRUE;
-        superblock_set_ = PETSC_FALSE;
+        // superblock_set_ = PETSC_FALSE; // See note below
     }
     else
     {
@@ -172,9 +172,12 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         #endif
     #endif // __SAVE_SUPERBLOCK
 
+    /*
+        Retain superblock_H_ matrix
+        Destroy it only when it is needed to be rebuilt
+    */
+    // MatDestroy(&superblock_H_);
 
-
-    MatDestroy(&superblock_H_);
     EPSDestroy(&eps);
 
     DMRG_TIMINGS_END(__FUNCT__);

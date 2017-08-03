@@ -150,21 +150,92 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
 
 
-    /*  Check size of superblock
+    /*
+        OPTIMIZATION (1)
+
+        Check size of superblock
         If the new superblock size does not match the current superblock, delete and reallocate
         Otherwise, reuse the superblock_H_
         Also, preallocate the superblock with full size by
             determining the sizes of submatrices and
             using MPIAIJSetPreallocation
     */
-    // PetscInt M_A, N_A, M_B, N_B;
-    // ierr = MatGetSize(A, &M_A, &N_A); CHKERRQ(ierr);
-    // ierr = MatGetSize(B, &M_B, &N_B); CHKERRQ(ierr);
-    if((superblock_set_==PETSC_TRUE || superblock_H_) )
-    {
-        ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
-        superblock_H_ = nullptr;
-    }
+
+
+    #define __OPTIMIZATION01
+    // #define __OPTIMIZATION02
+
+
+    #ifdef __OPTIMIZATION01
+        PetscInt M_A, N_A, M_B, N_B, M_C, N_C, M_C_req, N_C_req;
+        ierr = MatGetSize(BlockLeft_.H(), &M_A, &N_A); CHKERRQ(ierr);
+        ierr = MatGetSize(BlockRight_.H(), &M_B, &N_B); CHKERRQ(ierr);
+        M_C_req = M_A * M_B;
+        N_C_req = N_A * N_B;
+
+
+        #ifdef __OPTIMIZATION02
+            PetscMPIInt     nprocs, rank;
+            MPI_Comm_size(comm_, &nprocs);
+            MPI_Comm_rank(comm_, &rank);
+
+            PetscInt Istart, Iend, Irows, remrows, locrows, startrow;
+            /* Guess layout where remrows are distributed to first few rows */
+            remrows = M_C_req % nprocs;
+            locrows = M_C_req / nprocs;
+            startrow = locrows*rank;
+            if (remrows > 0 && rank < remrows)
+            {
+                locrows += 1;
+                startrow += rank;
+            }
+        #endif // __OPTIMIZATION02
+
+
+
+        if (M_C_req != N_C_req)
+            SETERRQ(comm_, 1, "Hamiltonian should be square. Check block operators from previous step.");
+
+        #ifdef __OPTIMIZATION02
+            #define SETUPSUPERBLOCKH \
+                ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
+                ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
+                ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
+                /*Guess the preallocation*/ \
+                ierr = MatMPIAIJSetPreallocation(superblock_H_, locrows, NULL, M_C_req - locrows , NULL); CHKERRQ(ierr);
+                // ierr = MatSetUp(superblock_H_); CHKERRQ(ierr); \
+                /*ierr = MatGetOwnershipRange(superblock_H_, &Istart, &Iend);*/
+        #else
+            #define SETUPSUPERBLOCKH \
+                ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
+                ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
+                ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
+                ierr = MatSetUp(superblock_H_); CHKERRQ(ierr);
+        #endif //__OPTIMIZATION02
+        #undef __OPTIMIZATION02
+
+        #define DESTROYSUPERBLOCKH \
+            ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr); \
+            superblock_H_ = nullptr; \
+            superblock_set_==PETSC_FALSE;
+
+        if(superblock_set_==PETSC_TRUE || superblock_H_)
+        {
+            ierr = MatGetSize(superblock_H_, &M_C, &N_C); CHKERRQ(ierr);
+            if (!((M_C_req==M_C)&&(N_C_req==N_C))) {
+                DESTROYSUPERBLOCKH
+                PetscPrintf(comm_, "Destroyed H (1)\n");
+                SETUPSUPERBLOCKH
+            }
+        } else {
+            SETUPSUPERBLOCKH
+        }
+        #undef SETUPSUPERBLOCKH
+        #undef DESTROYSUPERBLOCKH
+
+        ierr = MatZeroEntries(superblock_H_); CHKERRQ(ierr);
+    #endif //__OPTIMIZATION01
+
 
     /*
         Update the Hamiltonian
@@ -179,9 +250,14 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #ifdef __KRON_TIMINGS
         PetscPrintf(PETSC_COMM_WORLD, "%40s %s\n", __FUNCT__,"MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_)");
     #endif
-    ierr = MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
-    // ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
 
+    #ifdef __OPTIMIZATION01
+    ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+    #else
+    PetscPrintf(comm_, "Destroyed H (2) \n");
+    ierr = MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+    #endif
+    #undef __OPTIMIZATION01
     /*
         If the left and right sizes are the same, re-use the identity.
         Otherwise, create a new identity matrix with the correct size.
