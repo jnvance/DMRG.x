@@ -58,8 +58,8 @@ PetscErrorCode iDMRG::destroy()
     superblock_H_ = nullptr;
 
     DMRG_TIMINGS_END(__FUNCT__);
-    /* 
-        Close log files after ending timings 
+    /*
+        Close log files after ending timings
         otherwise, this causes a segmentation fault
      */
     #ifdef __TIMINGS
