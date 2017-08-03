@@ -201,7 +201,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
                 ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
                 ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
                 ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
-                /*Guess the preallocation*/ \
                 ierr = MatMPIAIJSetPreallocation(superblock_H_, locrows, NULL, M_C_req - locrows , NULL); CHKERRQ(ierr);
                 // ierr = MatSetUp(superblock_H_); CHKERRQ(ierr); \
                 /*ierr = MatGetOwnershipRange(superblock_H_, &Istart, &Iend);*/
@@ -217,7 +216,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         #define DESTROYSUPERBLOCKH \
             ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr); \
             superblock_H_ = nullptr; \
-            superblock_set_==PETSC_FALSE;
+            superblock_set_=PETSC_FALSE;
 
         if(superblock_set_==PETSC_TRUE || superblock_H_)
         {
