@@ -2,7 +2,7 @@
 TARGETS = test_dmrg.x test_kron.x test_reshape.x
 
 CXXFLAGS  = -O3 -std=c++11
-CXXFLAGS += -D__TESTING
+# CXXFLAGS += -D__TESTING
 # CXXFLAGS += -D__DMRG_TIMINGS
 CXXFLAGS += -D__TIMINGS
 # CXXFLAGS += -D__KRON_TIMINGS
