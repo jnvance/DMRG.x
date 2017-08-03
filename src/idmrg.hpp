@@ -5,7 +5,7 @@
 #include <petsctime.h>
 #include "dmrgblock.hpp"
 
-#ifdef __TIMINGS
+#ifdef __DMRG_TIMINGS
     #define DMRG_TIMINGS_START(FUNC_NAME) \
         PetscLogDouble funct_time0, funct_time; \
         ierr = PetscTime(&funct_time0); CHKERRQ(ierr);

@@ -33,11 +33,18 @@ MatKron(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
         Setup matrix C
         TODO: maybe hardcode some setup options
     */
-    MatCreate(comm, &C);
-    MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C);
-    MatSetFromOptions(C);
-    MatSetUp(C);
-    MatZeroEntries(C);
+    ierr = MatCreate(comm, &C); CHKERRQ(ierr);
+    ierr = MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(C); CHKERRQ(ierr);
+    ierr = MatSetUp(C); CHKERRQ(ierr);
+    ierr = MatZeroEntries(C); CHKERRQ(ierr);
+
+    /*
+        Preallocaton Method 1: Naive, preallocate everything
+     */
+    /* Get the full size of the diagonal submatrix */
+
+    // ierr = MatMPIAIJSetPreallocation(C, PetscInt d_nz,const PetscInt d_nnz[],PetscInt o_nz,const PetscInt o_nnz[]); CHKERRQ(ierr);
 
     MatKronAdd(A, B, C, comm);
 
@@ -64,6 +71,9 @@ PetscErrorCode
 MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
 {
     PetscErrorCode ierr = 0;
+
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
 
     PetscMPIInt     nprocs, rank;
     PetscInt        M_A, N_A, M_B, N_B, M_C, N_C;
@@ -212,6 +222,18 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
             PetscInt*       cols_C = new PetscInt[max_ncols_C];
             PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
 
+    #define __KRONLOOP "  KronLoop"
+    KRON_TIMINGS_INIT(__KRONLOOP);
+
+    #define __MATSETVALUES "    MatSetValues"
+    KRON_TIMINGS_ACCUM_INIT(__MATSETVALUES);
+
+    #define __CALC_VALUES "    CalculateKronValues"
+    KRON_TIMINGS_ACCUM_INIT(__CALC_VALUES);
+
+    KRON_TIMINGS_START(__KRONLOOP);
+        if (a == 1.) /* TODO: MOVE OUT OF LOOP */
+        {
             for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
             {
                 Arow = Irow/M_B;
@@ -220,52 +242,71 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
                 MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
                 MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
 
-                #ifdef __PRINT_TESTS__
-                printf("[%2d] Irow: %-5d Arow: %-5d Brow: %-5d ncols_A: %-5d ncols_B: %-5d\n",
-                    rank, Irow, Arow, Brow, ncols_A, ncols_B);
-                #endif
+                ncols_C = ncols_A * ncols_B;
+
+                KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
+                for (int j_A = 0; j_A < ncols_A; ++j_A)
+                {
+                    for (int j_B = 0; j_B < ncols_B; ++j_B)
+                    {
+                        cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                        vals_C [ j_A * ncols_B + j_B ] = vals_A[j_A] * vals_B[j_B];
+                    }
+                }
+                KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
+
+                KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
+                MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
+                KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
+
+                MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
+                MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+            };
+        }
+        else
+        {
+            for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+            {
+                Arow = Irow/M_B;
+                Brow = Irow % M_B;
+
+                MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+                MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
 
                 ncols_C = ncols_A * ncols_B;
-                /*
-                    TODO: This malloc might be costly, try to estimate the max number of nonzeros
-                    of the product matrix and pre-allocate outside the loop
-                */
-                // PetscInt*       cols_C = new PetscInt[ncols_C];
-                // PetscScalar*    vals_C = new PetscScalar[ncols_C];
 
-                if (a == 1.)
+                KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
+                for (int j_A = 0; j_A < ncols_A; ++j_A)
                 {
-                    for (int j_A = 0; j_A < ncols_A; ++j_A)
+                    for (int j_B = 0; j_B < ncols_B; ++j_B)
                     {
-                        for (int j_B = 0; j_B < ncols_B; ++j_B)
-                        {
-                            cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-                            vals_C [ j_A * ncols_B + j_B ] = vals_A[j_A] * vals_B[j_B];
-                        }
+                        cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                        vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
                     }
                 }
-                else
-                {
-                    for (int j_A = 0; j_A < ncols_A; ++j_A)
-                    {
-                        for (int j_B = 0; j_B < ncols_B; ++j_B)
-                        {
-                            cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-                            vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
-                        }
-                    }
-                }
+                KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
+                KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
                 MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
-
-
+                KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
 
                 MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
                 MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
             };
 
+        }
+
             delete [] cols_C;
             delete [] vals_C;
+
+    KRON_TIMINGS_END(__KRONLOOP);
+    #undef __KRONLOOP
+
+    KRON_TIMINGS_ACCUM_PRINT(__CALC_VALUES);
+    #undef __CALC_VALUES
+
+    KRON_TIMINGS_ACCUM_PRINT(__MATSETVALUES);
+    #undef __MATSETVALUES
 
     #endif // __NO_KRON__
 
@@ -299,6 +340,8 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     #endif
     #undef __KRON_WRITE_SUBMAT__
 
+    KRON_TIMINGS_END(__FUNCT__);
+    KRON_TIMINGS_PRINT(" "); 
 
     MatDestroy(&submat_A);
     MatDestroy(&submat_B);

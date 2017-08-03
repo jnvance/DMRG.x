@@ -144,14 +144,26 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     PetscInt        M_left, M_right, M_superblock;
 
     /*
-        TODO: Impose a checkpoint correctness of blocks
+        Impose a checkpoint on the correctness of blocks
     */
     if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
 
-    if(superblock_set_==PETSC_TRUE || superblock_H_)
+
+    /*  Check size of superblock
+        If the new superblock size does not match the current superblock, delete and reallocate
+        Otherwise, reuse the superblock_H_
+        Also, preallocate the superblock with full size by
+            determining the sizes of submatrices and
+            using MPIAIJSetPreallocation
+    */
+    // PetscInt M_A, N_A, M_B, N_B;
+    // ierr = MatGetSize(A, &M_A, &N_A); CHKERRQ(ierr);
+    // ierr = MatGetSize(B, &M_B, &N_B); CHKERRQ(ierr);
+    if((superblock_set_==PETSC_TRUE || superblock_H_) )
     {
         ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
+        superblock_H_ = nullptr;
     }
 
     /*
@@ -163,7 +175,12 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     */
     ierr = MatGetSize(BlockRight_.H(), &M_right, NULL); CHKERRQ(ierr);
     ierr = MatEyeCreate(comm_, mat_temp, M_right); CHKERRQ(ierr);
+
+    #ifdef __KRON_TIMINGS
+        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\n", __FUNCT__,"MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_)");
+    #endif
     ierr = MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+    // ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
 
     /*
         If the left and right sizes are the same, re-use the identity.
@@ -178,6 +195,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     /*
         Second term: 1_{DL×2} \otimes H_{R,i+2}
     */
+    #ifdef __KRON_TIMINGS
+        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\n", __FUNCT__,"MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_)");
+    #endif
     ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
 
     /*

@@ -3,7 +3,55 @@
 
 #include <slepceps.h>
 #include <stdlib.h>
+#include <petsctime.h>
 
+/* Inspect the timings inside matkron */
+#ifdef __KRON_TIMINGS
+
+    #define KRON_TIMINGS_PRINT(SOMETEXT) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%s\n",SOMETEXT);
+
+    /* Inspect timings for a full block of code */
+
+    #define KRON_TIMINGS_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time ## SECTION_LABEL;
+
+    #define KRON_TIMINGS_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define KRON_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+    /* Inspect accumulated timings for a section of code inside a loop */
+
+    #define KRON_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time1 ## SECTION_LABEL, funct_time ## SECTION_LABEL = 0.0;
+
+    #define KRON_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define KRON_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+
+    #define KRON_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+
+    #define KRON_TIMINGS_PRINT(SOMETEXT)
+
+    #define KRON_TIMINGS_INIT(SECTION_LABEL)
+    #define KRON_TIMINGS_START(SECTION_LABEL)
+    #define KRON_TIMINGS_END(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+
+#endif
 
 /**
     @defgroup   kron    Kronecker Product
