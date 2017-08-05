@@ -281,9 +281,11 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
                     for (int j_B = 0; j_B < ncols_B; ++j_B)
                     {
                         cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                        // PetscPrintf(PETSC_COMM_WORLD,"%6d ", cols_C [ j_A * ncols_B + j_B ]);
                         vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
                     }
                 }
+                // PetscPrintf(PETSC_COMM_WORLD,"\n");
                 KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
                 KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
@@ -341,7 +343,11 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     #undef __KRON_WRITE_SUBMAT__
 
     KRON_TIMINGS_END(__FUNCT__);
-    KRON_TIMINGS_PRINT(" "); 
+    KRON_TIMINGS_PRINT(" ");
+
+    MatAssemblyBegin(C, MAT_FLUSH_ASSEMBLY);
+    MatAssemblyEnd(C, MAT_FINAL_ASSEMBLY);
+
 
     MatDestroy(&submat_A);
     MatDestroy(&submat_B);
