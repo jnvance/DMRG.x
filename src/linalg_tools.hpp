@@ -193,6 +193,24 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
  */
 PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, PetscScalar& error, Mat& mat, FILE *fp);
 
+
+#define LINALG_TOOLS__MATASSEMBLY_INIT() \
+    PetscBool assembled;
+
+#define LINALG_TOOLS__MATASSEMBLY_FINAL(MATRIX) \
+    ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
+    if (assembled == PETSC_FALSE){\
+        ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+        ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    }
+
+#define LINALG_TOOLS__MATASSEMBLY_FLUSH(MATRIX) \
+    ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
+    if (assembled == PETSC_FALSE){\
+        ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+        ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    }
+
 /** @} */
 
 #endif // __LINALG_TOOLS_HPP__

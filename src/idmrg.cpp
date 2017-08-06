@@ -100,10 +100,9 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSSetOperators(eps, superblock_H_, nullptr); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
     ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
-    ierr = EPSSetType(eps, EPSKRYLOVSCHUR);
-    ierr = EPSSetDimensions(eps, 4, PETSC_DECIDE, PETSC_DECIDE);
-
-    ierr = EPSSetTolerances(eps, 1.0e-20, 200);
+    // ierr = EPSSetType(eps, EPSKRYLOVSCHUR);
+    // ierr = EPSSetDimensions(eps, 4, PETSC_DECIDE, PETSC_DECIDE);
+    // ierr = EPSSetTolerances(eps, 1.0e-20, 200);
 
     ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
     ierr = EPSSolve(eps); CHKERRQ(ierr);
