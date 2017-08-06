@@ -220,9 +220,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     // #define __NO_KRON__
     #ifndef __NO_KRON__
 
-            PetscInt        max_ncols_C = N_A * N_B;
-            PetscInt*       cols_C = new PetscInt[max_ncols_C];
-            PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
+
 
     #define __KRONLOOP "  KronLoop"
     KRON_TIMINGS_INIT(__KRONLOOP);
@@ -235,6 +233,53 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 
     KRON_TIMINGS_START(__KRONLOOP);
 
+    #define KRON_OPTIMIZATION
+
+    #ifdef KRON_OPTIMIZATION
+    PetscInt        max_ncols_C = N_A * N_B;
+    PetscInt*       cols_C = new PetscInt[max_ncols_C];
+    PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
+    PetscInt        j_A, j_B, last;
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+    {
+        Arow = Irow / M_B;
+        Brow = Irow % M_B;
+
+        MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+        MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
+
+        ncols_C = ncols_A * ncols_B;
+
+        KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
+        for (j_A = 0; j_A < ncols_A; ++j_A)
+        {
+            for (j_B = 0; j_B < ncols_B; ++j_B)
+            {
+                cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+            }
+        }
+        for (j_A = 0; j_A < ncols_A; ++j_A)
+        {
+            for (j_B = 0; j_B < ncols_B; ++j_B)
+            {
+                vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
+            }
+        }
+        KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
+
+        KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
+        MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
+        KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
+
+        MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
+        MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+    };
+
+    #else
+
+    PetscInt        max_ncols_C = N_A * N_B;
+    PetscInt*       cols_C = new PetscInt[max_ncols_C];
+    PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
     if (a == 1.)
     {
         for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
@@ -297,15 +342,8 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
             MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
             MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
         };
-
     }
-
-
-
-
-
-
-
+    #endif
 
     delete [] cols_C;
     delete [] vals_C;
