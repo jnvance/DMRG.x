@@ -171,7 +171,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         SETERRQ(comm_, 1, "Hamiltonian should be square. Check block operators from previous step.");
 
     /*
-        OPTIMIZATION (1)
+        OPTIMIZATION
 
         Check size of superblock
         If the new superblock size does not match the current superblock, delete and reallocate
@@ -181,8 +181,16 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             using MPIAIJSetPreallocation
     */
 
-    #define __OPTIMIZATION01
-    // #define __OPTIMIZATION02
+    #if !defined(SUPERBLOCK_OPTIMIZATION)
+        #define __OPTIMIZATION01
+    #elif SUPERBLOCK_OPTIMIZATION == 1
+        #define __OPTIMIZATION01
+    #elif SUPERBLOCK_OPTIMIZATION == 2
+        #define __OPTIMIZATION02
+    #elif SUPERBLOCK_OPTIMIZATION == 0
+
+    #endif
+
 
     #ifdef __OPTIMIZATION01
 
@@ -207,6 +215,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         }
         #undef SETUPSUPERBLOCKH
         #undef DESTROYSUPERBLOCKH
+
     #endif //__OPTIMIZATION01
 
     #ifdef __OPTIMIZATION02
@@ -245,6 +254,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
         if(superblock_set_==PETSC_TRUE || superblock_H_)
         {
+            PetscInt M_C, N_C;
             ierr = MatGetSize(superblock_H_, &M_C, &N_C); CHKERRQ(ierr);
             if (!((M_C_req==M_C)&&(N_C_req==N_C))) {
                 DESTROYSUPERBLOCKH
@@ -253,12 +263,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         } else {
             SETUPSUPERBLOCKH
         }
-
-        // if(superblock_set_==PETSC_TRUE || superblock_H_)
-        // {
-        //     DESTROYSUPERBLOCKH
-        // }
-        // SETUPSUPERBLOCKH
 
         #undef SETUPSUPERBLOCKH
         #undef DESTROYSUPERBLOCKH
@@ -294,8 +298,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         ierr = MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
     }
 
-    #undef __OPTIMIZATION01
-    #undef __OPTIMIZATION02
+    // #undef __OPTIMIZATION01
+    // #undef __OPTIMIZATION02
     /*
         If the left and right sizes are the same, re-use the identity.
         Otherwise, create a new identity matrix with the correct size.

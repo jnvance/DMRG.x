@@ -300,6 +300,13 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 
     }
 
+
+
+
+
+
+
+
     delete [] cols_C;
     delete [] vals_C;
 
