@@ -298,8 +298,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         ierr = MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
     }
 
-    // #undef __OPTIMIZATION01
-    // #undef __OPTIMIZATION02
+    #undef __OPTIMIZATION01
+    #undef __OPTIMIZATION02
     /*
         If the left and right sizes are the same, re-use the identity.
         Otherwise, create a new identity matrix with the correct size.
@@ -317,6 +317,17 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         PetscPrintf(PETSC_COMM_WORLD, "%40s %s\n", __FUNCT__,"MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_)");
     #endif
     ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
+
+    // #define __OPTIMIZATION01_01
+    // #ifdef __OPTIMIZATION01_01
+    // Mat BlockRight_H;
+    // ierr = MatKron(mat_temp, BlockRight_.H(), BlockRight_H, comm_); CHKERRQ(ierr);
+    // LINALG_TOOLS__MATASSEMBLY_INIT(); LINALG_TOOLS__MATASSEMBLY_FINAL(BlockRight_H);
+    // ierr = MatAXPY(superblock_H_,1.0,BlockRight_H,SUBSET_NONZERO_PATTERN); CHKERRQ(ierr);
+    // MatDestroy(&BlockRight_H);
+    // #else
+    // ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
+    // #endif
 
     /*
         Third term: S^z_{L,i+1} \otimes S^z_{R,i+2}
