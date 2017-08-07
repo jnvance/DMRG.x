@@ -239,7 +239,8 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     PetscInt        max_ncols_C = N_A * N_B;
     PetscInt*       cols_C = new PetscInt[max_ncols_C];
     PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
-    PetscInt        j_A, j_B, last;
+    PetscInt        j_A = 0, j_B = 0, j_0, nzeros_count;
+    PetscInt        idx, idx_prev, nzeros_step;
     for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
     {
         Arow = Irow / M_B;
@@ -249,26 +250,38 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
         MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
 
         ncols_C = ncols_A * ncols_B;
+        idx_prev = COL_MAP_A(cols_A[0]) * N_B + COL_MAP_B(cols_B[0]) - 1;
+        nzeros_count = 0;
+
+        printf("[%2d] Irow: %-4d ncols_C: %-6d \n",rank, Irow, ncols_C);
+        // printf("[%2d] Irow: %-4d\n",rank, Irow);
 
         KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
         for (j_A = 0; j_A < ncols_A; ++j_A)
         {
             for (j_B = 0; j_B < ncols_B; ++j_B)
             {
-                cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-            }
-        }
-        for (j_A = 0; j_A < ncols_A; ++j_A)
-        {
-            for (j_B = 0; j_B < ncols_B; ++j_B)
-            {
-                vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
+                idx = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                // nzeros_step = idx - idx_prev - 1;
+                nzeros_step = 0;
+                // printf("[%2d] Irow: %-4d idx_prev: %-4d nzeros_step: %-4d\n", rank, Irow, idx_prev, nzeros_step);
+                for (j_0 = 0; j_0 < nzeros_step; ++j_0)
+                {
+                    cols_C [ j_A * ncols_B + j_B + j_0] = idx_prev + j_0;
+                    vals_C [ j_A * ncols_B + j_B + j_0] = 0.0;
+                }
+                cols_C [ j_A * ncols_B + j_B + nzeros_step] = idx;
+                vals_C [ j_A * ncols_B + j_B + nzeros_step] = a * vals_A[j_A] * vals_B[j_B];
+
+                nzeros_count += nzeros_step;
+                idx_prev = idx;
             }
         }
         KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
         KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
         MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
+        // printf("[%2d] MatSetValues\n",rank);
         KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
 
         MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
