@@ -214,7 +214,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     #ifdef __SEQ_ORDER__
 
     for(PetscInt Irank = 0; Irank < nprocs; ++Irank){
-        if(Irank==rank)
+        if(Irank==rank){
 
     #endif
     // #define __NO_KRON__
@@ -233,14 +233,25 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 
     KRON_TIMINGS_START(__KRONLOOP);
 
-    #define KRON_OPTIMIZATION
-
-    #ifdef KRON_OPTIMIZATION
     PetscInt        max_ncols_C = N_A * N_B;
     PetscInt*       cols_C = new PetscInt[max_ncols_C];
     PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
+    /*
+        This optimization inserts zeros between all non-zero elements
+        of the matrix to improve the performance of the kronecker product
+        when the matrix is used iteratively. Doing this ensures that the preallocated
+        space for these elements survive the final assembly.
+
+        Remarks: Performance is worse
+     */
+    // #define KRON_OPTIMIZATION_01
+
+    #ifdef KRON_OPTIMIZATION_01
+
+    // printf("\n");
+
     PetscInt        j_A = 0, j_B = 0, j_0, nzeros_count;
-    PetscInt        idx, idx_prev, nzeros_step;
+    PetscInt        idx = 0, idx_prev = 0, nzeros_step = 0;
     for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
     {
         Arow = Irow / M_B;
@@ -250,11 +261,16 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
         MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
 
         ncols_C = ncols_A * ncols_B;
-        idx_prev = COL_MAP_A(cols_A[0]) * N_B + COL_MAP_B(cols_B[0]) - 1;
-        nzeros_count = 0;
+        if(ncols_C)
+            idx_prev = COL_MAP_A(cols_A[0]) * N_B + COL_MAP_B(cols_B[0]) - 1;
+        else
+            idx_prev = -1;
 
-        printf("[%2d] Irow: %-4d ncols_C: %-6d \n",rank, Irow, ncols_C);
-        // printf("[%2d] Irow: %-4d\n",rank, Irow);
+        nzeros_count = 0;
+        nzeros_step  = 0;
+
+        // printf("\n"
+        //        "[%2d] Irow: %-4d ncols_C: %-6d \n",rank, Irow, ncols_C);
 
         KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
         for (j_A = 0; j_A < ncols_A; ++j_A)
@@ -262,26 +278,26 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
             for (j_B = 0; j_B < ncols_B; ++j_B)
             {
                 idx = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-                // nzeros_step = idx - idx_prev - 1;
-                nzeros_step = 0;
+                nzeros_step = idx - idx_prev - 1;
                 // printf("[%2d] Irow: %-4d idx_prev: %-4d nzeros_step: %-4d\n", rank, Irow, idx_prev, nzeros_step);
+                // nzeros_step = 0;
                 for (j_0 = 0; j_0 < nzeros_step; ++j_0)
                 {
-                    cols_C [ j_A * ncols_B + j_B + j_0] = idx_prev + j_0;
-                    vals_C [ j_A * ncols_B + j_B + j_0] = 0.0;
+                    cols_C [ j_A * ncols_B + j_B + nzeros_count + j_0] = idx_prev + j_0 + 1;
+                    vals_C [ j_A * ncols_B + j_B + nzeros_count + j_0] = 0.0;
+                    // printf("[%2d] Irow: %-4d inserted \n", rank, Irow);
                 }
-                cols_C [ j_A * ncols_B + j_B + nzeros_step] = idx;
-                vals_C [ j_A * ncols_B + j_B + nzeros_step] = a * vals_A[j_A] * vals_B[j_B];
-
                 nzeros_count += nzeros_step;
+                cols_C [ j_A * ncols_B + j_B + nzeros_count] = idx;
+                vals_C [ j_A * ncols_B + j_B + nzeros_count] = a * vals_A[j_A] * vals_B[j_B];
                 idx_prev = idx;
             }
         }
         KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
         KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-        MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
-        // printf("[%2d] MatSetValues\n",rank);
+        // printf("[%2d] MatSetValues   ncols_C = %-5d nzeros_count = %-5d   \n",rank, ncols_C, nzeros_count );
+        MatSetValues(C, 1, &Irow, ncols_C + nzeros_count, cols_C, vals_C, ADD_VALUES );
         KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
 
         MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
@@ -290,9 +306,6 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 
     #else
 
-    PetscInt        max_ncols_C = N_A * N_B;
-    PetscInt*       cols_C = new PetscInt[max_ncols_C];
-    PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
     if (a == 1.)
     {
         for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
@@ -373,6 +386,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     #endif // __NO_KRON__
 
     #ifdef __SEQ_ORDER__
+        }
         MPI_Barrier(comm);
     }
     #endif
@@ -402,16 +416,22 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
     #endif
     #undef __KRON_WRITE_SUBMAT__
 
-    KRON_TIMINGS_END(__FUNCT__);
-    KRON_TIMINGS_PRINT(" ");
-
     /*
         This MatAssembly may be clearing up the unused
         preallocation.
         Solution: Explicitly fill zeros.
     */
+
+    #define __ASSEMBLY "  Assembly"
+    KRON_TIMINGS_INIT(__ASSEMBLY);
+    KRON_TIMINGS_START(__ASSEMBLY);
     MatAssemblyBegin(C, MAT_FLUSH_ASSEMBLY);
     MatAssemblyEnd(C, MAT_FLUSH_ASSEMBLY);
+    KRON_TIMINGS_END(__ASSEMBLY);
+
+
+    KRON_TIMINGS_END(__FUNCT__);
+    KRON_TIMINGS_PRINT(" ");
 
     MatDestroy(&submat_A);
     MatDestroy(&submat_B);
