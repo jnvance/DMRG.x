@@ -207,8 +207,8 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, P
 #define LINALG_TOOLS__MATASSEMBLY_FLUSH(MATRIX) \
     ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
     if (assembled == PETSC_FALSE){\
-        ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
-        ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+        ierr = MatAssemblyBegin(MATRIX, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);\
+        ierr = MatAssemblyEnd(MATRIX, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);\
     }
 
 /** @} */
