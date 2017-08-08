@@ -153,7 +153,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
 
 
-    /* Generic macro to destroy superblock and assign a null pointer */
+    /*
+        Generic macro to destroy superblock and assign a null pointer
+    */
     #define DESTROYSUPERBLOCKH \
         ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr); \
         superblock_H_ = nullptr; \
@@ -181,7 +183,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     */
 
     #if !defined(SUPERBLOCK_OPTIMIZATION)
-        #define __OPTIMIZATION01
+        #define __OPTIMIZATION01 // default
     #elif SUPERBLOCK_OPTIMIZATION == 1
         #define __OPTIMIZATION01
     #elif SUPERBLOCK_OPTIMIZATION == 2
@@ -191,7 +193,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #endif
 
 
-    #ifdef __OPTIMIZATION01
+    #if defined(__OPTIMIZATION01)
 
         #undef __OPTIMIZATION02 // defaults to OPTIMIZATION01
 
@@ -199,25 +201,12 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
-            ierr = MatSetUp(superblock_H_); CHKERRQ(ierr);
+            ierr = MatSetUp(superblock_H_); CHKERRQ(ierr); \
+            ierr = MatSetOption(superblock_H_, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); \
+            ierr = MatSetOption(superblock_H_, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE);
+            // ierr = MatSetOption(superblock_H_, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
 
-        PetscInt M_C, N_C;
-        if(superblock_set_==PETSC_TRUE || superblock_H_)
-        {
-            ierr = MatGetSize(superblock_H_, &M_C, &N_C); CHKERRQ(ierr);
-            if (!((M_C_req==M_C)&&(N_C_req==N_C))) {
-                DESTROYSUPERBLOCKH
-                SETUPSUPERBLOCKH
-            }
-        } else {
-            SETUPSUPERBLOCKH
-        }
-        #undef SETUPSUPERBLOCKH
-        #undef DESTROYSUPERBLOCKH
-
-    #endif //__OPTIMIZATION01
-
-    #ifdef __OPTIMIZATION02
+    #elif defined(__OPTIMIZATION02)
         PetscMPIInt     nprocs, rank;
         MPI_Comm_size(comm_, &nprocs);
         MPI_Comm_rank(comm_, &rank);
@@ -228,13 +217,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         locrows = M_C_req / nprocs;
         startrow = locrows*rank;
         if (remrows > 0){
-            if (rank < remrows)
-            {
+            if (rank < remrows){
                 locrows += 1;
                 startrow += rank;
-            }
-            else
-            {
+            } else {
                 startrow += remrows;
             }
         }
@@ -243,37 +229,38 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
-            ierr = MatMPIAIJSetPreallocation(superblock_H_, M_C_req, NULL, M_C_req, NULL); CHKERRQ(ierr); \
-            ierr = MatSetOption(superblock_H_, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE); \
+            ierr = MatMPIAIJSetPreallocation(superblock_H_, locrows+1, NULL, M_C_req - locrows+1, NULL); CHKERRQ(ierr); \
+            /*ierr = MatSetOption(superblock_H_, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);*/ \
             /*ierr = MatSetOption(superblock_H_, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);*/ \
             /*ierr = MatSetOption(superblock_H_, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE);*/ \
             ierr = MatGetOwnershipRange(superblock_H_, &Istart, &Iend); \
             Irows = Iend - Istart; \
             if(Irows != locrows) { SETERRQ(comm_, 1, "WRONG GUESS\n");}
 
-        if(superblock_set_==PETSC_TRUE || superblock_H_)
-        {
+    #endif // __OPTIMIZATION01 & __OPTIMIZATION02
+
+
+    #if defined(__OPTIMIZATION01) || defined(__OPTIMIZATION02)
+
+        if(superblock_set_==PETSC_TRUE || superblock_H_){
             PetscInt M_C, N_C;
             ierr = MatGetSize(superblock_H_, &M_C, &N_C); CHKERRQ(ierr);
-            if (!((M_C_req==M_C)&&(N_C_req==N_C))) {
+            if ( (M_C_req!=M_C) || (N_C_req!=N_C) ) {
                 DESTROYSUPERBLOCKH
                 SETUPSUPERBLOCKH
+            } else{
+                ierr = MatZeroEntries(superblock_H_); CHKERRQ(ierr);
             }
         } else {
             SETUPSUPERBLOCKH
         }
 
-        #undef SETUPSUPERBLOCKH
-        #undef DESTROYSUPERBLOCKH
+    #else // !defined(__OPTIMIZATION01) && !defined(__OPTIMIZATION02)
 
-
-    #endif // __OPTIMIZATION02
-
-    #if !defined(__OPTIMIZATION01) && !defined(__OPTIMIZATION02)
-        if(superblock_set_==PETSC_TRUE || superblock_H_)
-        {
+        if(superblock_set_==PETSC_TRUE || superblock_H_){
             DESTROYSUPERBLOCKH
         }
+
     #endif
 
     /*
@@ -287,23 +274,18 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     ierr = MatEyeCreate(comm_, mat_temp, M_right); CHKERRQ(ierr);
 
     #ifdef __KRON_TIMINGS
-        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_)",M_right*M_right,M_right*M_right);
+        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n",
+            __FUNCT__,"MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_)",
+            M_right*M_right,M_right*M_right);
     #endif
 
-    ierr = MatZeroEntries(superblock_H_); CHKERRQ(ierr);
     ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
 
-    // if (superblock_H_){
-    //     ierr = MatZeroEntries(superblock_H_); CHKERRQ(ierr);
-    //     ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
-    //     // ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
-    // } else {
-    //     ierr = MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
-    //     // ierr = MatKron(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
-    // }
-
+    #undef SETUPSUPERBLOCKH
+    #undef DESTROYSUPERBLOCKH
     #undef __OPTIMIZATION01
     #undef __OPTIMIZATION02
+
     /*
         If the left and right sizes are the same, re-use the identity.
         Otherwise, create a new identity matrix with the correct size.
@@ -321,17 +303,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
     #endif
     ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
-
-    // #define __OPTIMIZATION01_01
-    // #ifdef __OPTIMIZATION01_01
-    // Mat BlockRight_H;
-    // ierr = MatKron(mat_temp, BlockRight_.H(), BlockRight_H, comm_); CHKERRQ(ierr);
-    // LINALG_TOOLS__MATASSEMBLY_INIT(); LINALG_TOOLS__MATASSEMBLY_FINAL(BlockRight_H);
-    // ierr = MatAXPY(superblock_H_,1.0,BlockRight_H,SUBSET_NONZERO_PATTERN); CHKERRQ(ierr);
-    // MatDestroy(&BlockRight_H);
-    // #else
-    // ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
-    // #endif
 
     /*
         Third term: S^z_{L,i+1} \otimes S^z_{R,i+2}
