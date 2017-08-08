@@ -142,6 +142,11 @@ protected:
     PetscBool   dm_svd = PETSC_FALSE;
 
     /**
+        Counts the number of truncations performed
+     */
+    PetscInt    ntruncations_ = 0;
+
+    /**
         Rotation matrix formed from the singular vectors of the largest
         singular values of dm_left
      */

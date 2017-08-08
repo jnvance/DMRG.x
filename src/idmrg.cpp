@@ -360,6 +360,7 @@ PetscErrorCode iDMRG::TruncateOperators()
     if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
     if(U_right_)    {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
 
+    ntruncations_ += 1;
 
     /* Save operator state after rotation */
 
