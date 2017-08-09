@@ -73,6 +73,20 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 {
     PetscErrorCode ierr = 0;
 
+    ierr = MatKronScaleAddv(1., A, B, C, ADD_VALUES, comm); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatKronScaleAddv"
+PetscErrorCode
+MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const MPI_Comm& comm)
+{
+    PetscErrorCode ierr = 0;
+
     KRON_TIMINGS_INIT(__FUNCT__);
     KRON_TIMINGS_START(__FUNCT__);
 
@@ -330,7 +344,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
             KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
             KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
+            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, addv );
             KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
 
             MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
@@ -362,7 +376,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
             KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
             KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
+            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, addv );
             KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
 
             MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);

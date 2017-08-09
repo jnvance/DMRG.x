@@ -24,7 +24,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     LINALG_TOOLS__MATASSEMBLY_INIT();
 
     DMRG_TIMINGS_START(__FUNCT__);
-
+    DMRG_SUB_TIMINGS_START(__FUNCT__);
     /*
         Prepare Sm as explicit Hermitian conjugate of Sp
         TODO: Implement as part of Kronecker product
@@ -74,6 +74,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
 
+    DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
@@ -88,6 +89,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     LINALG_TOOLS__MATASSEMBLY_INIT();
 
     DMRG_TIMINGS_START(__FUNCT__);
+    DMRG_SUB_TIMINGS_START(__FUNCT__);
 
     /*
         Prepare Sm as explicit Hermitian conjugate of Sp
@@ -139,6 +141,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_R); CHKERRQ(ierr);
 
+    DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
@@ -150,6 +153,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
+    DMRG_SUB_TIMINGS_START(__FUNCT__);
 
     Mat             mat_temp;
     PetscInt        M_left, M_right, M_superblock;
@@ -225,7 +229,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         remrows = M_C_req % nprocs;
         locrows = M_C_req / nprocs;
         startrow = locrows*rank;
-        if (remrows > 0){
+        if (remrows > 0 && nprocs > 1){
             if (rank < remrows){
                 locrows += 1;
                 startrow += rank;
@@ -239,13 +243,20 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
             ierr = MatMPIAIJSetPreallocation(superblock_H_, locrows+1, NULL, M_C_req - locrows+1, NULL); CHKERRQ(ierr); \
+            ierr = MatSeqAIJSetPreallocation(superblock_H_, M_C_req+1, NULL); CHKERRQ(ierr); \
             ierr = MatSetOption(superblock_H_, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE); \
             ierr = MatSetOption(superblock_H_, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); \
             ierr = MatSetOption(superblock_H_, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE); \
             ierr = MatSetOption(superblock_H_, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE); \
-            ierr = MatGetOwnershipRange(superblock_H_, &Istart, &Iend); \
-            Irows = Iend - Istart; \
-            if(Irows != locrows) { SETERRQ(comm_, 1, "WRONG GUESS\n");}
+            ierr = MatSetOption(superblock_H_, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_FALSE); \
+            if(nprocs > 1){\
+                ierr = MatGetOwnershipRange(superblock_H_, &Istart, &Iend); \
+                Irows = Iend - Istart; \
+                if(Irows != locrows) { \
+                    char errormsg[200]; \
+                    sprintf(errormsg,"WRONG GUESS: Irows=%d  locrows=%d\n", Irows,locrows); \
+                    SETERRQ(comm_, 1, errormsg);}}
+
 
     #endif // __OPTIMIZATION01 & __OPTIMIZATION02
 
@@ -295,6 +306,15 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #endif
 
     ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+
+    // if(destroyed){
+    //     ierr = MatKronScaleAddv(1.0,BlockLeft_.H(), mat_temp, superblock_H_, INSERT_VALUES comm_); CHKERRQ(ierr);
+    // } else {
+    //     ierr = MatKronScaleAddv(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+    // }
+    // ierr = MatKronScaleAddv(1.0,BlockLeft_.H(), mat_temp, superblock_H_, INSERT_ALL_VALUES, comm_); CHKERRQ(ierr);
+    // LINALG_TOOLS__MATASSEMBLY_INIT();
+    // LINALG_TOOLS__MATASSEMBLY_FLUSH(superblock_H_);
 
     #undef SETUPSUPERBLOCKH
     #undef DESTROYSUPERBLOCKH
@@ -360,6 +380,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         PetscPrintf(comm_, "%12sSuperblock basis size: %-5d nsites: %-5d \n", "", M_superblock, BlockLeft_.length() + BlockRight_.length());
     #endif
 
+    DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }

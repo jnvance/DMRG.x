@@ -218,10 +218,6 @@ protected:
     */
     Mat Sm1_;
 
-    /**
-        Timings
-     */
-    FILE *fp_timings;
 
 public:
 
@@ -352,6 +348,11 @@ public:
         Save operator matrices to subfolder
      */
     PetscErrorCode MatSaveOperators();
+
+    /**
+        Timings
+     */
+    FILE *fp_timings;
 
 };
 

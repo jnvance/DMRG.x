@@ -37,6 +37,14 @@ int main(int argc, char **argv)
     iDMRG_Heisenberg heis;
     heis.init(comm, nsites, mstates);
 
+    /*
+        Timings
+    */
+    #ifdef __TIMINGS
+    PetscLogDouble total_time0, total_time;
+    ierr = PetscTime(&total_time0); CHKERRQ(ierr);
+    #endif //__TIMINGS
+
     PetscBool petsc_use_complex = PETSC_FALSE;
     #ifdef PETSC_USE_COMPLEX
         petsc_use_complex = PETSC_TRUE;
@@ -149,6 +157,14 @@ int main(int argc, char **argv)
         }
         heis.iter()++;
     }
+
+    #ifdef __TIMINGS
+    ierr = PetscTime(&total_time); CHKERRQ(ierr); \
+    total_time = total_time - total_time0; \
+    ierr = PetscFPrintf(PETSC_COMM_WORLD, heis.fp_timings, "%10d      %-50s %.20g\n", heis.iter(), "TotalTime", total_time);
+    ierr = PetscPrintf(PETSC_COMM_WORLD, "%10s      %-50s %.20g\n", " ", "TotalTime", total_time);
+    #endif //__TIMINGS
+
 
     #ifdef __TESTING
     ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
