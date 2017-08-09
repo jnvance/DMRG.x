@@ -73,7 +73,7 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 {
     PetscErrorCode ierr = 0;
 
-    ierr = MatKronScaleAddv(1., A, B, C, ADD_VALUES, comm); CHKERRQ(ierr);
+    ierr = MatKronScaleAddv(a, A, B, C, ADD_VALUES, comm); CHKERRQ(ierr);
 
     return ierr;
 }
