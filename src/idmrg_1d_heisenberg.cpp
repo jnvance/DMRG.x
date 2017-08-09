@@ -239,7 +239,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
             ierr = MatMPIAIJSetPreallocation(superblock_H_, locrows+1, NULL, M_C_req - locrows+1, NULL); CHKERRQ(ierr); \
-            /*ierr = MatSetOption(superblock_H_, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);*/ \
+            ierr = MatSetOption(superblock_H_, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE); \
             ierr = MatSetOption(superblock_H_, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); \
             ierr = MatSetOption(superblock_H_, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE); \
             ierr = MatSetOption(superblock_H_, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE); \
@@ -248,8 +248,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             if(Irows != locrows) { SETERRQ(comm_, 1, "WRONG GUESS\n");}
 
     #endif // __OPTIMIZATION01 & __OPTIMIZATION02
-
-    PetscPrintf(comm_,"Ntruncs: %d\n",    ntruncations_);
 
     #if defined(__OPTIMIZATION01) || defined(__OPTIMIZATION02)
 

@@ -19,6 +19,44 @@
     #define DMRG_TIMINGS_END(FUNC_NAME)
 #endif
 
+
+#ifdef __DMRG_SUB_TIMINGS
+
+    #define DMRG_SUB_TIMINGS_START(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time ## SECTION_LABEL; \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define DMRG_SUB_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+    /* Inspect accumulated timings for a section of code inside a loop */
+
+    #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time1 ## SECTION_LABEL, funct_time ## SECTION_LABEL = 0.0;
+
+    #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+
+    #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+    #define DMRG_SUB_TIMINGS_INIT(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_START(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_END(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+#endif
+
+
 /**
     @defgroup   idmrg   iDMRG
     @brief      Implements the iDMRG class

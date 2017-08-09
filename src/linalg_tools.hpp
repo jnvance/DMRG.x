@@ -211,6 +211,46 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, P
         ierr = MatAssemblyEnd(MATRIX, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);\
     }
 
+#ifdef __LINALG_TOOLS_TIMINGS
+
+    #include <petsctime.h>
+
+    #define LINALG_TOOLS_TIMINGS_START(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time ## SECTION_LABEL; \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define LINALG_TOOLS_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+    /* Inspect accumulated timings for a section of code inside a loop */
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time1 ## SECTION_LABEL, funct_time ## SECTION_LABEL = 0.0;
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+    #define LINALG_TOOLS_TIMINGS_INIT(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_START(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_END(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+#endif
+
+
+
 /** @} */
 
 #endif // __LINALG_TOOLS_HPP__
