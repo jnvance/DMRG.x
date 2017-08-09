@@ -571,7 +571,18 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
     ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
+
+    #define __SVD_SOLVE "        SVDSolve"
+    LINALG_TOOLS_TIMINGS_START(__SVD_SOLVE)
+
     ierr = SVDSolve(svd);CHKERRQ(ierr);
+
+    LINALG_TOOLS_TIMINGS_END(__SVD_SOLVE)
+    #undef __SVD_SOLVE
+
+    #define __SVD_LOAD  "        SVDLoad"
+    LINALG_TOOLS_TIMINGS_START(__SVD_LOAD)
+
 
     PetscInt nconv;
     ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
@@ -659,6 +670,8 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
         }
     #endif
 
+    LINALG_TOOLS_TIMINGS_END(__SVD_LOAD)
+
     ierr = SVDDestroy(&svd);
     return ierr;
 }
@@ -713,7 +726,7 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
     ierr = EPSSetType(eps,EPSKRYLOVSCHUR); /* May be removed/changed */
     // ierr = EPSSetType(eps,EPSLANCZOS); /* May be removed/changed */
-    ierr = EPSSetTolerances(eps,1.0e-20,100);
+    // ierr = EPSSetTolerances(eps,1.0e-20,100); /* May be removed/changed */
     ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
     ierr = EPSSetDimensions(eps, mat_in_nrows, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
 
