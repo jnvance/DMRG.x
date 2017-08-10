@@ -240,6 +240,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
         #define SETUPSUPERBLOCKH \
             ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
+            ierr = MatSetType(superblock_H_, MATMPIAIJ); \
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
             ierr = MatMPIAIJSetPreallocation(superblock_H_, locrows+1, NULL, M_C_req - locrows+1, NULL); CHKERRQ(ierr); \
@@ -306,6 +307,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #endif
 
     ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+    // ierr = MatKronScaleAddv(1.0, BlockLeft_.H(), mat_temp, superblock_H_, INSERT_VALUES, PETSC_FALSE, comm_); CHKERRQ(ierr);
 
     // if(destroyed){
     //     ierr = MatKronScaleAddv(1.0,BlockLeft_.H(), mat_temp, superblock_H_, INSERT_VALUES comm_); CHKERRQ(ierr);
