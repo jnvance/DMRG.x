@@ -157,14 +157,11 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     Mat             mat_temp;
     PetscInt        M_left, M_right, M_superblock;
-
     /*
         Impose a checkpoint on the correctness of blocks
     */
     if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
-
-
     /*
         Generic macro to destroy superblock and assign a null pointer
     */
@@ -237,7 +234,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
                 startrow += remrows;
             }
         }
-
+        /* TODO:
+                * insert function to calculate kronecker preallocation
+                * cleanup and refactor optimization 2
+        */
         #define SETUPSUPERBLOCKH \
             ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
             ierr = MatSetType(superblock_H_, MATMPIAIJ); \
@@ -381,6 +381,21 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #ifdef __PRINT_SIZES
         PetscPrintf(comm_, "%12sSuperblock basis size: %-5d nsites: %-5d \n", "", M_superblock, BlockLeft_.length() + BlockRight_.length());
     #endif
+
+    #ifdef __KRON_TIMINGS
+        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(BlockLeft_.Sz(), BlockRight_.Sz(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
+    #endif
+
+    #define SUPERBLOCK_ASSEMBLY "    Superblock Assembly"
+    DMRG_SUB_TIMINGS_START(SUPERBLOCK_ASSEMBLY)
+    PetscBool assembled;
+    ierr = MatAssembled(superblock_H_, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(superblock_H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(superblock_H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+    DMRG_SUB_TIMINGS_END(SUPERBLOCK_ASSEMBLY)
+    #undef SUPERBLOCK_ASSEMBLY
 
     DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);

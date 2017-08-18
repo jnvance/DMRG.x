@@ -146,6 +146,15 @@ PetscErrorCode MatKronAdd(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& co
  */
 PetscErrorCode MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm);
 
+
 PetscErrorCode MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const MPI_Comm& comm);
+
+
+PetscErrorCode MatKronScalePrealloc(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm);
+
+
+
+
+PetscErrorCode MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const PetscBool prealloc, const MPI_Comm& comm);
 /** @} */
 #endif // __KRON_HPP__

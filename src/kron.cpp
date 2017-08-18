@@ -79,11 +79,36 @@ MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const M
 }
 
 
-
 #undef __FUNCT__
 #define __FUNCT__ "MatKronScaleAddv"
 PetscErrorCode
 MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const MPI_Comm& comm)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = MatKronScalePreallocAddv(a, A, B, C, addv, flush, PETSC_FALSE, comm); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatKronScalePrealloc"
+PetscErrorCode
+MatKronScalePrealloc(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = MatKronScaleAddv(a, A, B, C, ADD_VALUES, PETSC_FALSE, comm); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatKronScalePreallocAddv"
+PetscErrorCode
+MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const PetscBool prealloc, const MPI_Comm& comm)
 {
     PetscErrorCode ierr = 0;
 
@@ -231,9 +256,6 @@ MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const 
         if(Irank==rank){
 
     #endif
-    // #define __NO_KRON__
-    #ifndef __NO_KRON__
-
 
 
     #define __KRONLOOP "  KronLoop"
@@ -250,75 +272,6 @@ MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const 
     PetscInt        max_ncols_C = N_A * N_B;
     PetscInt*       cols_C = new PetscInt[max_ncols_C];
     PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
-    /*
-        This optimization inserts zeros between all non-zero elements
-        of the matrix to improve the performance of the kronecker product
-        when the matrix is used iteratively. Doing this ensures that the preallocated
-        space for these elements survive the final assembly.
-
-        Remarks: Performance is worse
-     */
-    // #define KRON_OPTIMIZATION_01
-
-    // #ifdef KRON_OPTIMIZATION_01
-
-    // // printf("\n");
-
-    // PetscInt        j_A = 0, j_B = 0, j_0, nzeros_count;
-    // PetscInt        idx = 0, idx_prev = 0, nzeros_step = 0;
-    // for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
-    // {
-    //     Arow = Irow / M_B;
-    //     Brow = Irow % M_B;
-
-    //     MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-    //     MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-
-    //     ncols_C = ncols_A * ncols_B;
-    //     if(ncols_C)
-    //         idx_prev = COL_MAP_A(cols_A[0]) * N_B + COL_MAP_B(cols_B[0]) - 1;
-    //     else
-    //         idx_prev = -1;
-
-    //     nzeros_count = 0;
-    //     nzeros_step  = 0;
-
-    //     // printf("\n"
-    //     //        "[%2d] Irow: %-4d ncols_C: %-6d \n",rank, Irow, ncols_C);
-
-    //     KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
-    //     for (j_A = 0; j_A < ncols_A; ++j_A)
-    //     {
-    //         for (j_B = 0; j_B < ncols_B; ++j_B)
-    //         {
-    //             idx = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-    //             nzeros_step = idx - idx_prev - 1;
-    //             // printf("[%2d] Irow: %-4d idx_prev: %-4d nzeros_step: %-4d\n", rank, Irow, idx_prev, nzeros_step);
-    //             // nzeros_step = 0;
-    //             for (j_0 = 0; j_0 < nzeros_step; ++j_0)
-    //             {
-    //                 cols_C [ j_A * ncols_B + j_B + nzeros_count + j_0] = idx_prev + j_0 + 1;
-    //                 vals_C [ j_A * ncols_B + j_B + nzeros_count + j_0] = 0.0;
-    //                 // printf("[%2d] Irow: %-4d inserted \n", rank, Irow);
-    //             }
-    //             nzeros_count += nzeros_step;
-    //             cols_C [ j_A * ncols_B + j_B + nzeros_count] = idx;
-    //             vals_C [ j_A * ncols_B + j_B + nzeros_count] = a * vals_A[j_A] * vals_B[j_B];
-    //             idx_prev = idx;
-    //         }
-    //     }
-    //     KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
-
-    //     KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-    //     // printf("[%2d] MatSetValues   ncols_C = %-5d nzeros_count = %-5d   \n",rank, ncols_C, nzeros_count );
-    //     MatSetValues(C, 1, &Irow, ncols_C + nzeros_count, cols_C, vals_C, ADD_VALUES );
-    //     KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
-
-    //     MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-    //     MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-    // };
-
-    // #else
 
     if (a == 1.)
     {
@@ -391,7 +344,7 @@ MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const 
             MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
         };
     }
-    // #endif
+
 
     delete [] cols_C;
     delete [] vals_C;
@@ -405,12 +358,10 @@ MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const 
     KRON_TIMINGS_ACCUM_PRINT(__MATSETVALUES);
     #undef __MATSETVALUES
 
-    #endif // __NO_KRON__
-
     #ifdef __SEQ_ORDER__
         }
         MPI_Barrier(comm);
-    }
+    };
     #endif
     #undef __SEQ_ORDER__
 
