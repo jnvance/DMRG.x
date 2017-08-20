@@ -303,6 +303,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
         Prepare mat_temp = Identity corresponding to right block
     */
+
+    #define __H_TERM_01 "    H_L (x) 1_R"
+    DMRG_SUB_TIMINGS_START(__H_TERM_01);
     ierr = MatGetSize(BlockRight_.H(), &M_right, NULL); CHKERRQ(ierr);
     ierr = MatEyeCreate(comm_, mat_temp, M_right); CHKERRQ(ierr);
 
@@ -349,6 +352,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     // ierr = MatKronScaleAddv(1.0,BlockLeft_.H(), mat_temp, superblock_H_, INSERT_ALL_VALUES, comm_); CHKERRQ(ierr);
     // LINALG_TOOLS__MATASSEMBLY_INIT();
     // LINALG_TOOLS__MATASSEMBLY_FLUSH(superblock_H_);
+    DMRG_SUB_TIMINGS_END(__H_TERM_01);
+    #undef __H_TERM_01
 
     #undef SETUPSUPERBLOCKH
     #undef DESTROYSUPERBLOCKH
@@ -359,6 +364,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         If the left and right sizes are the same, re-use the identity.
         Otherwise, create a new identity matrix with the correct size.
     */
+    #define __H_TERM_02 "    1_L (x) H_R"
+    DMRG_SUB_TIMINGS_START(__H_TERM_02);
     ierr = MatGetSize(BlockLeft_.H(), &M_left, NULL); CHKERRQ(ierr);
     if(M_left != M_right){
         ierr = MatDestroy(&mat_temp); CHKERRQ(ierr);
@@ -371,6 +378,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
     #endif
     ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
+    DMRG_SUB_TIMINGS_END(__H_TERM_02);
+    #undef __H_TERM_02
+
     /*
         Third term: S^z_{L,i+1} \otimes S^z_{R,i+2}
     */
