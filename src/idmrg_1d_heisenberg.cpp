@@ -197,6 +197,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         #define __OPTIMIZATION01
     #elif SUPERBLOCK_OPTIMIZATION == 2
         #define __OPTIMIZATION02
+    #elif SUPERBLOCK_OPTIMIZATION == 3
+        #define __OPTIMIZATION03
     #elif SUPERBLOCK_OPTIMIZATION == 0
 
     #endif
@@ -282,6 +284,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             SETUPSUPERBLOCKH
         }
 
+    #elif defined(__OPTIMIZATION03)
+
+        /* Do nothing */
+
     #else // !defined(__OPTIMIZATION01) && !defined(__OPTIMIZATION02)
 
         if(superblock_set_==PETSC_TRUE || superblock_H_){
@@ -306,7 +312,33 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             M_right*M_right,M_right*M_right);
     #endif
 
+    #ifndef __OPTIMIZATION03
     ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+    #else
+
+        if(superblock_set_==PETSC_TRUE || superblock_H_){
+            PetscInt M_C, N_C;
+            ierr = MatGetSize(superblock_H_, &M_C, &N_C); CHKERRQ(ierr);
+            /*
+                Conditions to reallocate the Hamiltonian matrix:
+                    1.  size mismatch
+                    2.  after performing the first truncation
+                            where there is a sudden change in sparsity
+            */
+            if ( (M_C_req!=M_C) || (N_C_req!=N_C) || ntruncations_ == 1 ) {
+                DESTROYSUPERBLOCKH
+                ierr = MatKronScalePrealloc(1.0, BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+            } else{
+                ierr = MatZeroEntries(superblock_H_); CHKERRQ(ierr);
+                ierr = MatKronAdd(BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+            }
+        } else {
+            ierr = MatKronScalePrealloc(1.0, BlockLeft_.H(), mat_temp, superblock_H_, comm_); CHKERRQ(ierr);
+        }
+
+
+
+    #endif
     // ierr = MatKronScaleAddv(1.0, BlockLeft_.H(), mat_temp, superblock_H_, INSERT_VALUES, PETSC_FALSE, comm_); CHKERRQ(ierr);
 
     // if(destroyed){

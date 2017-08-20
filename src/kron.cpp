@@ -99,7 +99,7 @@ MatKronScalePrealloc(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, co
 {
     PetscErrorCode ierr = 0;
 
-    ierr = MatKronScaleAddv(a, A, B, C, ADD_VALUES, PETSC_FALSE, comm); CHKERRQ(ierr);
+    ierr = MatKronScalePreallocAddv(a, A, B, C, INSERT_VALUES, PETSC_FALSE, PETSC_TRUE, comm); CHKERRQ(ierr);
 
     return ierr;
 }
@@ -125,10 +125,9 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
     /*
         Put input matrices in correct state for submatrix extraction
     */
-    ierr = MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyBegin(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(B, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    LINALG_TOOLS__MATASSEMBLY_INIT()
+    LINALG_TOOLS__MATASSEMBLY_FINAL(A)
+    LINALG_TOOLS__MATASSEMBLY_FINAL(B)
     /*
         Determine dimensions of C and initialize
     */
@@ -137,24 +136,49 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
     M_C = M_A * M_B;
     N_C = N_A * N_B;
     /*
-        Determine whether C has the correct size
+        Perform preallocation or check whether preallocated correctly
     */
-    PetscInt M_C_input, N_C_input;
-    MatGetSize(C, &M_C_input, &N_C_input);
-    if( (M_C_input != M_C) || (N_C_input != N_C) ){
-        char errormsg[200];
-        sprintf(errormsg, "Incorrect Matrix size: Input(%d, %d) != Expected(%d, %d)\n", M_C_input, N_C_input, M_C, N_C);
-        SETERRQ(comm,1,errormsg);
+    PetscInt Istart, Iend, Irows, remrows, locrows;
+    if(prealloc==PETSC_TRUE)
+    {
+        /*
+            Guess the distribution of rows of C
+            Remrows are distributed to first few rows
+        */
+        remrows = M_C % nprocs;
+        locrows = M_C / nprocs;
+        Istart = locrows*rank;
+        if (remrows > 0 && nprocs > 1){
+            if (rank < remrows){
+                locrows += 1;
+                Istart += rank;
+            } else {
+                Istart += remrows;
+            }
+        }
+        Iend = Istart + locrows; // TODO: check this later after allocation
+    }
+    else
+    {
+        /*
+            Determine whether C has the correct size
+        */
+        PetscInt M_C_input, N_C_input;
+        MatGetSize(C, &M_C_input, &N_C_input);
+        if( (M_C_input != M_C) || (N_C_input != N_C) ){
+            char errormsg[200];
+            sprintf(errormsg, "Incorrect Matrix size: Input(%d, %d) != Expected(%d, %d)\n", M_C_input, N_C_input, M_C, N_C);
+            SETERRQ(comm,1,errormsg);
+        }
+        MatGetOwnershipRange(C, &Istart, &Iend);
     }
     /*
         Create the submatrix for A
     */
-    PetscInt Istart, Iend;
     Mat submat_A;
     /*
         Determine required rows from A
     */
-    MatGetOwnershipRange(C, &Istart, &Iend);
     PetscInt Astart, Aend;
     Astart = Istart/M_B;
     Aend = 1+(Iend-1)/M_B;
@@ -242,6 +266,76 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
     PetscInt            Arow, Brow;
     PetscInt            ncols_C;
     /*
+        PREALLOCATION STAGE
+     */
+    if(prealloc){
+        /*
+            Allocate the containers for non-zero counts in the diagonal and off-diagonal
+            Diagonal row and col range: Istart - Iend
+            Off-diagonal col range: 0-Istart, Iend-(M,N)
+            see: http://www.mcs.anl.gov/petsc/petsc-current/src/mat/examples/tutorials/ex5.c.html
+        */
+        PetscInt Dnnz[locrows];
+        PetscInt Onnz[locrows];
+        /*
+            Count the number of elements in the diagonal
+        */
+        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        {
+            Arow = Irow / M_B;
+            Brow = Irow % M_B;
+
+            ierr = MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
+            ierr = MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
+            ncols_C = ncols_A * ncols_B;
+
+            /* Diagonal */
+            for (PetscInt Acol = 0; Acol < ncols_A; ++Acol)
+            {
+                for (PetscInt Bcol = 0; Bcol < ncols_B; ++Bcol)
+                {
+                    /**/
+                }
+            }
+
+            Dnnz[Irow - Istart] = 0; /* no of nzs in diag */
+            Onnz[Irow - Istart] = 0; /* no of nzs in off-diag */
+
+            // if(prealloc==PETSC_TRUE) PetscPrintf(comm, "\n\nI got here (301)\n\n");
+
+            ierr = MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
+            ierr = MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
+        }
+        /*
+            Perform preallocation
+        */
+        ierr = MatCreate(PETSC_COMM_WORLD, &C); CHKERRQ(ierr);
+        ierr = MatSetType(C, MATMPIAIJ);
+        ierr = MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C); CHKERRQ(ierr);
+        ierr = MatSetFromOptions(C); CHKERRQ(ierr);
+        ierr = MatMPIAIJSetPreallocation(C, locrows, NULL, M_C - locrows, NULL); CHKERRQ(ierr);
+        ierr = MatSeqAIJSetPreallocation(C, M_C, NULL); CHKERRQ(ierr);
+        ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);
+        ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE);
+        ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
+        ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_FALSE);
+        ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
+        /*
+            Check ownership guess
+        */
+        if(nprocs > 1){
+            ierr = MatGetOwnershipRange(C, &Istart, &Iend);
+            Irows = Iend - Istart;
+            if(Irows != locrows) {
+                char errormsg[200];
+                sprintf(errormsg,"WRONG GUESS: Irows=%d  locrows=%d\n", Irows,locrows);
+                SETERRQ(comm, 1, errormsg);
+            }
+        }
+
+    }
+
+    /*
         IMPLEMENTATION OPTIONS:
         Load A and B one row at a time (check)
         Pre-allocate an array for calculating a row of C using
@@ -273,77 +367,39 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
     PetscInt*       cols_C = new PetscInt[max_ncols_C];
     PetscScalar*    vals_C = new PetscScalar[max_ncols_C];
 
-    if (a == 1.)
+
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
     {
-        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        Arow = Irow/M_B;
+        Brow = Irow % M_B;
+
+        MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+        MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
+
+        ncols_C = ncols_A * ncols_B;
+
+        KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
+        for (PetscInt j_A = 0; j_A < ncols_A; ++j_A)
         {
-            Arow = Irow/M_B;
-            Brow = Irow % M_B;
-
-            MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-            MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-
-            ncols_C = ncols_A * ncols_B;
-
-            KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
-            for (int j_A = 0; j_A < ncols_A; ++j_A)
+            for (PetscInt j_B = 0; j_B < ncols_B; ++j_B)
             {
-                for (int j_B = 0; j_B < ncols_B; ++j_B)
-                {
-                    cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-                    vals_C [ j_A * ncols_B + j_B ] = vals_A[j_A] * vals_B[j_B];
-                }
+                cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
+                vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
             }
-            KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
+        }
+        KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
-            KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, addv );
-            if(flush==PETSC_TRUE){
-                MatAssemblyBegin(C, MAT_FLUSH_ASSEMBLY);
-                MatAssemblyEnd(C, MAT_FLUSH_ASSEMBLY);
-            }
-            KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
+        KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
+        MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, addv );
+        if(flush==PETSC_TRUE){
+            MatAssemblyBegin(C, MAT_FLUSH_ASSEMBLY);
+            MatAssemblyEnd(C, MAT_FLUSH_ASSEMBLY);
+        }
+        KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
 
-            MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-            MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-        };
-    }
-    else
-    {
-        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
-        {
-            Arow = Irow/M_B;
-            Brow = Irow % M_B;
-
-            MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-            MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-
-            ncols_C = ncols_A * ncols_B;
-
-            KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
-            for (int j_A = 0; j_A < ncols_A; ++j_A)
-            {
-                for (int j_B = 0; j_B < ncols_B; ++j_B)
-                {
-                    cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B + COL_MAP_B(cols_B[j_B]);
-                    vals_C [ j_A * ncols_B + j_B ] = a * vals_A[j_A] * vals_B[j_B];
-                }
-            }
-            // PetscPrintf(PETSC_COMM_WORLD,"\n");
-            KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
-
-            KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, addv );
-            if(flush==PETSC_TRUE){
-                MatAssemblyBegin(C, MAT_FLUSH_ASSEMBLY);
-                MatAssemblyEnd(C, MAT_FLUSH_ASSEMBLY);
-            }
-            KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
-
-            MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-            MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-        };
-    }
+        MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
+        MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+    };
 
 
     delete [] cols_C;
@@ -394,13 +450,6 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
         preallocation.
         Solution: Explicitly fill zeros.
     */
-
-    // #define __ASSEMBLY "  Assembly"
-    // KRON_TIMINGS_INIT(__ASSEMBLY);
-    // KRON_TIMINGS_START(__ASSEMBLY);
-    // MatAssemblyBegin(C, MAT_FLUSH_ASSEMBLY);
-    // MatAssemblyEnd(C, MAT_FLUSH_ASSEMBLY);
-    // KRON_TIMINGS_END(__ASSEMBLY);
 
 
     KRON_TIMINGS_END(__FUNCT__);

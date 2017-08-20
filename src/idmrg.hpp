@@ -7,13 +7,13 @@
 
 #ifdef __TIMINGS
     #define DMRG_TIMINGS_START(FUNC_NAME) \
-        PetscLogDouble funct_time0, funct_time; \
-        ierr = PetscTime(&funct_time0); CHKERRQ(ierr);
+        PetscLogDouble funct_time0 ## FUNC_NAME, funct_time ## FUNC_NAME; \
+        ierr = PetscTime(&funct_time0 ## FUNC_NAME); CHKERRQ(ierr);
 
     #define DMRG_TIMINGS_END(FUNC_NAME) \
-        ierr = PetscTime(&funct_time); CHKERRQ(ierr); \
-        funct_time = funct_time - funct_time0; \
-        ierr = PetscFPrintf(PETSC_COMM_WORLD, fp_timings, "%10d      %-50s %.20g\n", iter_, FUNC_NAME, funct_time);
+        ierr = PetscTime(&funct_time ## FUNC_NAME); CHKERRQ(ierr); \
+        funct_time ## FUNC_NAME = funct_time ## FUNC_NAME - funct_time0 ## FUNC_NAME; \
+        ierr = PetscFPrintf(PETSC_COMM_WORLD, fp_timings, "%10d      %-50s %.20g\n", iter_, FUNC_NAME, funct_time ## FUNC_NAME);
 #else
     #define DMRG_TIMINGS_START(FUNC_NAME)
     #define DMRG_TIMINGS_END(FUNC_NAME)
@@ -23,28 +23,28 @@
 #ifdef __DMRG_SUB_TIMINGS
 
     #define DMRG_SUB_TIMINGS_START(SECTION_LABEL) \
-        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time ## SECTION_LABEL; \
-        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+        PetscLogDouble subfunct_time0 ## SECTION_LABEL, subfunct_time ## SECTION_LABEL; \
+        ierr = PetscTime(&subfunct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
 
     #define DMRG_SUB_TIMINGS_END(SECTION_LABEL) \
-        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
-        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+        ierr = PetscTime(&subfunct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        subfunct_time ## SECTION_LABEL = subfunct_time ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
 
     /* Inspect accumulated timings for a section of code inside a loop */
 
     #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
-        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time1 ## SECTION_LABEL, funct_time ## SECTION_LABEL = 0.0;
+        PetscLogDouble subfunct_time0 ## SECTION_LABEL, subfunct_time1 ## SECTION_LABEL, subfunct_time ## SECTION_LABEL = 0.0;
 
     #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL) \
-        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+        ierr = PetscTime(&subfunct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
 
     #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL) \
-        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
-        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscTime(&subfunct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        subfunct_time ## SECTION_LABEL += subfunct_time1 ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
 
     #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
 
 #else
     #define DMRG_SUB_TIMINGS_INIT(SECTION_LABEL)
