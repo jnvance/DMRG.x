@@ -99,7 +99,7 @@ MatKronScalePrealloc(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, co
 {
     PetscErrorCode ierr = 0;
 
-    ierr = MatKronScalePreallocAddv(a, A, B, C, INSERT_VALUES, PETSC_FALSE, PETSC_TRUE, comm); CHKERRQ(ierr);
+    ierr = MatKronScalePreallocAddv(a, A, B, C, ADD_VALUES, PETSC_FALSE, PETSC_TRUE, comm); CHKERRQ(ierr);
 
     return ierr;
 }
