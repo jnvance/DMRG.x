@@ -154,6 +154,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;
+    DMRG_TIMINGS_START(__FUNCT__);
+    DMRG_SUB_TIMINGS_START(__FUNCT__);
     PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
@@ -234,6 +236,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_ASSEMBLY)
     #undef SUPERBLOCK_ASSEMBLY
 
+    DMRG_SUB_TIMINGS_END(__FUNCT__);
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 

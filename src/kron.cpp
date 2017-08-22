@@ -746,13 +746,13 @@ PetscErrorCode MatKronSum(
     #define COL_MAP_A(INDEX) ((INDEX) - N_A[i] * (nprocs - 1) )
     #define COL_MAP_B(INDEX) ((INDEX) - N_B[i] * (nprocs - 1) )
 
-    const PetscInt*     cols_A;
-    const PetscScalar*  vals_A;
-    const PetscInt*     cols_B;
-    const PetscScalar*  vals_B;
-    PetscInt            ncols_A, ncols_B;
+    const PetscInt*     cols_A[nterms];
+    const PetscScalar*  vals_A[nterms];
+    const PetscInt*     cols_B[nterms];
+    const PetscScalar*  vals_B[nterms];
+    PetscInt            ncols_A[nterms], ncols_B[nterms];
     PetscInt            Arow, Brow;
-    PetscInt            ncols_C;
+    PetscInt            ncols_C[nterms];
 
     PetscInt        max_ncols_C = N_A[0] * N_B[0]; /* Assumes same size of matrices in A and B */
     PetscInt*       cols_C;
@@ -768,28 +768,33 @@ PetscErrorCode MatKronSum(
         Brow = Irow % M_B[0];
         for (PetscInt i = 0; i < nterms; ++i)
         {
-            MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
-            MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
+            MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]);
+            MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]);
+            ncols_C[i] = ncols_A[i] * ncols_B[i];
+        }
 
-            ncols_C = ncols_A * ncols_B;
-
+        for (PetscInt i = 0; i < nterms; ++i)
+        {
             KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
-            for (PetscInt j_A = 0; j_A < ncols_A; ++j_A)
+            for (PetscInt j_A = 0; j_A < ncols_A[i]; ++j_A)
             {
-                for (PetscInt j_B = 0; j_B < ncols_B; ++j_B)
+                for (PetscInt j_B = 0; j_B < ncols_B[i]; ++j_B)
                 {
-                    cols_C [ j_A * ncols_B + j_B ] = COL_MAP_A(cols_A[j_A]) * N_B[i] + COL_MAP_B(cols_B[j_B]);
-                    vals_C [ j_A * ncols_B + j_B ] = a[i] * vals_A[j_A] * vals_B[j_B];
+                    cols_C [ j_A * ncols_B[i] + j_B ] = COL_MAP_A(cols_A[i][j_A]) * N_B[i] + COL_MAP_B(cols_B[i][j_B]);
+                    vals_C [ j_A * ncols_B[i] + j_B ] = a[i] * vals_A[i][j_A] * vals_B[i][j_B];
                 }
             }
             KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
             KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-            MatSetValues(C, 1, &Irow, ncols_C, cols_C, vals_C, ADD_VALUES );
+            MatSetValues(C, 1, &Irow, ncols_C[i], cols_C, vals_C, ADD_VALUES );
             KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
+        }
 
-            MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B, &cols_B, &vals_B);
-            MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A, &cols_A, &vals_A);
+        for (PetscInt i = 0; i < nterms; ++i)
+        {
+            MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]);
+            MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]);
         };
     }
     KRON_TIMINGS_END(__KRONLOOP);
