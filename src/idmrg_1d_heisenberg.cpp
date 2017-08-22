@@ -149,6 +149,97 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::BuildSuperBlock"
+
+#if SUPERBLOCK_OPTIMIZATION == 4
+PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
+{
+    PetscErrorCode  ierr = 0;
+    PetscBool assembled;
+    /*
+        Declare aliases and auxiliary matrices
+    */
+    Mat H_L = BlockLeft_.H();
+    Mat H_R = BlockRight_.H();
+    Mat Sz_L = BlockLeft_.Sz();
+    Mat Sz_R = BlockRight_.Sz();
+    Mat Sp_L = BlockLeft_.Sp();
+    Mat Sp_R = BlockRight_.Sp();
+    Mat eye_L = nullptr;
+    Mat eye_R = nullptr;
+    Mat Sm_L = nullptr;
+    Mat Sm_R = nullptr;
+    /*
+        Determine the basis sizes of enlarged block
+    */
+    PetscInt M_L, N_L, M_R, N_R, M_H, N_H;
+    ierr = MatGetSize(H_L, &M_L, &N_L); CHKERRQ(ierr);
+    ierr = MatGetSize(H_R, &M_R, &N_R); CHKERRQ(ierr);
+    /*
+        Verify that the matrix is square
+    */
+    M_H = M_L * M_R;
+    N_H = N_L * N_R;
+    if (M_H != N_H)
+        SETERRQ(PETSC_COMM_WORLD, 1, "Hamiltonian should be square."
+            "Check block operators from previous step.");
+    /*
+        Fill in auxiliary matrices with values
+    */
+
+    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_L, M_L); CHKERRQ(ierr);
+    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_R, M_R); CHKERRQ(ierr);
+
+    LINALG_TOOLS__MATASSEMBLY_FINAL(BlockLeft_.Sp());
+    MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L);
+
+    LINALG_TOOLS__MATASSEMBLY_FINAL(BlockRight_.Sp());
+    MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);
+    /*
+        Decide whether to preallocate
+        Conditions to reallocate the Hamiltonian matrix:
+            1.  size mismatch
+            2.  after performing the first truncation
+                where there is a sudden change in sparsity
+    */
+    PetscBool prealloc = PETSC_TRUE;
+    if(superblock_set_==PETSC_TRUE || superblock_H_){
+        PetscInt M_H_curr, N_H_curr;
+        ierr = MatGetSize(superblock_H_, &M_H_curr, &N_H_curr); CHKERRQ(ierr);
+        if ((M_H == M_H_curr) && (N_H == N_H_curr) && ntruncations_ != 1)
+            prealloc = PETSC_FALSE;
+    }
+
+    std::vector<PetscScalar>    a = {1.0,   1.0,   1.0,  0.5,  0.5};
+    std::vector<Mat>            A = {H_L,   eye_L, Sz_L, Sp_L, Sm_L};
+    std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
+    ierr = MatKronSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+
+    LINALG_TOOLS__MATDESTROY(eye_L);
+    LINALG_TOOLS__MATDESTROY(eye_R);
+    LINALG_TOOLS__MATDESTROY(Sm_L);
+    LINALG_TOOLS__MATDESTROY(Sm_R);
+    /*
+        Checkpoint
+    */
+    superblock_set_ = PETSC_TRUE;
+    PetscInt M_superblock;
+    ierr = MatGetSize(superblock_H_, &M_superblock, nullptr); CHKERRQ(ierr);
+    if(M_superblock != TotalBasisSize()) SETERRQ(comm_, 1, "Basis size mismatch.\n");
+    /*
+        Final Assembly
+    */
+    #define SUPERBLOCK_ASSEMBLY "    Superblock Assembly"
+    DMRG_SUB_TIMINGS_START(SUPERBLOCK_ASSEMBLY)
+    LINALG_TOOLS__MATASSEMBLY_FINAL(superblock_H_);
+    DMRG_SUB_TIMINGS_END(SUPERBLOCK_ASSEMBLY)
+    #undef SUPERBLOCK_ASSEMBLY
+
+    return ierr;
+}
+
+
+#else
+
 PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;
@@ -443,3 +534,4 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
+#endif
