@@ -466,8 +466,8 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
 
 
 #undef __FUNCT__
-#define __FUNCT__ "MatKronSum"
-PetscErrorCode MatKronSum(
+#define __FUNCT__ "MatKronProdSum"
+PetscErrorCode MatKronProdSum(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
     const std::vector<Mat>& B,
@@ -476,6 +476,9 @@ PetscErrorCode MatKronSum(
 {
     PetscErrorCode ierr = 0;
     PetscBool assembled;
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
+
     /*
         Get information from MPI
     */
@@ -760,7 +763,16 @@ PetscErrorCode MatKronSum(
     ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
     ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
 
-    /* NAIVE Implementation */
+    // #define ___TRY1
+    #ifdef ___TRY1
+    PetscInt            j_A[nterms];
+    PetscInt            j_B[nterms];
+    PetscInt            j_C;
+    PetscBool           A_match[nterms];
+    PetscInt            n_A_match;
+    PetscInt            n_B_match;
+    PetscScalar         temp_val;
+    #endif
 
     for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
     {
@@ -772,6 +784,78 @@ PetscErrorCode MatKronSum(
             MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]);
             ncols_C[i] = ncols_A[i] * ncols_B[i];
         }
+        /*
+            Assume that matrices in A and in B have the same shapes
+        */
+        #ifdef ___TRY1
+
+        KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
+        j_C = 0;
+        for (PetscInt i = 0; i < nterms; ++i) j_A[i] = 0;
+        for (PetscInt idx_A = 0; idx_A < N_A[0]; ++idx_A)
+        {
+            /*
+                Check the A operators if any match
+            */
+            n_A_match = 0;
+            for (PetscInt i = 0; i < nterms; ++i)
+            {
+                A_match[i] = PETSC_FALSE;
+                if(j_A[i] < ncols_A[i])
+                {
+                    if (idx_A == COL_MAP_A(cols_A[i][ j_A[i]]))
+                    {
+                        // j_A[i] += 1;
+                        A_match[i] = PETSC_TRUE;
+                        n_A_match += 1;
+                    }
+                }
+            }
+
+            if(n_A_match > 0)
+            {
+
+                for (PetscInt i = 0; i < nterms; ++i) j_B[i] = 0;
+                for (PetscInt idx_B = 0; idx_B < N_B[0]; ++idx_B)
+                {
+                    n_B_match = 0;
+                    temp_val = 0;
+                    for (PetscInt i = 0; i < nterms; ++i)
+                    {
+                        if(j_B[i] < ncols_B[i])
+                        {
+                            if ( A_match[i] && idx_B == COL_MAP_B(cols_B[i][ j_B[i] ]))
+                            {
+                                n_B_match += 1;
+                                temp_val  += a[i] * vals_A[i][j_A[i]] * vals_B[i][j_B[i]];
+                                j_B[i] += 1;
+                            }
+                        }
+                    }
+
+                    if(n_B_match > 0)
+                    {
+                        // printf("%d %d %f\n", j_C, max_ncols_C, 1.0/*temp_val*/);
+                        cols_C[ j_C ] = idx_A * N_B[0] + idx_B;
+                        vals_C[ j_C ] = temp_val;
+                        j_C += 1;
+                    }
+
+
+                }
+
+                /* Increment matched indices */
+                for (PetscInt i = 0; i < nterms; ++i)
+                    if(A_match[i]) j_A[i] += 1;
+            }
+        }
+        KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
+
+
+        KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
+        MatSetValues(C, 1, &Irow, j_C, cols_C, vals_C, ADD_VALUES );
+        KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
+        #else
 
         for (PetscInt i = 0; i < nterms; ++i)
         {
@@ -790,6 +874,11 @@ PetscErrorCode MatKronSum(
             MatSetValues(C, 1, &Irow, ncols_C[i], cols_C, vals_C, ADD_VALUES );
             KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
         }
+
+        #endif
+
+
+
 
         for (PetscInt i = 0; i < nterms; ++i)
         {
@@ -824,6 +913,7 @@ PetscErrorCode MatKronSum(
     #undef COL_MAP_A
     #undef COL_MAP_B
 
+    KRON_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 

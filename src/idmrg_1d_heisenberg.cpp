@@ -214,7 +214,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     std::vector<PetscScalar>    a = {1.0,   1.0,   1.0,  0.5,  0.5};
     std::vector<Mat>            A = {H_L,   eye_L, Sz_L, Sp_L, Sm_L};
     std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
-    ierr = MatKronSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+    ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
 
     LINALG_TOOLS__MATDESTROY(eye_L);
     LINALG_TOOLS__MATDESTROY(eye_R);

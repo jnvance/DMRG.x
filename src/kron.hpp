@@ -158,7 +158,7 @@ PetscErrorCode MatKronScalePrealloc(const PetscScalar a, const Mat& A, const Mat
 PetscErrorCode MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const PetscBool prealloc, const MPI_Comm& comm);
 
 
-PetscErrorCode MatKronSum(
+PetscErrorCode MatKronProdSum(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
     const std::vector<Mat>& B,
