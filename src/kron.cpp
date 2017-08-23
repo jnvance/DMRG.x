@@ -564,6 +564,11 @@ PetscErrorCode MatKronProdSum(
         Istart += remrows;
     }
     PetscInt Iend = Istart + locrows;
+
+    #define KRON_SUBMATRIX "        Kron: Submatrix collection"
+    KRON_PS_TIMINGS_INIT(KRON_SUBMATRIX)
+    KRON_PS_TIMINGS_START(KRON_SUBMATRIX)
+
     /*
 
         SUBMATRIX A
@@ -641,7 +646,7 @@ PetscErrorCode MatKronProdSum(
     */
     IS isrow_B = nullptr, iscol_B = nullptr;
     /*
-        Create the submatrix for A_i and
+        Create the submatrix for B_i and
     */
     std::vector<Mat>      submat_B(nterms);
     std::vector<PetscInt> B_sub_start(nterms), B_sub_end(nterms);
@@ -685,6 +690,25 @@ PetscErrorCode MatKronProdSum(
 
     ierr = PetscFree(id_rows_B); CHKERRQ(ierr);
     ierr = PetscFree(id_cols_B); CHKERRQ(ierr);
+
+    KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
+    #undef KRON_SUBMATRIX
+
+
+    /*
+        Map ownership
+        Input: the row INDEX in the global matrix A/B
+        Output: the corresponding row index in the locally-owned rows of submatrix A/B
+    */
+    #define ROW_MAP_A(INDEX) ((INDEX) - Astart[i] + A_sub_start[i])
+    #define ROW_MAP_B(INDEX) ((INDEX) + B_sub_start[i])
+    /*
+        Submatrix constructions offsets the starting column
+        Input: the corresponding column index in the locally-owned submatrix A/B
+        Output: the column INDEX in the global matrix A/B
+    */
+    #define COL_MAP_A(INDEX) ((INDEX) - N_A[i] * (nprocs - 1) )
+    #define COL_MAP_B(INDEX) ((INDEX) - N_B[i] * (nprocs - 1) )
     /*
 
         PREALLOCATION
@@ -692,14 +716,66 @@ PetscErrorCode MatKronProdSum(
         Run through all terms and calculate an overestimated preallocation
         by adding all the non-zeros needed for each row.
     */
-    if(prealloc){
-        std::vector<PetscInt> d_nnz(locrows), o_nnz(locrows);
+    if(prealloc)
+    {
+        #define KRON_SUBMATRIX "        Kron: Preallocation"
+        KRON_PS_TIMINGS_INIT(KRON_SUBMATRIX)
+        KRON_PS_TIMINGS_START(KRON_SUBMATRIX)
+
         ierr = MatCreate(PETSC_COMM_WORLD, &C); CHKERRQ(ierr);
         ierr = MatSetType(C, MATMPIAIJ);
         ierr = MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C); CHKERRQ(ierr);
         ierr = MatSetFromOptions(C); CHKERRQ(ierr);
-        ierr = MatMPIAIJSetPreallocation(C, locrows, NULL, M_C - locrows, NULL); CHKERRQ(ierr);
-        ierr = MatSeqAIJSetPreallocation(C, M_C, NULL); CHKERRQ(ierr);
+        /*
+            Naive / dense preallocation
+        */
+        // ierr = MatMPIAIJSetPreallocation(C, locrows, NULL, M_C - locrows, NULL); CHKERRQ(ierr);
+        // ierr = MatSeqAIJSetPreallocation(C, M_C, NULL); CHKERRQ(ierr);
+        /*
+            More accurate preallocation (slightly overestimated)
+        */
+        PetscInt *d_nnz, *o_nnz, ncols_A, ncols_B, ncols_C_max;
+        PetscInt Arow, Brow, Ccol, diag;
+        const PetscInt *cols_A, *cols_B;
+        ierr = PetscMalloc1(locrows,&d_nnz); CHKERRQ(ierr);
+        ierr = PetscMalloc1(locrows,&o_nnz); CHKERRQ(ierr);
+
+        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        {
+            Arow = Irow / M_B[0];
+            Brow = Irow % M_B[0];
+
+            diag        = 0;
+            ncols_C_max = 0;
+            for (PetscInt i = 0; i < nterms; ++i)
+            {
+                ierr = MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
+                ierr = MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
+
+                ncols_C_max += ncols_A * ncols_B;
+                for (PetscInt j_A = 0; j_A < ncols_A; ++j_A)
+                {
+                    for (PetscInt j_B = 0; j_B < ncols_B; ++j_B)
+                    {
+                        Ccol = COL_MAP_A(cols_A[j_A]) * N_B[i] + COL_MAP_B(cols_B[j_B]);
+                        if ( Istart <= Ccol && Ccol < Iend ) diag += 1;
+                    }
+                }
+
+                ierr = MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
+                ierr = MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
+            }
+            d_nnz[Irow-Istart] = std::min(diag, locrows);
+            o_nnz[Irow-Istart] = std::min(ncols_C_max - diag, M_C - locrows);
+
+        }
+
+        ierr = MatMPIAIJSetPreallocation(C, 0, d_nnz, 0, o_nnz); CHKERRQ(ierr);
+        ierr = MatSeqAIJSetPreallocation(C, 0, d_nnz); CHKERRQ(ierr);
+
+        ierr = PetscFree(d_nnz); CHKERRQ(ierr);
+        ierr = PetscFree(o_nnz); CHKERRQ(ierr);
+
         ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);
         ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE);
         ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
@@ -717,15 +793,20 @@ PetscErrorCode MatKronProdSum(
                 SETERRQ(comm, 1, errormsg);
             }
         }
-    } else
+
+        KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
+        #undef KRON_SUBMATRIX
+
+    }
+    else
     {
         ierr = MatZeroEntries(C); CHKERRQ(ierr);
     }
     /*
         CALCULATE ENTRIES
     */
-    #define __KRONLOOP "  KronLoop"
-    KRON_TIMINGS_INIT(__KRONLOOP);
+    #define __KRONLOOP "        KronLoop"
+    KRON_PS_TIMINGS_INIT(__KRONLOOP);
 
     #define __MATSETVALUES "    MatSetValues"
     KRON_TIMINGS_ACCUM_INIT(__MATSETVALUES);
@@ -733,21 +814,7 @@ PetscErrorCode MatKronProdSum(
     #define __CALC_VALUES "    CalculateKronValues"
     KRON_TIMINGS_ACCUM_INIT(__CALC_VALUES);
 
-    KRON_TIMINGS_START(__KRONLOOP);
-    /*
-        Map ownership
-        Input: the row INDEX in the global matrix A/B
-        Output: the corresponding row index in the locally-owned rows of submatrix A/B
-    */
-    #define ROW_MAP_A(INDEX) ((INDEX) - Astart[i] + A_sub_start[i])
-    #define ROW_MAP_B(INDEX) ((INDEX) + B_sub_start[i])
-    /*
-        Submatrix constructions offsets the starting column
-        Input: the corresponding column index in the locally-owned submatrix A/B
-        Output: the column INDEX in the global matrix A/B
-    */
-    #define COL_MAP_A(INDEX) ((INDEX) - N_A[i] * (nprocs - 1) )
-    #define COL_MAP_B(INDEX) ((INDEX) - N_B[i] * (nprocs - 1) )
+    KRON_PS_TIMINGS_START(__KRONLOOP);
 
     const PetscInt*     cols_A[nterms];
     const PetscScalar*  vals_A[nterms];
@@ -763,17 +830,6 @@ PetscErrorCode MatKronProdSum(
     ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
     ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
 
-    // #define ___TRY1
-    #ifdef ___TRY1
-    PetscInt            j_A[nterms];
-    PetscInt            j_B[nterms];
-    PetscInt            j_C;
-    PetscBool           A_match[nterms];
-    PetscInt            n_A_match;
-    PetscInt            n_B_match;
-    PetscScalar         temp_val;
-    #endif
-
     for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
     {
         Arow = Irow / M_B[0];
@@ -787,76 +843,6 @@ PetscErrorCode MatKronProdSum(
         /*
             Assume that matrices in A and in B have the same shapes
         */
-        #ifdef ___TRY1
-
-        KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
-        j_C = 0;
-        for (PetscInt i = 0; i < nterms; ++i) j_A[i] = 0;
-        for (PetscInt idx_A = 0; idx_A < N_A[0]; ++idx_A)
-        {
-            /*
-                Check the A operators if any match
-            */
-            n_A_match = 0;
-            for (PetscInt i = 0; i < nterms; ++i)
-            {
-                A_match[i] = PETSC_FALSE;
-                if(j_A[i] < ncols_A[i])
-                {
-                    if (idx_A == COL_MAP_A(cols_A[i][ j_A[i]]))
-                    {
-                        // j_A[i] += 1;
-                        A_match[i] = PETSC_TRUE;
-                        n_A_match += 1;
-                    }
-                }
-            }
-
-            if(n_A_match > 0)
-            {
-
-                for (PetscInt i = 0; i < nterms; ++i) j_B[i] = 0;
-                for (PetscInt idx_B = 0; idx_B < N_B[0]; ++idx_B)
-                {
-                    n_B_match = 0;
-                    temp_val = 0;
-                    for (PetscInt i = 0; i < nterms; ++i)
-                    {
-                        if(j_B[i] < ncols_B[i])
-                        {
-                            if ( A_match[i] && idx_B == COL_MAP_B(cols_B[i][ j_B[i] ]))
-                            {
-                                n_B_match += 1;
-                                temp_val  += a[i] * vals_A[i][j_A[i]] * vals_B[i][j_B[i]];
-                                j_B[i] += 1;
-                            }
-                        }
-                    }
-
-                    if(n_B_match > 0)
-                    {
-                        // printf("%d %d %f\n", j_C, max_ncols_C, 1.0/*temp_val*/);
-                        cols_C[ j_C ] = idx_A * N_B[0] + idx_B;
-                        vals_C[ j_C ] = temp_val;
-                        j_C += 1;
-                    }
-
-
-                }
-
-                /* Increment matched indices */
-                for (PetscInt i = 0; i < nterms; ++i)
-                    if(A_match[i]) j_A[i] += 1;
-            }
-        }
-        KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
-
-
-        KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-        MatSetValues(C, 1, &Irow, j_C, cols_C, vals_C, ADD_VALUES );
-        KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
-        #else
-
         for (PetscInt i = 0; i < nterms; ++i)
         {
             KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
@@ -875,18 +861,13 @@ PetscErrorCode MatKronProdSum(
             KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
         }
 
-        #endif
-
-
-
-
         for (PetscInt i = 0; i < nterms; ++i)
         {
             MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]);
             MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]);
         };
     }
-    KRON_TIMINGS_END(__KRONLOOP);
+    KRON_PS_TIMINGS_END(__KRONLOOP);
     #undef __KRONLOOP
 
     KRON_TIMINGS_ACCUM_PRINT(__CALC_VALUES);

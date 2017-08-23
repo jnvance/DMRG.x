@@ -204,6 +204,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
                 where there is a sudden change in sparsity
     */
     PetscBool prealloc = PETSC_TRUE;
+
     if(superblock_set_==PETSC_TRUE || superblock_H_){
         PetscInt M_H_curr, N_H_curr;
         ierr = MatGetSize(superblock_H_, &M_H_curr, &N_H_curr); CHKERRQ(ierr);
@@ -211,10 +212,26 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             prealloc = PETSC_FALSE;
     }
 
-    std::vector<PetscScalar>    a = {1.0,   1.0,   1.0,  0.5,  0.5};
-    std::vector<Mat>            A = {H_L,   eye_L, Sz_L, Sp_L, Sm_L};
-    std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
-    ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+    if(prealloc && superblock_H_)
+    {
+        ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
+        superblock_H_ = nullptr;
+        superblock_set_=PETSC_FALSE;
+        PetscPrintf(comm_, "Prealloc H\n");
+    }
+    /*
+        Construct the Hamiltonian matrix
+    */
+    #define SUPERBLOCK_CONSTRUCTION "    Superblock Construction with MatKronProdSum"
+    DMRG_SUB_TIMINGS_START(SUPERBLOCK_CONSTRUCTION)
+
+        std::vector<PetscScalar>    a = {1.0,   1.0,   1.0,  0.5,  0.5};
+        std::vector<Mat>            A = {H_L,   eye_L, Sz_L, Sp_L, Sm_L};
+        std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
+        ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+
+    DMRG_SUB_TIMINGS_END(SUPERBLOCK_CONSTRUCTION)
+    #undef SUPERBLOCK_CONSTRUCTION
 
     LINALG_TOOLS__MATDESTROY(eye_L);
     LINALG_TOOLS__MATDESTROY(eye_R);
@@ -232,7 +249,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     */
     #define SUPERBLOCK_ASSEMBLY "    Superblock Assembly"
     DMRG_SUB_TIMINGS_START(SUPERBLOCK_ASSEMBLY)
-    LINALG_TOOLS__MATASSEMBLY_FINAL(superblock_H_);
+
+        LINALG_TOOLS__MATASSEMBLY_FINAL(superblock_H_);
+
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_ASSEMBLY)
     #undef SUPERBLOCK_ASSEMBLY
 
