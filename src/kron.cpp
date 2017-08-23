@@ -740,6 +740,7 @@ PetscErrorCode MatKronProdSum(
         ierr = PetscMalloc1(locrows,&d_nnz); CHKERRQ(ierr);
         ierr = PetscMalloc1(locrows,&o_nnz); CHKERRQ(ierr);
 
+        PetscInt tot_entries = 0;
         for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
         {
             Arow = Irow / M_B[0];
@@ -767,11 +768,11 @@ PetscErrorCode MatKronProdSum(
             }
             d_nnz[Irow-Istart] = std::min(diag, locrows);
             o_nnz[Irow-Istart] = std::min(ncols_C_max - diag, M_C - locrows);
-
+            tot_entries += ncols_C_max;
         }
 
-        ierr = MatMPIAIJSetPreallocation(C, 0, d_nnz, 0, o_nnz); CHKERRQ(ierr);
-        ierr = MatSeqAIJSetPreallocation(C, 0, d_nnz); CHKERRQ(ierr);
+        ierr = MatMPIAIJSetPreallocation(C, -1, d_nnz, -1, o_nnz); CHKERRQ(ierr);
+        ierr = MatSeqAIJSetPreallocation(C, -1, d_nnz); CHKERRQ(ierr);
 
         ierr = PetscFree(d_nnz); CHKERRQ(ierr);
         ierr = PetscFree(o_nnz); CHKERRQ(ierr);
@@ -796,6 +797,14 @@ PetscErrorCode MatKronProdSum(
 
         KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
         #undef KRON_SUBMATRIX
+
+        #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
+            // printf("[%d] %d \n", rank, tot_entries);
+            PetscInt tot_entries_reduced;
+            MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
+            PetscPrintf(comm, "%20s Nonzeros: %d/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C,
+                100.0*(double)tot_entries_reduced/((double)(M_C) * (double)(M_C)));
+        #endif
 
     }
     else
