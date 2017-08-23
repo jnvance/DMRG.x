@@ -845,8 +845,8 @@ PetscErrorCode MatKronProdSum(
         Brow = Irow % M_B[0];
         for (PetscInt i = 0; i < nterms; ++i)
         {
-            MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]);
-            MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]);
+            ierr = MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]); CHKERRQ(ierr);
+            ierr = MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]); CHKERRQ(ierr);
             ncols_C[i] = ncols_A[i] * ncols_B[i];
         }
         /*
@@ -866,16 +866,17 @@ PetscErrorCode MatKronProdSum(
             KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
 
             KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
-            MatSetValues(C, 1, &Irow, ncols_C[i], cols_C, vals_C, ADD_VALUES );
+            ierr = MatSetValues(C, 1, &Irow, ncols_C[i], cols_C, vals_C, ADD_VALUES ); CHKERRQ(ierr);
             KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
         }
 
         for (PetscInt i = 0; i < nterms; ++i)
         {
-            MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]);
-            MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]);
+            ierr = MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]); CHKERRQ(ierr);
+            ierr = MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]); CHKERRQ(ierr);
         };
     }
+
     KRON_PS_TIMINGS_END(__KRONLOOP);
     #undef __KRONLOOP
 
