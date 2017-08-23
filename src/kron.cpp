@@ -138,7 +138,7 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
     /*
         Perform preallocation or check whether preallocated correctly
     */
-    PetscInt Istart, Iend, Irows, remrows, locrows;
+    PetscInt Istart, Iend, Irows, remrows, locrows = 0;
     if(prealloc==PETSC_TRUE)
     {
         /*
@@ -275,39 +275,39 @@ MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C
             Off-diagonal col range: 0-Istart, Iend-(M,N)
             see: http://www.mcs.anl.gov/petsc/petsc-current/src/mat/examples/tutorials/ex5.c.html
         */
-        PetscInt Dnnz[locrows];
-        PetscInt Onnz[locrows];
+        // PetscInt Dnnz[locrows];
+        // PetscInt Onnz[locrows];
+        // /*
+        //     Count the number of elements in the diagonal
+        // */
+        // for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        // {
+        //     Arow = Irow / M_B;
+        //     Brow = Irow % M_B;
+
+        //     ierr = MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
+        //     ierr = MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
+        //     ncols_C = ncols_A * ncols_B;
+
+        //     /* Diagonal */
+        //     for (PetscInt Acol = 0; Acol < ncols_A; ++Acol)
+        //     {
+        //         for (PetscInt Bcol = 0; Bcol < ncols_B; ++Bcol)
+        //         {
+        //             /**/
+        //         }
+        //     }
+
+        //     Dnnz[Irow - Istart] = 0; /* no of nzs in diag */
+        //     Onnz[Irow - Istart] = 0; /* no of nzs in off-diag */
+
+        //     // if(prealloc==PETSC_TRUE) PetscPrintf(comm, "\n\nI got here (301)\n\n");
+
+        //     ierr = MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
+        //     ierr = MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
+        // }
         /*
-            Count the number of elements in the diagonal
-        */
-        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
-        {
-            Arow = Irow / M_B;
-            Brow = Irow % M_B;
-
-            ierr = MatGetRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
-            ierr = MatGetRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
-            ncols_C = ncols_A * ncols_B;
-
-            /* Diagonal */
-            for (PetscInt Acol = 0; Acol < ncols_A; ++Acol)
-            {
-                for (PetscInt Bcol = 0; Bcol < ncols_B; ++Bcol)
-                {
-                    /**/
-                }
-            }
-
-            Dnnz[Irow - Istart] = 0; /* no of nzs in diag */
-            Onnz[Irow - Istart] = 0; /* no of nzs in off-diag */
-
-            // if(prealloc==PETSC_TRUE) PetscPrintf(comm, "\n\nI got here (301)\n\n");
-
-            ierr = MatRestoreRow(submat_A, ROW_MAP_A(Arow), &ncols_A, &cols_A, nullptr); CHKERRQ(ierr);
-            ierr = MatRestoreRow(submat_B, ROW_MAP_B(Brow), &ncols_B, &cols_B, nullptr); CHKERRQ(ierr);
-        }
-        /*
-            Perform preallocation
+            Perform naive preallocation
         */
         ierr = MatCreate(PETSC_COMM_WORLD, &C); CHKERRQ(ierr);
         ierr = MatSetType(C, MATMPIAIJ);
@@ -493,7 +493,7 @@ PetscErrorCode MatKronProdSum(
     */
     PetscInt nterms = a.size();
 
-    if (nterms   != A.size()) SETERRQ2(comm, 1,
+    if ((size_t)nterms != A.size()) SETERRQ2(comm, 1,
         "Incompatible length of a and A: %d != %d\n", a.size(), A.size());
 
     if (A.size() != B.size()) SETERRQ2(comm, 1,
