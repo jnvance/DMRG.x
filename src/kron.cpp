@@ -726,11 +726,14 @@ PetscErrorCode MatKronProdSum(
         ierr = MatSetType(C, MATMPIAIJ);
         ierr = MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C); CHKERRQ(ierr);
         ierr = MatSetFromOptions(C); CHKERRQ(ierr);
+
+        #ifdef __KRON_DENSE_PREALLOCATION
         /*
             Naive / dense preallocation
         */
-        // ierr = MatMPIAIJSetPreallocation(C, locrows, NULL, M_C - locrows, NULL); CHKERRQ(ierr);
-        // ierr = MatSeqAIJSetPreallocation(C, M_C, NULL); CHKERRQ(ierr);
+        ierr = MatMPIAIJSetPreallocation(C, locrows, NULL, M_C - locrows, NULL); CHKERRQ(ierr);
+        ierr = MatSeqAIJSetPreallocation(C, M_C, NULL); CHKERRQ(ierr);
+        #else
         /*
             More accurate preallocation (slightly overestimated)
         */
@@ -777,10 +780,19 @@ PetscErrorCode MatKronProdSum(
         ierr = PetscFree(d_nnz); CHKERRQ(ierr);
         ierr = PetscFree(o_nnz); CHKERRQ(ierr);
 
+        #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
+            // printf("[%d] %d \n", rank, tot_entries);
+            PetscInt tot_entries_reduced;
+            MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
+            PetscPrintf(comm, "%20s Nonzeros: %d/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C,
+                100.0*(double)tot_entries_reduced/((double)(M_C) * (double)(M_C)));
+        #endif
+        #endif
+
         ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);
         ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE);
         ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
-        ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_FALSE);
+        ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
         ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
         /*
             Check ownership guess
@@ -797,15 +809,6 @@ PetscErrorCode MatKronProdSum(
 
         KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
         #undef KRON_SUBMATRIX
-
-        #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
-            // printf("[%d] %d \n", rank, tot_entries);
-            PetscInt tot_entries_reduced;
-            MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
-            PetscPrintf(comm, "%20s Nonzeros: %d/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C,
-                100.0*(double)tot_entries_reduced/((double)(M_C) * (double)(M_C)));
-        #endif
-
     }
     else
     {
@@ -814,14 +817,14 @@ PetscErrorCode MatKronProdSum(
     /*
         CALCULATE ENTRIES
     */
-    #define __KRONLOOP "        KronLoop"
+    #define __KRONLOOP     "        KronLoop"
     KRON_PS_TIMINGS_INIT(__KRONLOOP);
 
-    #define __MATSETVALUES "    MatSetValues"
-    KRON_TIMINGS_ACCUM_INIT(__MATSETVALUES);
+    #define __MATSETVALUES "            MatSetValues"
+    KRON_PS_TIMINGS_ACCUM_INIT(__MATSETVALUES);
 
-    #define __CALC_VALUES "    CalculateKronValues"
-    KRON_TIMINGS_ACCUM_INIT(__CALC_VALUES);
+    #define __CALC_VALUES  "            CalculateKronValues"
+    KRON_PS_TIMINGS_ACCUM_INIT(__CALC_VALUES);
 
     KRON_PS_TIMINGS_START(__KRONLOOP);
 
@@ -839,6 +842,50 @@ PetscErrorCode MatKronProdSum(
     ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
     ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
 
+    #ifdef __KRON_SWAP_LOOP
+    /*
+     *  Outer loop through operators, inner loop through rows of each operator
+     */
+    for (PetscInt i = 0; i < nterms; ++i)
+    {
+        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        {
+            Arow = Irow / M_B[0];
+            Brow = Irow % M_B[0];
+
+            ierr = MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]); CHKERRQ(ierr);
+            ierr = MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]); CHKERRQ(ierr);
+            ncols_C[i] = ncols_A[i] * ncols_B[i];
+            /*
+                Assumes that matrices in A and in B have the same shapes
+            */
+            KRON_PS_TIMINGS_ACCUM_START(__CALC_VALUES);
+            for (PetscInt j_A = 0; j_A < ncols_A[i]; ++j_A)
+            {
+                for (PetscInt j_B = 0; j_B < ncols_B[i]; ++j_B)
+                {
+                    cols_C [ j_A * ncols_B[i] + j_B ] = COL_MAP_A(cols_A[i][j_A]) * N_B[i] + COL_MAP_B(cols_B[i][j_B]);
+                    vals_C [ j_A * ncols_B[i] + j_B ] = a[i] * vals_A[i][j_A] * vals_B[i][j_B];
+                }
+            }
+            KRON_PS_TIMINGS_ACCUM_END(__CALC_VALUES);
+
+            KRON_PS_TIMINGS_ACCUM_START(__MATSETVALUES);
+            ierr = MatSetValues(C, 1, &Irow, ncols_C[i], cols_C, vals_C, ADD_VALUES ); CHKERRQ(ierr);
+            KRON_PS_TIMINGS_ACCUM_END(__MATSETVALUES);
+
+            ierr = MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B[i], &cols_B[i], &vals_B[i]); CHKERRQ(ierr);
+            ierr = MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A[i], &cols_A[i], &vals_A[i]); CHKERRQ(ierr);
+        }
+    }
+    /*
+     *
+     */
+    #else
+    /*
+     *  Default behavior:
+     *  Outer loop through rows, inner loop through operators.
+     */
     for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
     {
         Arow = Irow / M_B[0];
@@ -854,7 +901,7 @@ PetscErrorCode MatKronProdSum(
         */
         for (PetscInt i = 0; i < nterms; ++i)
         {
-            KRON_TIMINGS_ACCUM_START(__CALC_VALUES);
+            KRON_PS_TIMINGS_ACCUM_START(__CALC_VALUES);
             for (PetscInt j_A = 0; j_A < ncols_A[i]; ++j_A)
             {
                 for (PetscInt j_B = 0; j_B < ncols_B[i]; ++j_B)
@@ -863,11 +910,11 @@ PetscErrorCode MatKronProdSum(
                     vals_C [ j_A * ncols_B[i] + j_B ] = a[i] * vals_A[i][j_A] * vals_B[i][j_B];
                 }
             }
-            KRON_TIMINGS_ACCUM_END(__CALC_VALUES);
+            KRON_PS_TIMINGS_ACCUM_END(__CALC_VALUES);
 
-            KRON_TIMINGS_ACCUM_START(__MATSETVALUES);
+            KRON_PS_TIMINGS_ACCUM_START(__MATSETVALUES);
             ierr = MatSetValues(C, 1, &Irow, ncols_C[i], cols_C, vals_C, ADD_VALUES ); CHKERRQ(ierr);
-            KRON_TIMINGS_ACCUM_END(__MATSETVALUES);
+            KRON_PS_TIMINGS_ACCUM_END(__MATSETVALUES);
         }
 
         for (PetscInt i = 0; i < nterms; ++i)
@@ -877,15 +924,17 @@ PetscErrorCode MatKronProdSum(
         };
     }
 
-    KRON_PS_TIMINGS_END(__KRONLOOP);
-    #undef __KRONLOOP
+    #endif
 
-    KRON_TIMINGS_ACCUM_PRINT(__CALC_VALUES);
+
+    KRON_PS_TIMINGS_ACCUM_PRINT(__CALC_VALUES);
     #undef __CALC_VALUES
 
-    KRON_TIMINGS_ACCUM_PRINT(__MATSETVALUES);
+    KRON_PS_TIMINGS_ACCUM_PRINT(__MATSETVALUES);
     #undef __MATSETVALUES
 
+    KRON_PS_TIMINGS_END(__KRONLOOP);
+    #undef __KRONLOOP
 
     ierr = PetscFree(cols_C); CHKERRQ(ierr);
     ierr = PetscFree(vals_C); CHKERRQ(ierr);
