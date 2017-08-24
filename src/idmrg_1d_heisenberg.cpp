@@ -150,7 +150,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::BuildSuperBlock"
 
-#if SUPERBLOCK_OPTIMIZATION == 4
+#if SUPERBLOCK_OPTIMIZATION == 4 || !defined(SUPERBLOCK_OPTIMIZATION)
 PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 {
     PetscErrorCode  ierr = 0;
