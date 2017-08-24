@@ -55,9 +55,11 @@ int main(int argc, char **argv)
 
     ierr = PetscPrintf(comm,   "\n"
                         "iDMRG of the 1D Heisenberg model\n"
-                        "PetscScalar type        : %-20s\n"
-                        "Target number of sites  : %-10d\n"
-                        "Number of states to keep: %-10d\n\n", scalar_type, nsites, mstates); CHKERRQ(ierr);
+                        "PetscScalar type        : %-s\n"
+                        "Target number of sites  : %-d\n"
+                        "Number of states to keep: %-d\n"
+                        "Number of MPI processes : %-d\n\n",
+                        scalar_type, nsites, mstates, nprocs); CHKERRQ(ierr);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"
