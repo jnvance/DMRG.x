@@ -788,12 +788,62 @@ PetscErrorCode MatKronProdSum(
                 100.0*(double)tot_entries_reduced/((double)(M_C) * (double)(M_C)));
         #endif
         #endif
+        /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 
+            MATRIX OPTIONS
+
+            You know each process will only set values for its own rows,
+            will generate an error if any process sets values for another process.
+            This avoids all reductions in the MatAssembly routines and thus
+            improves performance for very large process counts.
+        */
         ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);
+        /*
+
+            You know each process will only zero its own rows.
+            This avoids all reductions in the zero row routines and thus
+            improves performance for very large process counts.
+        */
+        ierr = MatSetOption(C, MAT_NO_OFF_PROC_ZERO_ROWS, PETSC_TRUE);
+        /*
+
+            Set to PETSC_TRUE indicates entries destined for other processors should be dropped,
+            rather than stashed. This is useful if you know that the "owning" processor is also
+            always generating the correct matrix entries, so that PETSc need not transfer
+            duplicate entries generated on another processor.
+        */
         ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE);
+        /*
+
+            indicates when MatZeroRows() is called the zeroed entries are kept in the nonzero structure
+            NOTE: significant improvement not yet observed
+        */
         ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE);
+        /*
+
+            set to PETSC_TRUE indicates that any add or insertion that would generate a new entry
+            in the nonzero structure instead produces an error. (Currently supported for
+            AIJ and BAIJ formats only.) If this option is set then the MatAssemblyBegin/End()
+            processes has one less global reduction
+         */
         ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE);
-        ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_FALSE);
+        /*
+
+            set to PETSC_TRUE indicates that any add or insertion that would generate a new entry
+            that has not been preallocated will instead produce an error. (Currently supported
+            for AIJ and BAIJ formats only.) This is a useful flag when debugging matrix memory
+            preallocation. If this option is set then the MatAssemblyBegin/End() processes has one
+            less global reduction
+         */
+        ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE);
+        /*
+
+            for AIJ/IS matrices this will stop zero values from creating a zero location in the matrix
+        */
+        ierr = MatSetOption(C, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE);
+
+        /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
         /*
             Check ownership guess
         */
@@ -842,6 +892,7 @@ PetscErrorCode MatKronProdSum(
     ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
     ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
 
+    // #define __KRON_SWAP_LOOP
     #ifdef __KRON_SWAP_LOOP
     /*
      *  Outer loop through operators, inner loop through rows of each operator
