@@ -1009,3 +1009,18 @@ PetscErrorCode MatKronProdSum(
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "MatKronProdSum"
+PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat& C)
+{
+    PetscErrorCode ierr = 0;
+
+    std::vector<PetscScalar>    a_vec = {a};
+    std::vector<Mat>            A_vec = {A};
+    std::vector<Mat>            B_vec = {B};
+
+    ierr =  MatKronProdSum(a_vec, A_vec, B_vec, C,PETSC_TRUE); CHKERRQ(ierr);
+
+    return ierr;
+}
+

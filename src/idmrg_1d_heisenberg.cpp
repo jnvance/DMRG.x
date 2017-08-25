@@ -20,58 +20,63 @@
 PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
 {
     PetscErrorCode  ierr = 0;
-
-    LINALG_TOOLS__MATASSEMBLY_INIT();
-
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+    PetscBool assembled;
     /*
-        Prepare Sm as explicit Hermitian conjugate of Sp
-        TODO: Implement as part of Kronecker product
+        Declare aliases and auxiliary matrices
     */
-    Mat BlockLeft_Sm;
-    LINALG_TOOLS__MATASSEMBLY_FINAL(BlockLeft_.Sp());
-    ierr = MatHermitianTranspose(BlockLeft_.Sp(), MAT_INITIAL_MATRIX, &BlockLeft_Sm); CHKERRQ(ierr);
-
-    /* Prepare the identity */
-    Mat eye_L;
-    PetscInt dim;
-    ierr = MatGetSize(BlockLeft_.H(), &dim, nullptr);
-    ierr = MatEyeCreate(comm_, eye_L, dim);
-
-    /*
-        Update the Hamiltonian
-    */
+    Mat H_L = BlockLeft_.H();
+    Mat Sz_L = BlockLeft_.Sz();
+    Mat Sp_L = BlockLeft_.Sp();
+    Mat eye_L = nullptr;
+    Mat Sm_L = nullptr;
     Mat Mat_temp;
-    ierr = MatKron(BlockLeft_.H(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKronAdd(BlockLeft_.Sz(), Sz1_, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKronScaleAdd(0.5, BlockLeft_.Sp(), Sm1_, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKronScaleAdd(0.5, BlockLeft_Sm, Sp1_, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = BlockLeft_.update_H(Mat_temp); /* H_temp is destroyed here */ CHKERRQ(ierr);
-    Mat_temp = nullptr;
+    /*
+        Determine the basis size of the block
+    */
+    PetscInt M_L, N_L;
+    ierr = MatGetSize(H_L, &M_L, &N_L); CHKERRQ(ierr);
+    /*
+        Fill in auxiliary matrices with values
+    */
+    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_L, M_L); CHKERRQ(ierr);
 
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_L);
+    ierr = MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L); CHKERRQ(ierr);
+    /*
+        Update the block Hamiltonian
+    */
+    std::vector<PetscScalar>    a = {1.0,   1.0,  0.5,  0.5};
+    std::vector<Mat>            A = {H_L,   Sz_L, Sp_L, Sm_L};
+    std::vector<Mat>            B = {eye1_, Sz1_, Sm1_, Sp1_};
+    ierr = MatKronProdSum(a, A, B, Mat_temp, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = BlockLeft_.update_H(Mat_temp);
+    Mat_temp = nullptr;
     /*
         Update the Sz operator
     */
-    // ierr = MatKron(eye1_, BlockLeft_.Sz(), Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKron(eye_L, Sz1_, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKronProd(1.0, eye_L, Sz1_, Mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(Mat_temp); CHKERRQ(ierr);
     Mat_temp = nullptr;
-
     /*
         Update the Sp operator
     */
-    // ierr = MatKron(eye1_, BlockLeft_.Sp(), Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKron(eye_L, Sp1_, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKronProd(1.0, eye_L, Sp1_, Mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(Mat_temp); CHKERRQ(ierr);
     Mat_temp = nullptr;
-
+    /*
+        Verify block validity
+    */
     BlockLeft_.length(BlockLeft_.length() + 1);
     if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
     #ifdef __PRINT_SIZES
         PetscPrintf(comm_, "%12sLeft       basis size: %-5d nsites: %-5d \n", "", BlockLeft_.basis_size(), BlockLeft_.length());
     #endif
-    ierr = MatDestroy(&BlockLeft_Sm); CHKERRQ(ierr);
+    /*
+        Destroy auxiliary objects
+    */
+    ierr = MatDestroy(&Sm_L); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
 
     DMRG_SUB_TIMINGS_END(__FUNCT__);
@@ -85,60 +90,63 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
 PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 {
     PetscErrorCode  ierr = 0;
-
-    LINALG_TOOLS__MATASSEMBLY_INIT();
-
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
-
+    PetscBool assembled;
     /*
-        Prepare Sm as explicit Hermitian conjugate of Sp
-        TODO: Implement as part of Kronecker product
+        Declare aliases and auxiliary matrices
     */
-    Mat BlockRight_Sm;
-    LINALG_TOOLS__MATASSEMBLY_FINAL(BlockRight_.Sp());
-    ierr = MatHermitianTranspose(BlockRight_.Sp(), MAT_INITIAL_MATRIX, &BlockRight_Sm); CHKERRQ(ierr);
-
-    /* Prepare the identity */
-    Mat eye_R;
-    PetscInt dim;
-    ierr = MatGetSize(BlockRight_.H(), &dim, nullptr);
-    ierr = MatEyeCreate(comm_, eye_R, dim);
-
-    /*
-        Update the Hamiltonian
-    */
+    Mat H_R = BlockRight_.H();
+    Mat Sz_R = BlockRight_.Sz();
+    Mat Sp_R = BlockRight_.Sp();
+    Mat eye_R = nullptr;
+    Mat Sm_R = nullptr;
     Mat Mat_temp;
-    ierr = MatKron(eye1_, BlockRight_.H(), Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKronAdd(Sz1_, BlockRight_.Sz(), Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKronScaleAdd(0.5, Sm1_, BlockRight_.Sp(), Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKronScaleAdd(0.5, Sp1_, BlockRight_Sm, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = BlockRight_.update_H(Mat_temp); /* H_temp is destroyed here */ CHKERRQ(ierr);
-    ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
-    Mat_temp = nullptr;
+    /*
+        Determine the basis size of the block
+    */
+    PetscInt M_R, N_R;
+    ierr = MatGetSize(H_R, &M_R, &N_R); CHKERRQ(ierr);
+    /*
+        Fill in auxiliary matrices with values
+    */
+    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_R, M_R); CHKERRQ(ierr);
 
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_R);
+    ierr = MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);CHKERRQ(ierr);
+    /*
+        Update the block Hamiltonian
+    */
+    std::vector<PetscScalar>    a = {1.0,   1.0,  0.5,  0.5};
+    std::vector<Mat>            A = {eye1_, Sz1_, Sm1_, Sp1_};
+    std::vector<Mat>            B = {H_R,   Sz_R, Sp_R, Sm_R};
+    ierr = MatKronProdSum(a, A, B, Mat_temp, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = BlockRight_.update_H(Mat_temp);
+    Mat_temp = nullptr;
     /*
         Update the Sz operator
     */
-    // ierr = MatKron(BlockRight_.Sz(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKron(Sz1_, eye_R, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKronProd(1.0, Sz1_, eye_R, Mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(Mat_temp); CHKERRQ(ierr);
     Mat_temp = nullptr;
-
     /*
         Update the Sp operator
     */
-    // ierr = MatKron(BlockRight_.Sp(), eye1_, Mat_temp, comm_); CHKERRQ(ierr);
-    ierr = MatKron(Sp1_, eye_R, Mat_temp, comm_); CHKERRQ(ierr);
+    ierr = MatKronProd(1.0, Sp1_, eye_R, Mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(Mat_temp); CHKERRQ(ierr);
     Mat_temp = nullptr;
-
+    /*
+        Verify block validity
+    */
     BlockRight_.length(BlockRight_.length() + 1);
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
     #ifdef __PRINT_SIZES
         PetscPrintf(comm_, "%12sRight      basis size: %-5d nsites: %-5d \n", "", BlockRight_.basis_size(), BlockRight_.length());
     #endif
-    ierr = MatDestroy(&BlockRight_Sm); CHKERRQ(ierr);
+    /*
+        Destroy auxiliary objects
+    */
+    ierr = MatDestroy(&Sm_R); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_R); CHKERRQ(ierr);
 
     DMRG_SUB_TIMINGS_END(__FUNCT__);
@@ -211,7 +219,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         if ((M_H == M_H_curr) && (N_H == N_H_curr) && ntruncations_ != 1)
             prealloc = PETSC_FALSE;
     }
-
+    /*
+        Do preallocation at each iteration
+    */
+    prealloc = PETSC_TRUE;
     if(prealloc && superblock_H_)
     {
         ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
