@@ -103,6 +103,20 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
     ierr = EPSSetType(eps, EPSKRYLOVSCHUR);
     ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
+
+    /*
+        Use previously solved ground state vector as initial guess
+     */
+    if (ntruncations_ > 0)
+    {
+        ierr = EPSSetInitialSpace(eps, 1, &gsv_r_);
+    }
+    else
+    {
+        PetscPrintf(comm_,"Prealloc gsv\n");
+        if (gsv_r_) ierr = VecDestroy(&gsv_r_); CHKERRQ(ierr); gsv_r_ = nullptr;
+        if (gsv_i_) ierr = VecDestroy(&gsv_i_); CHKERRQ(ierr); gsv_i_ = nullptr;
+    }
     // ierr = EPSSetTolerances(eps, 1.0e-20, 200);
 
     ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
@@ -228,8 +242,8 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     /*
         Destroy ground state vectors and matrix
     */
-    if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
-    if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
+    // if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
+    // if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
     if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
 
     DMRG_TIMINGS_END(__FUNCT__);
