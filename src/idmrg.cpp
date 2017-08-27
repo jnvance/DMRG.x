@@ -105,17 +105,19 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
 
     /*
-        Use previously solved ground state vector as initial guess
+        If compatible, use previously solved ground state vector as initial guess
      */
-    if (ntruncations_ > 0)
+
+    if (gsv_r_ && superblock_H_ && ntruncations_ > 1)
     {
-        ierr = EPSSetInitialSpace(eps, 1, &gsv_r_);
-    }
-    else
-    {
-        PetscPrintf(comm_,"Prealloc gsv\n");
-        if (gsv_r_) ierr = VecDestroy(&gsv_r_); CHKERRQ(ierr); gsv_r_ = nullptr;
-        if (gsv_i_) ierr = VecDestroy(&gsv_i_); CHKERRQ(ierr); gsv_i_ = nullptr;
+        PetscInt gsv_size, superblock_H_size;
+        ierr = VecGetSize(gsv_r_, &gsv_size); CHKERRQ(ierr);
+        ierr = MatGetSize(superblock_H_, nullptr, &superblock_H_size); CHKERRQ(ierr);
+
+        if(gsv_size==superblock_H_size)
+        {
+            ierr = EPSSetInitialSpace(eps, 1, &gsv_r_); CHKERRQ(ierr);
+        }
     }
     // ierr = EPSSetTolerances(eps, 1.0e-20, 200);
 
