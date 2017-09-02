@@ -18,10 +18,10 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     ierr = BlockRight_.init(comm_); CHKERRQ(ierr);
 
     /* Initialize single-site operators */
-    MatEyeCreate(comm, eye1_, 2);
-    MatSzCreate(comm, Sz1_);
-    MatSpCreate(comm, Sp1_);
-    MatTranspose(Sp1_, MAT_INITIAL_MATRIX, &Sm1_);
+    ierr = MatEyeCreate(comm, eye1_, 2); CHKERRQ(ierr);
+    ierr = MatSzCreate(comm, Sz1_); CHKERRQ(ierr);
+    ierr = MatSpCreate(comm, Sp1_); CHKERRQ(ierr);
+    ierr = MatTranspose(Sp1_, MAT_INITIAL_MATRIX, &Sm1_); CHKERRQ(ierr);
 
     /* Initialize log file for timings */
     #ifdef __TIMINGS
@@ -39,33 +39,25 @@ PetscErrorCode iDMRG::destroy()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
 
-
     /* Destroy block objects */
     ierr = BlockLeft_.destroy(); CHKERRQ(ierr);
     ierr = BlockRight_.destroy(); CHKERRQ(ierr);
 
     /* Destroy single-site operators */
-    MatDestroy(&eye1_);
-    MatDestroy(&Sz1_);
-    MatDestroy(&Sp1_);
-    MatDestroy(&Sm1_);
-    MatDestroy(&superblock_H_); /* Do a check whether matrix is in the correct state */
+    LINALG_TOOLS__MATDESTROY(eye1_);
+    LINALG_TOOLS__MATDESTROY(Sz1_);
+    LINALG_TOOLS__MATDESTROY(Sp1_);
+    LINALG_TOOLS__MATDESTROY(Sm1_);
+    LINALG_TOOLS__MATDESTROY(superblock_H_);
 
-    eye1_ = nullptr;
-    Sz1_ = nullptr;
-    Sp1_ = nullptr;
-    Sm1_ = nullptr;
-    superblock_H_ = nullptr;
-
-    DMRG_TIMINGS_END(__FUNCT__);
-    /*
-        Close log files after ending timings
-        otherwise, this causes a segmentation fault
+    /* Close log files after ending timings otherwise,
+     * this causes a segmentation fault
      */
     #ifdef __TIMINGS
         ierr = PetscFClose(PETSC_COMM_WORLD, fp_timings); CHKERRQ(ierr);
     #endif
 
+    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
@@ -86,40 +78,34 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         SETERRQ(comm_, 1, "Superblock Hamiltonian has not been set with BuildSuperBlock().");
 
     PetscBool assembled;
-    ierr = MatAssembled(superblock_H_, &assembled); CHKERRQ(ierr);
-    if (assembled == PETSC_FALSE){
-        ierr = MatAssemblyBegin(superblock_H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-        ierr = MatAssemblyEnd(superblock_H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    }
+    LINALG_TOOLS__MATASSEMBLY_FINAL(superblock_H_);
 
     /*
         Solve the eigensystem using SLEPC EPS
     */
-
     EPS eps;
+
     ierr = EPSCreate(comm_, &eps); CHKERRQ(ierr);
     ierr = EPSSetOperators(eps, superblock_H_, nullptr); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
-    ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL);
-    ierr = EPSSetType(eps, EPSKRYLOVSCHUR);
-    ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE);
+    ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL); CHKERRQ(ierr);
+    ierr = EPSSetType(eps, EPSKRYLOVSCHUR); CHKERRQ(ierr);
+    ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
 
     /*
         If compatible, use previously solved ground state vector as initial guess
      */
-
     if (gsv_r_ && superblock_H_ && ntruncations_ > 1)
     {
         PetscInt gsv_size, superblock_H_size;
+
         ierr = VecGetSize(gsv_r_, &gsv_size); CHKERRQ(ierr);
         ierr = MatGetSize(superblock_H_, nullptr, &superblock_H_size); CHKERRQ(ierr);
 
-        if(gsv_size==superblock_H_size)
-        {
+        if(gsv_size==superblock_H_size){
             ierr = EPSSetInitialSpace(eps, 1, &gsv_r_); CHKERRQ(ierr);
         }
     }
-    // ierr = EPSSetTolerances(eps, 1.0e-20, 200);
 
     ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
 
@@ -129,14 +115,14 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     DMRG_SUB_TIMINGS_END(__EPS_SOLVE__)
 
     PetscInt nconv;
+
     ierr = EPSGetConverged(eps,&nconv);CHKERRQ(ierr);
     if (nconv < 1)
-    {
         SETERRQ(comm_,1, "EPS did not converge.");
-    }
 
-    if (gsv_r_) VecDestroy(&gsv_r_);
-    if (gsv_i_) VecDestroy(&gsv_i_);
+    if (gsv_r_){ ierr = VecDestroy(&gsv_r_); CHKERRQ(ierr); }
+    if (gsv_i_){ ierr = VecDestroy(&gsv_i_); CHKERRQ(ierr); }
+
     ierr = MatCreateVecs(superblock_H_, &gsv_r_, nullptr); CHKERRQ(ierr);
 
     /* TODO: Verify that this works */
@@ -171,13 +157,13 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
             gse_i = ki;
         #endif
 
-        ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error);CHKERRQ(ierr);
+        ierr = EPSComputeError(eps, 0, EPS_ERROR_RELATIVE, &error); CHKERRQ(ierr);
         groundstate_solved_ = PETSC_TRUE;
         // superblock_set_ = PETSC_FALSE; // See note below
     }
     else
     {
-        PetscPrintf(PETSC_COMM_WORLD,"Warning: EPS did not converge.");
+        ierr = PetscPrintf(PETSC_COMM_WORLD,"Warning: EPS did not converge."); CHKERRQ(ierr);
     }
 
     #ifdef __TESTING
@@ -187,22 +173,21 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     #ifdef __SAVE_SUPERBLOCK
         char filename[PETSC_MAX_PATH_LEN];
         sprintf(filename,"data/superblock_H_%06d.dat",iter());
-        MatWrite(superblock_H_,filename);
+        ierr = MatWrite(superblock_H_,filename); CHKERRQ(ierr);
         sprintf(filename,"data/gsv_r_%06d.dat",iter());
-        VecWrite(gsv_r_,filename);
+        ierr = VecWrite(gsv_r_,filename); CHKERRQ(ierr);
         #ifndef PETSC_USE_COMPLEX
             sprintf(filename,"data/gsv_i_%06d.dat",iter());
-            VecWrite(gsv_i_,filename);
+            ierr = VecWrite(gsv_i_,filename); CHKERRQ(ierr);
         #endif
     #endif // __SAVE_SUPERBLOCK
 
     /*
         Retain superblock_H_ matrix
         Destroy it only when it is needed to be rebuilt
+        Destroy EPS object
     */
-    // MatDestroy(&superblock_H_);
-
-    EPSDestroy(&eps);
+    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
 
     DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
@@ -222,6 +207,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
      */
     if(groundstate_solved_ == PETSC_FALSE)
         SETERRQ(comm_, 1, "Ground state not yet solved.");
+
     /*
         Collect information regarding the basis size of the
         left and right blocks
@@ -229,6 +215,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     PetscInt size_left, size_right;
     ierr = MatGetSize(BlockLeft_.H(), &size_left, nullptr); CHKERRQ(ierr);
     ierr = MatGetSize(BlockRight_.H(), &size_right, nullptr); CHKERRQ(ierr);
+
     /*
         Collect entire groundstate vector to all processes
      */
@@ -241,11 +228,10 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     */
     groundstate_solved_ = PETSC_FALSE;
     dm_solved = PETSC_TRUE;
+
     /*
-        Destroy ground state vectors and matrix
+        Destroy temporary matrices
     */
-    // if (gsv_r_) VecDestroy(&gsv_r_); gsv_r_ = nullptr;
-    // if (gsv_i_) VecDestroy(&gsv_i_); gsv_i_ = nullptr;
     if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
 
     DMRG_TIMINGS_END(__FUNCT__);
@@ -370,8 +356,10 @@ PetscErrorCode iDMRG::TruncateOperators()
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
+
     ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
+
     ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
 
@@ -381,8 +369,10 @@ PetscErrorCode iDMRG::TruncateOperators()
 
     ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
+
     ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
+
     ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
 
@@ -398,25 +388,24 @@ PetscErrorCode iDMRG::TruncateOperators()
 
     #ifdef __CHECK_ROTATION
         sprintf(filename,"data/H_left_post_%06d.dat",iter());
-        MatWrite(BlockLeft_.H(), filename);
+        ierr = MatWrite(BlockLeft_.H(), filename); CHKERRQ(ierr);
 
         sprintf(filename,"data/Sz_left_post_%06d.dat",iter());
-        MatWrite(BlockLeft_.Sz(), filename);
+        ierr = MatWrite(BlockLeft_.Sz(), filename); CHKERRQ(ierr);
 
         sprintf(filename,"data/Sp_left_post_%06d.dat",iter());
-        MatWrite(BlockLeft_.Sp(), filename);
+        ierr = MatWrite(BlockLeft_.Sp(), filename); CHKERRQ(ierr);
 
         sprintf(filename,"data/H_right_post_%06d.dat",iter());
-        MatWrite(BlockRight_.H(), filename);
+        ierr = MatWrite(BlockRight_.H(), filename); CHKERRQ(ierr);
 
         sprintf(filename,"data/Sz_right_post_%06d.dat",iter());
-        MatWrite(BlockRight_.Sz(), filename);
+        ierr = MatWrite(BlockRight_.Sz(), filename); CHKERRQ(ierr);
 
         sprintf(filename,"data/Sp_right_post_%06d.dat",iter());
-        MatWrite(BlockRight_.Sp(), filename);
+        ierr = MatWrite(BlockRight_.Sp(), filename); CHKERRQ(ierr);
     #endif // __CHECK_ROTATION
     #undef __CHECK_ROTATION
-
 
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
