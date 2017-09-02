@@ -212,7 +212,7 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, P
     }
 
 #define LINALG_TOOLS__MATDESTROY(MATRIX) \
-    ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); MATRIX = nullptr;
+    if(&MATRIX){ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); MATRIX = nullptr;}
     /* Requires ierr to be defined */
 
 #ifdef __LINALG_TOOLS_TIMINGS
