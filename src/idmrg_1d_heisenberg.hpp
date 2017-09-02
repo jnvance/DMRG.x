@@ -7,9 +7,14 @@
 */
 class iDMRG_Heisenberg: public iDMRG
 {
-    // PetscInt local_dim_ = 2;
+protected:
+
+    PetscScalar J;
+    PetscScalar Jz;
 
 public:
+
+    PetscErrorCode SetParameters(PetscScalar J_in, PetscScalar Jz_in);
 
     /*
         Overload base class implementation
@@ -18,5 +23,4 @@ public:
     PetscErrorCode BuildBlockLeft() final;
     PetscErrorCode BuildBlockRight() final;
     PetscErrorCode BuildSuperBlock() final;
-
 };

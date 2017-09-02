@@ -30,20 +30,24 @@ int main(int argc, char **argv)
     */
     PetscInt nsites = 12;
     PetscInt mstates = 15;
+    PetscScalar J  = 1.0;
+    PetscScalar Jz = 1.0;
 
     ierr = PetscOptionsGetInt(NULL,NULL,"-nsites",&nsites,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetReal(NULL,NULL,"-J", &J, NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetReal(NULL,NULL,"-Jz",&Jz,NULL); CHKERRQ(ierr);
 
     iDMRG_Heisenberg heis;
+
     heis.init(comm, nsites, mstates);
+    heis.SetParameters(J, Jz);
 
     /*
         Timings
     */
-    // #ifdef __TIMINGS
     PetscLogDouble total_time0, total_time;
     ierr = PetscTime(&total_time0); CHKERRQ(ierr);
-    // #endif //__TIMINGS
 
     PetscBool petsc_use_complex = PETSC_FALSE;
     #ifdef PETSC_USE_COMPLEX
@@ -55,11 +59,12 @@ int main(int argc, char **argv)
 
     ierr = PetscPrintf(comm,   "\n"
                         "iDMRG of the 1D Heisenberg model\n"
+                        "J = %f    Jz = %f\n"
                         "PetscScalar type        : %-s\n"
                         "Target number of sites  : %-d\n"
                         "Number of states to keep: %-d\n"
                         "Number of MPI processes : %-d\n\n",
-                        scalar_type, nsites, mstates, nprocs); CHKERRQ(ierr);
+                        J, Jz, scalar_type, nsites, mstates, nprocs); CHKERRQ(ierr);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"

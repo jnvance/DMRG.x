@@ -101,6 +101,11 @@ protected:
     PetscInt    nsteps_;
 
     /**
+        Flag for when parameters have been set
+    */
+    PetscBool   parameters_set = PETSC_FALSE;
+
+    /**
         Completed number of steps.
     */
     PetscInt    iter_ = 0;
@@ -218,6 +223,10 @@ protected:
     */
     Mat Sm1_;
 
+    /**
+        Internal function to check whether parameters have been set
+    */
+    PetscErrorCode CheckSetParameters();
 
 public:
 

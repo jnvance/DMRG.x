@@ -3,7 +3,8 @@
 /* Implementation of the Heisenberg Hamiltonian */
 
 /** TODO:
- *  Implement coupling J
+ *  Implement coupling J and anisotropy Jz (DONE)
+ *  Transfer SVDLargest to iDMRG as private member
  *  Change values and observe degeneracies
  *
  *  Implement eye as iDMRG object that gets renewed only when necessary
@@ -15,6 +16,28 @@
  *      H, H_enl
  */
 
+
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG_Heisenberg::SetParameters"
+PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in)
+{
+    PetscErrorCode  ierr = 0;
+
+    if(parameters_set == PETSC_TRUE)
+    {
+        SETERRQ(comm_, 1, "Parameters already set.");
+    }
+    else
+    {
+        J = J_in;
+        Jz = Jz_in;
+        parameters_set = PETSC_TRUE;
+    }
+
+    return ierr;
+}
+
+
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::BuildBlockLeft"
 PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
@@ -22,6 +45,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+
+    ierr = CheckSetParameters(); CHKERRQ(ierr);
+
     PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
@@ -47,7 +73,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     /*
         Update the block Hamiltonian
     */
-    std::vector<PetscScalar>    a = {1.0,   1.0,  0.5,  0.5};
+    std::vector<PetscScalar>    a = {1.0,   Jz,  0.5*J,  0.5*J};
     std::vector<Mat>            A = {H_L,   Sz_L, Sp_L, Sm_L};
     std::vector<Mat>            B = {eye1_, Sz1_, Sm1_, Sp1_};
     ierr = MatKronProdSum(a, A, B, Mat_temp, PETSC_TRUE); CHKERRQ(ierr);
@@ -92,6 +118,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+
+    ierr = CheckSetParameters(); CHKERRQ(ierr);
+
     PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
@@ -117,7 +146,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     /*
         Update the block Hamiltonian
     */
-    std::vector<PetscScalar>    a = {1.0,   1.0,  0.5,  0.5};
+    std::vector<PetscScalar>    a = {1.0,   Jz,  0.5*J,  0.5*J};
     std::vector<Mat>            A = {eye1_, Sz1_, Sm1_, Sp1_};
     std::vector<Mat>            B = {H_R,   Sz_R, Sp_R, Sm_R};
     ierr = MatKronProdSum(a, A, B, Mat_temp, PETSC_TRUE); CHKERRQ(ierr);
@@ -164,6 +193,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+
+    ierr = CheckSetParameters(); CHKERRQ(ierr);
+
     PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
@@ -236,7 +268,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #define SUPERBLOCK_CONSTRUCTION "    Superblock Construction with MatKronProdSum"
     DMRG_SUB_TIMINGS_START(SUPERBLOCK_CONSTRUCTION)
 
-        std::vector<PetscScalar>    a = {1.0,   1.0,   1.0,  0.5,  0.5};
+        std::vector<PetscScalar>    a = {1.0,   1.0,   Jz,  0.5*J,  0.5*J};
         std::vector<Mat>            A = {H_L,   eye_L, Sz_L, Sp_L, Sm_L};
         std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
         ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);

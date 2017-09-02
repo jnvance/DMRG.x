@@ -62,6 +62,20 @@ PetscErrorCode iDMRG::destroy()
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::CheckSetParameters"
+PetscErrorCode iDMRG::CheckSetParameters()
+{
+    PetscErrorCode  ierr = 0;
+
+    if (parameters_set == PETSC_FALSE)
+    {
+        SETERRQ(comm_, 1, "Parameters not yet set.");
+    }
+
+    return ierr;
+}
+
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG::SolveGroundState"
