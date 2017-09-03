@@ -1,6 +1,8 @@
 #include "dmrgblock.hpp"
 
 
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::init"
 PetscErrorCode DMRGBlock::init( MPI_Comm comm, PetscInt length, PetscInt basis_size)
 {
     PetscErrorCode  ierr = 0;
@@ -45,6 +47,8 @@ PetscErrorCode DMRGBlock::init( MPI_Comm comm, PetscInt length, PetscInt basis_s
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::destroy"
 PetscErrorCode DMRGBlock::destroy()
 {
     PetscErrorCode  ierr = 0;
@@ -65,6 +69,8 @@ PetscErrorCode DMRGBlock::destroy()
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::update_operators"
 PetscErrorCode DMRGBlock::update_operators(Mat& H_new, Mat& Sz_new, Mat& Sp_new)
 {
     PetscErrorCode  ierr = 0;
@@ -75,18 +81,8 @@ PetscErrorCode DMRGBlock::update_operators(Mat& H_new, Mat& Sz_new, Mat& Sp_new)
 }
 
 
-// PetscErrorCode DMRGBlock::update_MATRIX(Mat MATRIX_new)
-// {
-//     PetscErrorCode  ierr = 0;
-//     if (MATRIX_ == MATRIX_new)
-//         return ierr;
-//     Mat MATRIX_temp = MATRIX_;
-//     MATRIX_ = MATRIX_new;
-//     ierr = MatDestroy(&MATRIX_temp); CHKERRQ(ierr);
-//     return ierr;
-// }
-
-
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::update_H"
 PetscErrorCode DMRGBlock::update_H(Mat& H_new)
 {
     PetscErrorCode  ierr = 0;
@@ -100,6 +96,8 @@ PetscErrorCode DMRGBlock::update_H(Mat& H_new)
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::update_Sz"
 PetscErrorCode DMRGBlock::update_Sz(Mat& Sz_new)
 {
     PetscErrorCode  ierr = 0;
@@ -113,6 +111,8 @@ PetscErrorCode DMRGBlock::update_Sz(Mat& Sz_new)
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::update_Sp"
 PetscErrorCode DMRGBlock::update_Sp(Mat& Sp_new)
 {
     PetscErrorCode  ierr = 0;
@@ -126,6 +126,8 @@ PetscErrorCode DMRGBlock::update_Sp(Mat& Sp_new)
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "DMRGBlock::is_valid"
 PetscBool DMRGBlock::is_valid()
 {
     PetscInt size1, size2, size3;
