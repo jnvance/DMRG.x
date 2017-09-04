@@ -16,17 +16,18 @@ static char help[] =
 #define __FUNCT__ "main"
 int main(int argc, char **argv)
 {
-    MPI_Comm        comm;
-    PetscMPIInt     nprocs, rank;
     PetscErrorCode  ierr = 0;
-
     SlepcInitialize(&argc, &argv, (char*)0, help);
-    comm = PETSC_COMM_WORLD;
+
+    MPI_Comm        comm = PETSC_COMM_WORLD;
+    PetscMPIInt     nprocs, rank;
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
+
     /*
-        Determine from options the target number of sites
-        and number of states retained at each truncation
+        Determine from options the target number of sites,
+        the number of states retained at each truncation, and
+        the coupling constants
     */
     PetscInt nsites = 12;
     PetscInt mstates = 15;
@@ -41,7 +42,7 @@ int main(int argc, char **argv)
     iDMRG_Heisenberg heis;
 
     heis.init(comm, nsites, mstates);
-    heis.SetParameters(J, Jz);
+    heis.SetParameters(J, Jz, 0.0);
 
     /*
         Timings

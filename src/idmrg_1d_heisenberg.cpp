@@ -19,7 +19,7 @@
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::SetParameters"
-PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in)
+PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz_in)
 {
     PetscErrorCode  ierr = 0;
 
@@ -31,6 +31,8 @@ PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_
     {
         J = J_in;
         Jz = Jz_in;
+        Mz = Mz_in;
+
         parameters_set = PETSC_TRUE;
     }
 

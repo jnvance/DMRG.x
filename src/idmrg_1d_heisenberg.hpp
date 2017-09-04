@@ -9,12 +9,18 @@ class iDMRG_Heisenberg: public iDMRG
 {
 protected:
 
+    /** XX-coupling constant */
     PetscScalar J;
+
+    /** Z-coupling constant */
     PetscScalar Jz;
+
+    /** Target magnetization */
+    PetscReal Mz;
 
 public:
 
-    PetscErrorCode SetParameters(PetscScalar J_in, PetscScalar Jz_in);
+    PetscErrorCode SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz);
 
     /*
         Overload base class implementation
