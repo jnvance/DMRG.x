@@ -1,32 +1,28 @@
 #include "kron.hpp"
 
-#undef __FUNCT__
-#define __FUNCT__ "MatKronProdSum"
-PetscErrorCode MatKronProdSum(
+
+PetscErrorCode InitialChecks(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
     const std::vector<Mat>& B,
     Mat& C,
-    const PetscBool prealloc)
+    MPI_Comm& comm,
+    PetscInt& nterms,
+    std::vector<PetscInt>& M_A,
+    std::vector<PetscInt>& N_A,
+    std::vector<PetscInt>& M_B,
+    std::vector<PetscInt>& N_B,
+    PetscInt& M_C,
+    PetscInt& N_C)
 {
-    PetscErrorCode ierr = 0;
-    PetscBool assembled;
-    KRON_TIMINGS_INIT(__FUNCT__);
-    KRON_TIMINGS_START(__FUNCT__);
+    PetscErrorCode ierr;
 
-    /*
-        Get information from MPI
-    */
-    PetscMPIInt     nprocs, rank;
-    MPI_Comm comm = PETSC_COMM_WORLD;
-    MPI_Comm_size(comm, &nprocs);
-    MPI_Comm_rank(comm, &rank);
     /*
         INITIAL CHECKPOINTS
 
         Check that a vectors a, A and B all have the same non-zero lengths
     */
-    PetscInt nterms = a.size();
+    nterms = a.size();
 
     if ((size_t)nterms != A.size()) SETERRQ2(comm, 1,
         "Incompatible length of a and A: %d != %d\n", a.size(), A.size());
@@ -39,8 +35,12 @@ PetscErrorCode MatKronProdSum(
     /*
         Collect matrix sizes
     */
-    std::vector<PetscInt> M_A(nterms), N_A(nterms), M_B(nterms), N_B(nterms);
-    PetscInt M_C, N_C, M_C_temp, N_C_temp;
+    // std::vector<PetscInt> M_A(nterms), N_A(nterms), M_B(nterms), N_B(nterms);
+    M_A.resize(nterms);
+    N_A.resize(nterms);
+    M_B.resize(nterms);
+    N_B.resize(nterms);
+    PetscInt M_C_temp, N_C_temp;
 
     for (PetscInt i = 0; i < nterms; ++i)
     {
@@ -86,6 +86,38 @@ PetscErrorCode MatKronProdSum(
             "Incompatible matrix shapes for N between B[%d] and B[0]: %d != %d",
             i, N_B[i], N_B[0]);
     }
+
+    return ierr;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatKronProdSum"
+PetscErrorCode MatKronProdSum(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const PetscBool prealloc)
+{
+    PetscErrorCode ierr = 0;
+    PetscBool assembled;
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
+
+    /*
+        Get information from MPI
+    */
+    PetscMPIInt     nprocs, rank;
+    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+    /*
+        Perform initial checks and get sizes
+    */
+    std::vector<PetscInt>   M_A, N_A, M_B, N_B;
+    PetscInt                nterms, M_C, N_C;
+    ierr = InitialChecks(a,A,B,C,comm,nterms,M_A,N_A,M_B,N_B,M_C,N_C); CHKERRQ(ierr);
     /*
         Guess the local ownership of resultant matrix C
     */
@@ -103,7 +135,6 @@ PetscErrorCode MatKronProdSum(
     #define KRON_SUBMATRIX "        Kron: Submatrix collection"
     KRON_PS_TIMINGS_INIT(KRON_SUBMATRIX)
     KRON_PS_TIMINGS_START(KRON_SUBMATRIX)
-
     /*
 
         SUBMATRIX A
