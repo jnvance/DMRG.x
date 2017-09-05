@@ -3,6 +3,8 @@
 
 #include <slepceps.h>
 #include <slepcsvd.h>
+#include <vector>
+#include <map>
 
 /**
     @defgroup   linalg_tools    Linear Algebra Tools
@@ -192,6 +194,21 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     @return     { description_of_the_return_value }
  */
 PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, PetscScalar& error, Mat& mat, FILE *fp);
+
+
+/**
+    Mimics the python operation: np.add.outer(A, B).flatten()
+ */
+std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector<PetscScalar> B);
+
+
+/**
+    Index map
+ */
+std::map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array);
+
+
+
 
 
 #define LINALG_TOOLS__MATASSEMBLY_INIT() \

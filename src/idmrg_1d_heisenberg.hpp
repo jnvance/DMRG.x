@@ -1,6 +1,7 @@
-#include <vector>
 #include "dmrg.hpp"
-
+#include <iostream>
+#include <vector>
+#include <unordered_map>
 
 /*
     The DMRG Class is inherited by a class that specifies the Hamiltonian

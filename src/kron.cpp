@@ -257,8 +257,7 @@ PetscErrorCode MatKronProdSum(
         KRON_PS_TIMINGS_INIT(KRON_SUBMATRIX)
         KRON_PS_TIMINGS_START(KRON_SUBMATRIX)
 
-        ierr = MatCreate(PETSC_COMM_WORLD, &C); CHKERRQ(ierr);
-        ierr = MatSetType(C, MATMPIAIJ);
+        ierr = MatCreate(comm, &C); CHKERRQ(ierr);
         ierr = MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C, N_C); CHKERRQ(ierr);
         ierr = MatSetFromOptions(C); CHKERRQ(ierr);
 

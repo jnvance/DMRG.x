@@ -1,6 +1,10 @@
 
 #include "linalg_tools.hpp"
 
+/*
+    TODO: Move these definitions to spin-dependent class
+ */
+
 #undef __FUNCT__
 #define __FUNCT__ "MatEyeCreate"
 PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim)
@@ -16,7 +20,7 @@ PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim)
     ierr = MatAssemblyBegin(eye, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(eye, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
-    MatShift(eye, 1.00);
+    ierr = MatShift(eye, 1.00); CHKERRQ(ierr);
 
     return ierr;
 }
@@ -79,10 +83,10 @@ PetscErrorCode MatPeek(const Mat mat, const char* label)
     ierr = MatAssemblyBegin(mat, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
-    PetscPrintf(comm, "\n%s\n", label);
+    ierr = PetscPrintf(comm, "\n%s\n", label); CHKERRQ(ierr);
     ierr = MatView(mat, fd); CHKERRQ(ierr);
 
-    PetscViewerDestroy(&fd);
+    ierr = PetscViewerDestroy(&fd); CHKERRQ(ierr);
     fd = nullptr;
 
     return ierr;
@@ -811,4 +815,27 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     ierr = EPSDestroy(&eps); CHKERRQ(ierr);
 
     return ierr;
+}
+
+
+std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector<PetscScalar> B)
+{
+    std::vector<PetscScalar> C(A.size()*B.size(), 0);
+
+    for (PetscInt i = 0; i < (PetscInt)(A.size()); ++i)
+        for (PetscInt j = 0; j < (PetscInt)(B.size()); ++j)
+            C[i*(PetscInt)(B.size()) + j] = A[i] + B[j];
+
+    return C;
+}
+
+
+std::map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array)
+{
+    std::map<PetscScalar,std::vector<PetscInt>> map;
+
+    for (PetscInt i = 0; i < (PetscInt)(array.size()); ++i)
+        map[array[i]].push_back(i);
+
+    return map;
 }

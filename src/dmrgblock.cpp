@@ -143,6 +143,9 @@ PetscBool DMRGBlock::is_valid()
     if(size1 != size2) return PETSC_FALSE;
     if(size2 != size3) return PETSC_FALSE;
 
+    /* TODO: put this back later on */
+    // if (basis_sector_array.size() != size1) return PETSC_FALSE;
+
     basis_size_ = size1;
 
     return PETSC_TRUE;

@@ -121,6 +121,12 @@ protected:
     DMRGBlock   BlockRight_;
 
     /**
+        Container for the magnetization sectors of a single site
+        TODO: On new layout, move to spin-dependent definitions/class
+     */
+    std::vector<PetscScalar> single_site_sectors;
+
+    /**
         Matrix operator containing the superblock Hamiltonian
      */
     Mat         superblock_H_ = nullptr;

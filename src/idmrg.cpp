@@ -23,6 +23,26 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     ierr = MatSpCreate(comm, Sp1_); CHKERRQ(ierr);
     ierr = MatTranspose(Sp1_, MAT_INITIAL_MATRIX, &Sm1_); CHKERRQ(ierr);
 
+    /*
+        Initialize single-site sectors
+        TODO: Transfer definition to spin-dependent class
+    */
+    single_site_sectors = {0.5, -0.5};
+    BlockLeft_.basis_sector_array = single_site_sectors;
+    BlockRight_.basis_sector_array = single_site_sectors;
+
+    #define PRINT_VEC(stdvectorpetscscalar) \
+        for (std::vector<PetscScalar>::const_iterator i = stdvectorpetscscalar.begin(); \
+            i != stdvectorpetscscalar.end(); ++i) printf("%f\n",PetscRealPart(*i)); \
+            printf("\n");
+
+    PRINT_VEC(single_site_sectors)
+    PRINT_VEC(BlockLeft_.basis_sector_array)
+    PRINT_VEC(BlockRight_.basis_sector_array)
+
+    #undef PRINT_VEC
+
+
     /* Initialize log file for timings */
     #ifdef __TIMINGS
         ierr = PetscFOpen(PETSC_COMM_WORLD, "timings.dat", "w", &fp_timings); CHKERRQ(ierr);
@@ -278,12 +298,18 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     #define __GET_SVD "    GetSVD"
     DMRG_SUB_TIMINGS_START(__GET_SVD)
 
+    PetscInt M_left, M_right;
+    ierr = MatGetSize(dm_left, &M_left, nullptr); CHKERRQ(ierr);
+    ierr = MatGetSize(dm_right, &M_right, nullptr); CHKERRQ(ierr);
+    M_left = std::min(M_left, mstates_);
+    M_right = std::min(M_right, mstates_);
+
     #ifdef __SVD_USE_EPS
-        ierr = EPSLargestEigenpairs(dm_left, mstates_, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
-        ierr = EPSLargestEigenpairs(dm_right, mstates_, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+        ierr = EPSLargestEigenpairs(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
+        ierr = EPSLargestEigenpairs(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
     #else
-        ierr = SVDLargestStates(dm_left, mstates_, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
-        ierr = SVDLargestStates(dm_right, mstates_, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+        ierr = SVDLargestStates(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
+        ierr = SVDLargestStates(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
     #endif
 
     DMRG_SUB_TIMINGS_END(__GET_SVD)

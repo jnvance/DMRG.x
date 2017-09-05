@@ -10,6 +10,7 @@
 
 #include <slepceps.h>
 #include <petscmat.h>
+#include <vector>
 
 
 /**
@@ -152,6 +153,11 @@ public:
         Check whether this is a valid block
      */
     PetscBool is_valid();
+
+    /**
+        Keeps track of the Sz sectors
+     */
+    std::vector<PetscScalar>   basis_sector_array;
 
 };
 

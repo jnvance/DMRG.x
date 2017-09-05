@@ -16,6 +16,11 @@
  *      H, H_enl
  */
 
+#define PRINT_VEC(stdvectorpetscscalar,msg) \
+        printf("%s\n",msg);\
+        for (std::vector<PetscScalar>::const_iterator i = stdvectorpetscscalar.begin(); \
+            i != stdvectorpetscscalar.end(); ++i) printf("%f\n",PetscRealPart(*i)); \
+        printf("\n");
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::SetParameters"
@@ -68,7 +73,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     /*
         Fill in auxiliary matrices with values
     */
-    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_L, M_L); CHKERRQ(ierr);
+    ierr = MatEyeCreate(comm_, eye_L, M_L); CHKERRQ(ierr);
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_L);
     ierr = MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L); CHKERRQ(ierr);
@@ -94,9 +99,16 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = BlockLeft_.update_Sp(Mat_temp); CHKERRQ(ierr);
     Mat_temp = nullptr;
     /*
-        Verify block validity
+        Update the basis_sectors
+    */
+    BlockLeft_.basis_sector_array = OuterSumFlatten(BlockLeft_.basis_sector_array, single_site_sectors);
+    /*
+        Update block length
     */
     BlockLeft_.length(BlockLeft_.length() + 1);
+    /*
+        Verify block validity
+    */
     if(!BlockLeft_.is_valid()) SETERRQ(comm_, 1, "Invalid left block");
     #ifdef __PRINT_SIZES
         PetscPrintf(comm_, "%12sLeft       basis size: %-5d nsites: %-5d \n", "", BlockLeft_.basis_size(), BlockLeft_.length());
@@ -141,7 +153,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     /*
         Fill in auxiliary matrices with values
     */
-    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_R, M_R); CHKERRQ(ierr);
+    ierr = MatEyeCreate(comm_, eye_R, M_R); CHKERRQ(ierr);
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_R);
     ierr = MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);CHKERRQ(ierr);
@@ -167,9 +179,16 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     ierr = BlockRight_.update_Sp(Mat_temp); CHKERRQ(ierr);
     Mat_temp = nullptr;
     /*
-        Verify block validity
+        Update the basis_sectors
+    */
+    BlockRight_.basis_sector_array = OuterSumFlatten(single_site_sectors,BlockRight_.basis_sector_array);
+    /*
+        Update block length
     */
     BlockRight_.length(BlockRight_.length() + 1);
+    /*
+        Verify block validity
+    */
     if(!BlockRight_.is_valid()) SETERRQ(comm_, 1, "Invalid right block");
     #ifdef __PRINT_SIZES
         PetscPrintf(comm_, "%12sRight      basis size: %-5d nsites: %-5d \n", "", BlockRight_.basis_size(), BlockRight_.length());
@@ -213,6 +232,55 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     Mat Sm_L = nullptr;
     Mat Sm_R = nullptr;
     /*
+        Build a restricted basis of states
+
+    */
+#if 1
+    /* Return type: std::map<PetscScalar,std::vector<PetscInt>> */
+    auto sys_enl_basis_by_sector = IndexMap(BlockLeft_.basis_sector_array);
+    auto env_enl_basis_by_sector = IndexMap(BlockRight_.basis_sector_array);
+
+    // auto M_sys_enl = BlockLeft_.basis_size();
+    auto M_env_enl = BlockRight_.basis_size();
+
+    PetscScalar target_Sz = Mz * (BlockLeft_.length()+BlockRight_.length() + 2);
+
+    std::map<PetscScalar,std::vector<PetscInt>> sector_indices = {};
+    std::vector<PetscInt>                       restricted_basis_indices = {};
+
+    for (auto elem: sys_enl_basis_by_sector)
+    {
+        auto& sys_enl_Sz = elem.first;
+        auto& sys_enl_basis_states = elem.second;
+        auto env_enl_Sz = target_Sz - sys_enl_Sz;
+        sector_indices[sys_enl_Sz].reserve(
+            sys_enl_basis_states.size()*env_enl_basis_by_sector[env_enl_Sz].size());
+
+        // std::cout << "sys_enl_Sz:  " << sys_enl_Sz << std::endl;
+        // std::cout << "env_enl_Sz:  " << env_enl_Sz << std::endl;
+
+        if (env_enl_basis_by_sector.find(env_enl_Sz) == env_enl_basis_by_sector.end()){
+        } else {
+            /* found */
+            for (auto i : sys_enl_basis_states)
+            {
+                auto i_offset = M_env_enl * i;
+                for (auto j: env_enl_basis_by_sector[env_enl_Sz])
+                {
+                    auto current_index = (PetscInt)(restricted_basis_indices.size());
+                    sector_indices[sys_enl_Sz].push_back(current_index);
+                    restricted_basis_indices.push_back(i_offset + j);
+                }
+            }
+        }
+    }
+
+    for (auto elem: restricted_basis_indices) std::cout << "  " << elem;
+    std::cout << std::endl;
+
+#endif
+
+    /*
         Determine the basis sizes of enlarged block
     */
     PetscInt M_L, N_L, M_R, N_R, M_H, N_H;
@@ -224,14 +292,14 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     M_H = M_L * M_R;
     N_H = N_L * N_R;
     if (M_H != N_H)
-        SETERRQ(PETSC_COMM_WORLD, 1, "Hamiltonian should be square."
+        SETERRQ(comm_, 1, "Hamiltonian should be square."
             "Check block operators from previous step.");
     /*
         Fill in auxiliary matrices with values
     */
 
-    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_L, M_L); CHKERRQ(ierr);
-    ierr = MatEyeCreate(PETSC_COMM_WORLD, eye_R, M_R); CHKERRQ(ierr);
+    ierr = MatEyeCreate(comm_, eye_L, M_L); CHKERRQ(ierr);
+    ierr = MatEyeCreate(comm_, eye_R, M_R); CHKERRQ(ierr);
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(BlockLeft_.Sp());
     MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L);
@@ -366,7 +434,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #if defined(__OPTIMIZATION01)
 
         #define SETUPSUPERBLOCKH \
-            ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
+            ierr = MatCreate(comm_, &superblock_H_); CHKERRQ(ierr); \
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
             ierr = MatSetUp(superblock_H_); CHKERRQ(ierr); \
@@ -400,7 +468,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
                 * cleanup and refactor optimization 2
         */
         #define SETUPSUPERBLOCKH \
-            ierr = MatCreate(PETSC_COMM_WORLD, &superblock_H_); CHKERRQ(ierr); \
+            ierr = MatCreate(comm_, &superblock_H_); CHKERRQ(ierr); \
             ierr = MatSetType(superblock_H_, MATMPIAIJ); \
             ierr = MatSetSizes(superblock_H_, PETSC_DECIDE, PETSC_DECIDE, M_C_req, N_C_req); CHKERRQ(ierr); \
             ierr = MatSetFromOptions(superblock_H_); CHKERRQ(ierr); \
@@ -469,7 +537,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     ierr = MatEyeCreate(comm_, mat_temp, M_right); CHKERRQ(ierr);
 
     #ifdef __KRON_TIMINGS
-        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n",
+        PetscPrintf(comm_, "%40s %s\nSize: %10d x %-10d\n",
             __FUNCT__,"MatKron(BlockLeft_.H(), mat_temp, superblock_H_, comm_)",
             M_right*M_right,M_right*M_right);
     #endif
@@ -534,7 +602,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         Second term: 1_{DL×2} \otimes H_{R,i+2}
     */
     #ifdef __KRON_TIMINGS
-        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
+        PetscPrintf(comm_, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
     #endif
     ierr = MatKronAdd(mat_temp, BlockRight_.H(), superblock_H_, comm_); CHKERRQ(ierr);
     DMRG_SUB_TIMINGS_END(__H_TERM_02);
@@ -544,7 +612,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         Third term: S^z_{L,i+1} \otimes S^z_{R,i+2}
     */
     #ifdef __KRON_TIMINGS
-        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(BlockLeft_.Sz(), BlockRight_.Sz(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
+        PetscPrintf(comm_, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(BlockLeft_.Sz(), BlockRight_.Sz(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
     #endif
     ierr = MatKronAdd(BlockLeft_.Sz(), BlockRight_.Sz(), superblock_H_, comm_); CHKERRQ(ierr);
     /*
@@ -584,7 +652,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     #endif
 
     #ifdef __KRON_TIMINGS
-        PetscPrintf(PETSC_COMM_WORLD, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(BlockLeft_.Sz(), BlockRight_.Sz(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
+        PetscPrintf(comm_, "%40s %s\nSize: %10d x %-10d\n", __FUNCT__,"MatKronAdd(BlockLeft_.Sz(), BlockRight_.Sz(), superblock_H_, comm_)",M_left*M_left,M_left*M_left);
     #endif
 
     #define SUPERBLOCK_ASSEMBLY "    Superblock Assembly"

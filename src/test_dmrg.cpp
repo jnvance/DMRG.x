@@ -80,8 +80,59 @@ int main(int argc, char **argv)
         TODO: File may also be used to save other data
      */
     FILE *fp;
+
     ierr = PetscFOpen(PETSC_COMM_WORLD, "eigvals.dat", "w", &fp); CHKERRQ(ierr);
 
+    while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
+    {
+        /*
+            Grow the left and right blocks by adding one site in the junction
+         */
+        ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
+        ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
+        ierr = heis.BuildSuperBlock(); CHKERRQ(ierr);
+        ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
+        ierr = heis.SolveGroundState(gse_r, gse_i, error); CHKERRQ(ierr);
+        /*
+                Printout data on ground state energy and wavevector
+        */
+        PRINT_EMPTY_LINE;
+        superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
+        if (gse_i!=0.0) {
+            /*
+                TODO: Implement error printing for complex values
+             */
+            SETERRQ(comm,1,"Not implemented for complex ground state energy.\n");
+            // ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n",
+            //     superblocklength, (double)gse_r/((double)(superblocklength)),
+            //     (double)gse_i/((double)(superblocklength)),(double)error); CHKERRQ(ierr);
+        } else {
+            double gse_site  = (double)gse_r/((double)(superblocklength));
+            double error_rel = (gse_site - gse_site_theor) / gse_site_theor;
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n",
+                heis.iter(), superblocklength, (double)gse_r, gse_site,
+                error_rel, (double)(error)); CHKERRQ(ierr);
+            ierr = PetscFPrintf(PETSC_COMM_WORLD, fp,"   %6d   %6d    %.20g    %.20g    %.20g    %.20g\n",
+                heis.iter(), superblocklength, (double)gse_r, gse_site,
+                error_rel, (double)(error)); CHKERRQ(ierr);
+        }
+        PRINT_EMPTY_LINE;
+        /*
+            From the ground state wavevector get the reduced density matrices of the left
+            and right blocks, and construct the rectangular rotation matrices to perform the
+            truncation of site and block operators.
+         */
+        ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
+        ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
+        ierr = heis.TruncateOperators(); CHKERRQ(ierr);
+
+        PetscPrintf(PETSC_COMM_WORLD,"   %6d\n", heis.iter());
+
+        heis.iter()++;
+    }
+
+
+#if 0
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
         PRINT_EMPTY_LINE;
@@ -165,6 +216,7 @@ int main(int argc, char **argv)
         }
         heis.iter()++;
     }
+#endif
 
     ierr = PetscTime(&total_time); CHKERRQ(ierr); \
     total_time = total_time - total_time0; \
