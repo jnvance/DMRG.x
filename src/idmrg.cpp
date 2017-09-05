@@ -31,6 +31,8 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     BlockLeft_.basis_sector_array = single_site_sectors;
     BlockRight_.basis_sector_array = single_site_sectors;
 
+    sector_indices = {};
+
     #define PRINT_VEC(stdvectorpetscscalar) \
         for (std::vector<PetscScalar>::const_iterator i = stdvectorpetscscalar.begin(); \
             i != stdvectorpetscscalar.end(); ++i) printf("%f\n",PetscRealPart(*i)); \

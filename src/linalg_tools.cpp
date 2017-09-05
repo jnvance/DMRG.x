@@ -830,9 +830,9 @@ std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector
 }
 
 
-std::map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array)
+std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array)
 {
-    std::map<PetscScalar,std::vector<PetscInt>> map;
+    std::unordered_map<PetscScalar,std::vector<PetscInt>> map;
 
     for (PetscInt i = 0; i < (PetscInt)(array.size()); ++i)
         map[array[i]].push_back(i);

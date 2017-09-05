@@ -126,7 +126,7 @@ int main(int argc, char **argv)
         ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
         ierr = heis.TruncateOperators(); CHKERRQ(ierr);
 
-        PetscPrintf(PETSC_COMM_WORLD,"   %6d\n", heis.iter());
+        // PetscPrintf(PETSC_COMM_WORLD,"   %6d\n", heis.iter());
 
         heis.iter()++;
     }

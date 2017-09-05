@@ -5,6 +5,7 @@
 #include <slepcsvd.h>
 #include <vector>
 #include <map>
+#include <unordered_map>
 
 /**
     @defgroup   linalg_tools    Linear Algebra Tools
@@ -205,7 +206,7 @@ std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector
 /**
     Index map
  */
-std::map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array);
+std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array);
 
 
 

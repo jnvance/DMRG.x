@@ -4,6 +4,7 @@
 #include <slepceps.h>
 #include <petsctime.h>
 #include "dmrgblock.hpp"
+#include <unordered_map>
 
 #ifdef __TIMINGS
     #define DMRG_TIMINGS_START(FUNC_NAME) \
@@ -125,6 +126,12 @@ protected:
         TODO: On new layout, move to spin-dependent definitions/class
      */
     std::vector<PetscScalar> single_site_sectors;
+
+    /**
+        Container for the magnetization sectors and indices
+        TODO: On new layout, move to spin-dependent definitions/class
+     */
+    std::unordered_map<PetscScalar,std::vector<PetscInt>> sector_indices;
 
     /**
         Matrix operator containing the superblock Hamiltonian
