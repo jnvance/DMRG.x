@@ -220,5 +220,13 @@ PetscErrorCode MatKronProdSum(
     const PetscBool prealloc);
 
 
+PetscErrorCode MatKronProdSumIdx(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx);
+
+
 /** @} */
 #endif // __KRON_HPP__

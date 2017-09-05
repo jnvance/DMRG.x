@@ -24,7 +24,7 @@
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::SetParameters"
-PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz_in)
+PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz_in , PetscBool do_target_Sz_in)
 {
     PetscErrorCode  ierr = 0;
 
@@ -37,6 +37,7 @@ PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_
         J = J_in;
         Jz = Jz_in;
         Mz = Mz_in;
+        do_target_Sz = do_target_Sz_in;
 
         parameters_set = PETSC_TRUE;
     }
@@ -235,52 +236,52 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         Build a restricted basis of states
 
     */
-#if 1
-    /* Return type: std::map<PetscScalar,std::vector<PetscInt>> */
-    auto sys_enl_basis_by_sector = IndexMap(BlockLeft_.basis_sector_array);
-    auto env_enl_basis_by_sector = IndexMap(BlockRight_.basis_sector_array);
-
-    // auto M_sys_enl = BlockLeft_.basis_size();
-    auto M_env_enl = BlockRight_.basis_size();
-
-    PetscScalar target_Sz = Mz * (BlockLeft_.length()+BlockRight_.length() + 2);
-
     if(sector_indices.size() > 0) sector_indices.clear();
     std::vector<PetscInt> restricted_basis_indices = {};
 
-    for (auto elem: sys_enl_basis_by_sector)
+    if (do_target_Sz)
     {
-        auto& sys_enl_Sz = elem.first;
-        auto& sys_enl_basis_states = elem.second;
-        auto  env_enl_Sz = target_Sz - sys_enl_Sz;
+        /* Return type: std::map<PetscScalar,std::vector<PetscInt>> */
+        auto sys_enl_basis_by_sector = IndexMap(BlockLeft_.basis_sector_array);
+        auto env_enl_basis_by_sector = IndexMap(BlockRight_.basis_sector_array);
 
-        sector_indices[sys_enl_Sz].reserve(
-            sys_enl_basis_states.size()*env_enl_basis_by_sector[env_enl_Sz].size());
+        // auto M_sys_enl = BlockLeft_.basis_size();
+        auto M_env_enl = BlockRight_.basis_size();
 
-        std::cout << "sys_enl_Sz:  " << sys_enl_Sz << std::endl;
-        std::cout << "env_enl_Sz:  " << env_enl_Sz << std::endl;
+        PetscScalar target_Sz = Mz * (BlockLeft_.length()+BlockRight_.length() + 2);
 
-        if (env_enl_basis_by_sector.find(env_enl_Sz) == env_enl_basis_by_sector.end()){
-        } else {
-            /* found */
-            for (auto i : sys_enl_basis_states)
-            {
-                auto i_offset = M_env_enl * i;
-                for (auto j: env_enl_basis_by_sector[env_enl_Sz])
+        for (auto elem: sys_enl_basis_by_sector)
+        {
+            auto& sys_enl_Sz = elem.first;
+            auto& sys_enl_basis_states = elem.second;
+            auto  env_enl_Sz = target_Sz - sys_enl_Sz;
+
+            sector_indices[sys_enl_Sz].reserve(
+                sys_enl_basis_states.size()*env_enl_basis_by_sector[env_enl_Sz].size());
+
+            std::cout << "sys_enl_Sz:  " << sys_enl_Sz << std::endl;
+            std::cout << "env_enl_Sz:  " << env_enl_Sz << std::endl;
+
+            if (env_enl_basis_by_sector.find(env_enl_Sz) == env_enl_basis_by_sector.end()){
+            } else {
+                /* found */
+                for (auto i : sys_enl_basis_states)
                 {
-                    auto current_index = (PetscInt)(restricted_basis_indices.size());
-                    sector_indices[sys_enl_Sz].push_back(current_index);
-                    restricted_basis_indices.push_back(i_offset + j);
+                    auto i_offset = M_env_enl * i;
+                    for (auto j: env_enl_basis_by_sector[env_enl_Sz])
+                    {
+                        auto current_index = (PetscInt)(restricted_basis_indices.size());
+                        sector_indices[sys_enl_Sz].push_back(current_index);
+                        restricted_basis_indices.push_back(i_offset + j);
+                    }
                 }
             }
         }
+
+        std::cout << "restricted_basis_indices:  ";
+        for (auto elem: restricted_basis_indices) std::cout << "  " << elem;
+        std::cout << std::endl;
     }
-
-    std::cout << "restricted_basis_indices:  ";
-    for (auto elem: restricted_basis_indices) std::cout << "  " << elem;
-    std::cout << std::endl;
-
-#endif
 
     /*
         Determine the basis sizes of enlarged block
@@ -343,7 +344,14 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         std::vector<PetscScalar>    a = {1.0,   1.0,   Jz,  0.5*J,  0.5*J};
         std::vector<Mat>            A = {H_L,   eye_L, Sz_L, Sp_L, Sm_L};
         std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
-        ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+
+
+        // printf("size: %lu\n", restricted_basis_indices.size());
+        if(restricted_basis_indices.size() > 0){
+            ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
+        } else {
+            ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+        }
 
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_CONSTRUCTION)
     #undef SUPERBLOCK_CONSTRUCTION

@@ -558,3 +558,28 @@ PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat
     return ierr;
 }
 
+
+#undef __FUNCT__
+#define __FUNCT__ "MatKronProdSumIdx"
+PetscErrorCode MatKronProdSumIdx(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx)
+{
+    PetscErrorCode ierr = 0;
+
+    /* Final shape of C */
+    PetscInt M_C_final = idx.size();
+    PetscInt N_C_final = idx.size();
+
+    printf("size: %d x %d\n", M_C_final, N_C_final);
+
+    /* Current shape of C */
+
+
+
+
+    return ierr;
+}

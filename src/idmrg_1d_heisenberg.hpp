@@ -16,12 +16,15 @@ protected:
     /** Z-coupling constant */
     PetscScalar Jz;
 
+    /** Whether to perform targetting of magnetization sector */
+    PetscBool do_target_Sz = PETSC_FALSE;
+
     /** Target magnetization */
     PetscReal Mz;
 
 public:
 
-    PetscErrorCode SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz);
+    PetscErrorCode SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz_in, PetscBool do_target_Sz_in);
 
     /*
         Overload base class implementation

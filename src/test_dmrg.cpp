@@ -33,16 +33,20 @@ int main(int argc, char **argv)
     PetscInt mstates = 15;
     PetscScalar J  = 1.0;
     PetscScalar Jz = 1.0;
+    PetscBool do_target_Sz = PETSC_FALSE;
 
     ierr = PetscOptionsGetInt(NULL,NULL,"-nsites",&nsites,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
-    ierr = PetscOptionsGetReal(NULL,NULL,"-J", &J, NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetReal(NULL,NULL,"-J", &J,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetReal(NULL,NULL,"-Jz",&Jz,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_target_Sz",&do_target_Sz,NULL); CHKERRQ(ierr);
+
+    PetscPrintf(comm,"%s\n", do_target_Sz ? "TRUE" : "FALSE");
 
     iDMRG_Heisenberg heis;
 
     heis.init(comm, nsites, mstates);
-    heis.SetParameters(J, Jz, 0.0);
+    heis.SetParameters(J, Jz, 0.0, do_target_Sz);
 
     /*
         Timings
