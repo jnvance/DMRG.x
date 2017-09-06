@@ -1,6 +1,8 @@
 #include "kron.hpp"
 
 
+#undef __FUNCT__
+#define __FUNCT__ "InitialChecks"
 PetscErrorCode InitialChecks(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
@@ -91,23 +93,68 @@ PetscErrorCode InitialChecks(
 }
 
 
-#define FALSE 0
-#if FALSE
+#undef __FUNCT__
+#define __FUNCT__ "GetSubmatrix"
 PetscErrorCode GetSubmatrix(
-    PetscInt nterms,
-    std::vector<PetscInt> M_req_A, // number of requested rows
-    std::vector<PetscInt> N_A, // total number of columns
-
-
-    )
+    const std::vector<Mat>&       A,
+    const std::vector<PetscInt>&  N_A,
+    const PetscInt&               nterms,
+    const PetscInt&               M_req_A,
+    const PetscInt                *id_rows_A,
+    std::vector<Mat>&       submat_A,
+    PetscInt&               A_sub_start,
+    PetscInt&               A_sub_end)
 {
     PetscErrorCode ierr = 0;
+    PetscBool      assembled;
+    MPI_Comm comm = PETSC_COMM_WORLD;
+
+    PetscInt *id_cols_A;
+    ierr = PetscMalloc1(N_A[0], &id_cols_A); CHKERRQ(ierr);
+    for (PetscInt Icol = 0; Icol < N_A[0]; ++Icol)
+        id_cols_A[Icol] = Icol;
 
     IS isrow_A = nullptr, iscol_A = nullptr;
+    PetscInt A_sub_start_temp, A_sub_end_temp;
+
+    for (PetscInt i = 0; i < nterms; ++i)
+    {
+        LINALG_TOOLS__MATASSEMBLY_FINAL(A[i]); /* Removes segfault issue*/
+        /*
+            Checkpoint column sizes
+         */
+        if( N_A[i]!=N_A[0])
+            SETERRQ(comm, 1, "Shapes of A matrices are not equal.");
+
+        ierr = ISCreateGeneral(comm, M_req_A, id_rows_A, PETSC_USE_POINTER, &isrow_A); CHKERRQ(ierr);
+        ierr = ISCreateGeneral(comm, N_A[i],  id_cols_A, PETSC_USE_POINTER, &iscol_A); CHKERRQ(ierr);
+        /*
+            Construct submatrix_A and get local indices
+        */
+        submat_A[i] = nullptr;
+        ierr = MatGetSubMatrix(A[i], isrow_A, iscol_A, MAT_INITIAL_MATRIX, submat_A.data()+i); CHKERRQ(ierr);
+        ierr = MatGetOwnershipRange(submat_A[i], &A_sub_start, &A_sub_end); CHKERRQ(ierr);
+        /*
+            Checkpoint row ownership ranges
+        */
+        if (i && (A_sub_start_temp != A_sub_start) && (A_sub_end_temp != A_sub_end)){
+            SETERRQ(comm, 1, "Shapes of A matrices are not equal.");
+        } else {
+            A_sub_start_temp = A_sub_start;
+            A_sub_end_temp = A_sub_end;
+        }
+        /*
+            Destroy index set
+        */
+        if(isrow_A) ierr = ISDestroy(&isrow_A); CHKERRQ(ierr); isrow_A = nullptr;
+        if(iscol_A) ierr = ISDestroy(&iscol_A); CHKERRQ(ierr); iscol_A = nullptr;
+    }
+
+    ierr = PetscFree(id_cols_A); CHKERRQ(ierr);
 
     return ierr;
 }
-#endif
+
 
 
 #undef __FUNCT__
@@ -142,12 +189,14 @@ PetscErrorCode MatKronProdSum(
     PetscInt remrows = M_C % nprocs;
     PetscInt locrows = M_C / nprocs;
     PetscInt Istart = locrows * rank;
+
     if (rank < remrows){
         locrows += 1;
         Istart += rank;
     } else {
         Istart += remrows;
     }
+
     PetscInt Iend = Istart + locrows;
 
     #define KRON_SUBMATRIX "        Kron: Submatrix collection"
@@ -162,61 +211,32 @@ PetscErrorCode MatKronProdSum(
 
         Determine the required rows from A_i
     */
-    std::vector<PetscInt> Astart(nterms);
-    std::vector<PetscInt> Aend(nterms);
-    std::vector<PetscInt> M_req_A(nterms);
-    for (PetscInt i = 0; i < nterms; ++i)
-    {
-        Astart[i] = Istart/M_B[i];
-        Aend[i] = 1+(Iend-1)/M_B[i];
-        M_req_A[i] = Aend[i] - Astart[i];
-    }
+    PetscInt Astart = Istart/M_B[0];
+    PetscInt Aend = 1+(Iend-1)/M_B[0];
+    PetscInt M_req_A = Aend - Astart;
     /*
         Build the submatrices for each term
     */
-    std::vector<Mat>      submat_A(nterms);
-    std::vector<PetscInt> A_sub_start(nterms), A_sub_end(nterms);
-    PetscInt *id_rows_A, *id_cols_A;
+    std::vector<Mat>    submat_A(nterms);
+    PetscInt            A_sub_start, A_sub_end;
+    PetscInt            *id_rows_A;
     /*
-        NOTE: Assumes equal shapes for A and B matrices
-        TODO: Transfer allocation inside the loop
+        Assumes equal shapes for A and B matrices
     */
-    ierr = PetscMalloc1(M_req_A[0], &id_rows_A); CHKERRQ(ierr);
-    ierr = PetscMalloc1(N_A[0],     &id_cols_A); CHKERRQ(ierr);
+    ierr = PetscMalloc1(M_req_A, &id_rows_A); CHKERRQ(ierr);
     /*
         Construct index set
     */
-    for (PetscInt Irow = Astart[0]; Irow < Aend[0]; ++Irow)
-        id_rows_A[Irow-Astart[0]] = Irow;
-    for (PetscInt Icol = 0; Icol < N_A[0]; ++Icol)
-        id_cols_A[Icol] = Icol;
-
-    #if 1
-    IS isrow_A = nullptr, iscol_A = nullptr;
-    for (PetscInt i = 0; i < nterms; ++i)
-    {
-        LINALG_TOOLS__MATASSEMBLY_FINAL(A[i]); /* Removes segfault issue*/
-        if( M_req_A[i]!=M_req_A[0] || N_A[i]!=N_A[0])
-            SETERRQ(comm, 1, "Shapes of A matrices are not equal.");
-
-        ierr = ISCreateGeneral(comm, M_req_A[i], id_rows_A, PETSC_USE_POINTER, &isrow_A); CHKERRQ(ierr);
-        ierr = ISCreateGeneral(comm, N_A[i],     id_cols_A, PETSC_USE_POINTER, &iscol_A); CHKERRQ(ierr);
-        /*
-            Construct submatrix_A and get local indices
-        */
-        submat_A[i] = nullptr;
-        ierr = MatGetSubMatrix(A[i], isrow_A, iscol_A, MAT_INITIAL_MATRIX, submat_A.data()+i); CHKERRQ(ierr);
-        ierr = MatGetOwnershipRange(submat_A[i], A_sub_start.data()+i, A_sub_end.data()+i); CHKERRQ(ierr);
-        /*
-            Destroy index set
-        */
-        if(isrow_A) ierr = ISDestroy(&isrow_A); CHKERRQ(ierr); isrow_A = nullptr;
-        if(iscol_A) ierr = ISDestroy(&iscol_A); CHKERRQ(ierr); iscol_A = nullptr;
-    }
-    #endif
-
+    for (PetscInt Irow = Astart; Irow < Aend; ++Irow)
+        id_rows_A[Irow-Astart] = Irow;
+    /*
+        Obtain submatrices
+    */
+    ierr = GetSubmatrix(A,N_A,nterms,M_req_A,id_rows_A,submat_A,A_sub_start,A_sub_end); CHKERRQ(ierr);
+    /*
+        Destroy row indices
+    */
     ierr = PetscFree(id_rows_A); CHKERRQ(ierr);
-    ierr = PetscFree(id_cols_A); CHKERRQ(ierr);
     /*
 
         SUBMATRIX B
@@ -225,65 +245,33 @@ PetscErrorCode MatKronProdSum(
         the local rows of C
 
         Build the submatrices for each term
-    */
-    IS isrow_B = nullptr, iscol_B = nullptr;
-    /*
-        Create the submatrix for B_i and
+
     */
     std::vector<Mat>      submat_B(nterms);
-    std::vector<PetscInt> B_sub_start(nterms), B_sub_end(nterms);
-    PetscInt *id_rows_B, *id_cols_B;
-    for (int i = 0; i < nterms; ++i) submat_B[i] = nullptr;
+    PetscInt B_sub_start, B_sub_end;
     /*
         NOTE: Assumes equal shapes for A and B matrices
-        TODO: Transfer allocation inside the loop
     */
-    ierr = PetscMalloc1(M_B[0], &id_rows_B); CHKERRQ(ierr);
-    ierr = PetscMalloc1(N_B[0], &id_cols_B); CHKERRQ(ierr);
+    PetscInt *id_rows_B;
 
-    for (PetscInt i = 0; i < nterms; ++i)
-    {
-        LINALG_TOOLS__MATASSEMBLY_FINAL(B[i]); /* Removes segfault issue*/
-        /*
-            Checkpoint assumption
-        */
-        if( M_B[i]!=M_B[0] || N_B[i]!=N_B[0])
-            SETERRQ(comm, 1, "Shapes of B matrices are not equal.");
-        /*
-            Construct index set
-        */
-        for (PetscInt Irow = 0; Irow < M_B[i]; ++Irow)
-            id_rows_B[Irow] = Irow;
-        for (PetscInt Icol = 0; Icol < N_B[i]; ++Icol)
-            id_cols_B[Icol] = Icol;
-        ierr = ISCreateGeneral(comm, M_B[i], id_rows_B, PETSC_USE_POINTER, &isrow_B); CHKERRQ(ierr);
-        ierr = ISCreateGeneral(comm, N_B[i], id_cols_B, PETSC_USE_POINTER, &iscol_B); CHKERRQ(ierr);
-        /*
-            Construct submatrix_B and get local indices
-        */
-        ierr = MatGetSubMatrix(B[i], isrow_B, iscol_B, MAT_INITIAL_MATRIX, submat_B.data()+i); CHKERRQ(ierr);
-        ierr = MatGetOwnershipRange(submat_B[i], B_sub_start.data()+i, B_sub_end.data()+i); CHKERRQ(ierr);
-        /*
-            Destroy index set
-        */
-        if(isrow_B) ierr = ISDestroy(&isrow_B); CHKERRQ(ierr); isrow_B = nullptr;
-        if(iscol_B) ierr = ISDestroy(&iscol_B); CHKERRQ(ierr); iscol_B = nullptr;
-    }
+    ierr = PetscMalloc1(M_B[0], &id_rows_B); CHKERRQ(ierr);
+
+    for (PetscInt Irow = 0; Irow < M_B[0]; ++Irow)
+        id_rows_B[Irow] = Irow;
+
+    ierr = GetSubmatrix(B,N_B,nterms,M_B[0],id_rows_B,submat_B,B_sub_start,B_sub_end); CHKERRQ(ierr);
 
     ierr = PetscFree(id_rows_B); CHKERRQ(ierr);
-    ierr = PetscFree(id_cols_B); CHKERRQ(ierr);
 
     KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
     #undef KRON_SUBMATRIX
-
-
     /*
         Map ownership
         Input: the row INDEX in the global matrix A/B
         Output: the corresponding row index in the locally-owned rows of submatrix A/B
     */
-    #define ROW_MAP_A(INDEX) ((INDEX) - Astart[i] + A_sub_start[i])
-    #define ROW_MAP_B(INDEX) ((INDEX) + B_sub_start[i])
+    #define ROW_MAP_A(INDEX) ((INDEX) - Astart + A_sub_start)
+    #define ROW_MAP_B(INDEX) ((INDEX) + B_sub_start)
     /*
         Submatrix constructions offsets the starting column
         Input: the corresponding column index in the locally-owned submatrix A/B
@@ -616,7 +604,9 @@ PetscErrorCode MatKronProdSumIdx(
     const std::vector<PetscInt> idx)
 {
     PetscErrorCode ierr = 0;
-    PetscBool assembled;
+
+    // PetscBool assembled;
+
     KRON_TIMINGS_INIT(__FUNCT__);
     KRON_TIMINGS_START(__FUNCT__);
     /*
@@ -636,7 +626,7 @@ PetscErrorCode MatKronProdSumIdx(
         Determine final sizes based on desired indices
     */
     PetscInt M_C_final = idx.size();
-    PetscInt N_C_final = idx.size();
+    // PetscInt N_C_final = idx.size();
     /*
         Guess the local ownership of resultant matrix C
     */
