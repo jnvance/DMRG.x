@@ -104,7 +104,6 @@ PetscErrorCode MatKronProdSum(
     PetscBool assembled;
     KRON_TIMINGS_INIT(__FUNCT__);
     KRON_TIMINGS_START(__FUNCT__);
-
     /*
         Get information from MPI
     */
@@ -600,17 +599,91 @@ PetscErrorCode MatKronProdSumIdx(
     const std::vector<PetscInt> idx)
 {
     PetscErrorCode ierr = 0;
-
-    /* Final shape of C */
+    PetscBool assembled;
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
+    /*
+        Get information from MPI
+    */
+    PetscMPIInt     nprocs, rank;
+    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+    /*
+        Perform initial checks and get sizes
+    */
+    std::vector<PetscInt>   M_A, N_A, M_B, N_B;
+    PetscInt                nterms, M_C, N_C;
+    ierr = InitialChecks(a,A,B,C,comm,nterms,M_A,N_A,M_B,N_B,M_C,N_C); CHKERRQ(ierr);
+    /*
+        Determine final sizes based on desired indices
+    */
     PetscInt M_C_final = idx.size();
     PetscInt N_C_final = idx.size();
+    /*
+        Guess the local ownership of resultant matrix C
+    */
+    PetscInt remrows = M_C_final % nprocs;
+    PetscInt locrows = M_C_final / nprocs;
+    PetscInt Istart = locrows * rank;
 
-    printf("size: %d x %d\n", M_C_final, N_C_final);
+    if (rank < remrows){
+        locrows += 1;
+        Istart += rank;
+    } else {
+        Istart += remrows;
+    }
 
-    /* Current shape of C */
+    PetscInt Iend = Istart + locrows;
+    /*
+        Determine which rows of A and B to take and populate corresponding sets
+    */
+    std::set<PetscInt> set_Arows, set_Brows;
+
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        set_Arows.insert(Irow / M_B[0]);
+
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        set_Brows.insert(Irow % M_B[0]);
+
+    PetscInt i;
+
+    PetscInt *id_rows_A;
+    ierr = PetscMalloc1(set_Arows.size(), &id_rows_A); CHKERRQ(ierr);
+    i = 0;
+    for (auto elem: set_Arows){
+        id_rows_A[i] = elem;
+        ++i;
+    }
+
+    PetscInt *id_cols_A;
+    ierr = PetscMalloc1(N_A[0], &id_cols_A);
+    for (int i = 0; i < N_A[0]; ++i) id_cols_A[i] = i;
 
 
+    for (auto elem: set_Arows) printf("[%d] A: %d\n", rank, elem);
+    for (auto elem: set_Brows) printf("[%d] B: %d\n", rank, elem);
+    /*
+        Put these rows to a local submatrix
+    */
+    /// TODO: FACTORIZE GETTING SUBMATRIX
 
+
+    /*
+        Create a map from global Arow/Brow to local submatrix
+    */
+    // std::map<PetscInt,PetscInt>
+
+    #if 0
+    printf("[%2d] ", rank);
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+    {
+        printf(" %d", idx[Irow]);
+    }
+    printf("\n");
+    #endif
+
+    ierr = MatKronProdSum( a, A, B, C, PETSC_TRUE ); CHKERRQ(ierr);
 
     return ierr;
 }

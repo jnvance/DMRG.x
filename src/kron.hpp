@@ -1,11 +1,12 @@
 #ifndef __KRON_HPP__
 #define __KRON_HPP__
 
+#include "linalg_tools.hpp"
 #include <vector>
 #include <slepceps.h>
 #include <stdlib.h>
 #include <petsctime.h>
-#include "linalg_tools.hpp"
+#include <set>
 
 /* Inspect the timings inside matkron */
 #ifdef __KRON_TIMINGS
