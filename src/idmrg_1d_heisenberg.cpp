@@ -102,7 +102,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     /*
         Update the basis_sectors
     */
-    BlockLeft_.basis_sector_array = OuterSumFlatten(BlockLeft_.basis_sector_array, single_site_sectors);
+    if (do_target_Sz)
+        BlockLeft_.basis_sector_array = OuterSumFlatten(BlockLeft_.basis_sector_array, single_site_sectors);
     /*
         Update block length
     */
@@ -182,7 +183,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     /*
         Update the basis_sectors
     */
-    BlockRight_.basis_sector_array = OuterSumFlatten(single_site_sectors,BlockRight_.basis_sector_array);
+    if (do_target_Sz)
+        BlockRight_.basis_sector_array = OuterSumFlatten(single_site_sectors,BlockRight_.basis_sector_array);
     /*
         Update block length
     */
@@ -236,11 +238,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         Build a restricted basis of states
 
     */
-    if(sector_indices.size() > 0) sector_indices.clear();
     std::vector<PetscInt> restricted_basis_indices = {};
-
     if (do_target_Sz)
     {
+        if(sector_indices.size() > 0) sector_indices.clear();
         /* Return type: std::map<PetscScalar,std::vector<PetscInt>> */
         auto sys_enl_basis_by_sector = IndexMap(BlockLeft_.basis_sector_array);
         auto env_enl_basis_by_sector = IndexMap(BlockRight_.basis_sector_array);
@@ -347,7 +348,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
 
         // printf("size: %lu\n", restricted_basis_indices.size());
-        if(restricted_basis_indices.size() > 0){
+        if(do_target_Sz){
             ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
         } else {
             ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
