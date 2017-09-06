@@ -112,7 +112,7 @@ int main(int argc, char **argv)
             //     (double)gse_i/((double)(superblocklength)),(double)error); CHKERRQ(ierr);
         } else {
             double gse_site  = (double)gse_r/((double)(superblocklength));
-            double error_rel = (gse_site - gse_site_theor) / gse_site_theor;
+            double error_rel = (gse_site - gse_site_theor) / std::abs(gse_site_theor);
             ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n",
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
                 error_rel, (double)(error)); CHKERRQ(ierr);
