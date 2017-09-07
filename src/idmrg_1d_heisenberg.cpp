@@ -350,8 +350,16 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         // printf("size: %lu\n", restricted_basis_indices.size());
         if(do_target_Sz){
             ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
+            // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         } else {
-            ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
+            std::vector<PetscInt> full_idx(M_H);
+            for (PetscInt i = 0; i < M_H; ++i) full_idx[i] = i;
+            ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
+
+
+
+
+            // ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
         }
 
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_CONSTRUCTION)
@@ -365,9 +373,17 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         Checkpoint
     */
     superblock_set_ = PETSC_TRUE;
-    PetscInt M_superblock;
-    ierr = MatGetSize(superblock_H_, &M_superblock, nullptr); CHKERRQ(ierr);
-    if(M_superblock != TotalBasisSize()) SETERRQ(comm_, 1, "Basis size mismatch.\n");
+    PetscInt M_superblock, N_superblock;
+    ierr = MatGetSize(superblock_H_, &M_superblock, &N_superblock); CHKERRQ(ierr);
+
+    if(M_superblock != N_superblock)
+        SETERRQ2(comm_, 1, "Superblock must be square matrix. Got (%d,%d) ",M_superblock,N_superblock);
+
+    if(!do_target_Sz && M_superblock != TotalBasisSize())
+        SETERRQ2(comm_, 1, "Basis size mismatch. Expected %d. Got %d.\n",TotalBasisSize(),M_superblock);
+
+    if( do_target_Sz && M_superblock != restricted_basis_indices.size())
+        SETERRQ2(comm_, 1, "Sector size mismatch. Expected %d. Got %d\n",restricted_basis_indices.size(),M_superblock);
     /*
         Final Assembly
     */

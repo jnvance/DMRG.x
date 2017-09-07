@@ -34,12 +34,15 @@ int main(int argc, char **argv)
     PetscScalar J  = 1.0;
     PetscScalar Jz = 1.0;
     PetscBool do_target_Sz = PETSC_FALSE;
+    PetscBool do_save_operators = PETSC_FALSE;
 
     ierr = PetscOptionsGetInt(NULL,NULL,"-nsites",&nsites,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetReal(NULL,NULL,"-J", &J,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetReal(NULL,NULL,"-Jz",&Jz,NULL); CHKERRQ(ierr);
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_target_Sz",&do_target_Sz,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_operators",&do_save_operators,NULL); CHKERRQ(ierr);
+
 
     PetscPrintf(comm,"%s\n", do_target_Sz ? "TRUE" : "FALSE");
 
@@ -95,7 +98,9 @@ int main(int argc, char **argv)
         ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
         ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
         ierr = heis.BuildSuperBlock(); CHKERRQ(ierr);
-        ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
+        if(do_save_operators){
+            ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
+        }
         ierr = heis.SolveGroundState(gse_r, gse_i, error); CHKERRQ(ierr);
         /*
                 Printout data on ground state energy and wavevector
