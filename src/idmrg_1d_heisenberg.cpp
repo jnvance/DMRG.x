@@ -355,11 +355,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             std::vector<PetscInt> full_idx(M_H);
             for (PetscInt i = 0; i < M_H; ++i) full_idx[i] = i;
             ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
-
-
-
-
-            // ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc); CHKERRQ(ierr);
         }
 
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_CONSTRUCTION)

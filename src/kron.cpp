@@ -631,9 +631,8 @@ PetscErrorCode MatKronProdSumIdx(
 
     /* Guess final row ownership ranges */
 
-
     PetscInt M_C_final = idx.size();
-
+    PetscInt N_C_final = idx.size();
     PetscInt remrows = M_C_final % nprocs;
     PetscInt locrows = M_C_final / nprocs;
     PetscInt Istart = locrows * rank;
@@ -670,16 +669,63 @@ PetscErrorCode MatKronProdSumIdx(
     /* Get submatrix based on indices */
     PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(C_temp);
-    ierr = MatGetSubMatrix(C_temp, is_rows, is_cols, MAT_INITIAL_MATRIX, &C); CHKERRQ(ierr);
 
-    PetscPrintf(comm, "is_rows\n");
-    ISView(is_rows, PETSC_VIEWER_STDOUT_WORLD);
-    PetscPrintf(comm, "is_cols\n");
-    ISView(is_cols, PETSC_VIEWER_STDOUT_WORLD);
+    Mat C_sub;
+    ierr = MatGetSubMatrix(C_temp, is_rows, is_cols, MAT_INITIAL_MATRIX, &C_sub); CHKERRQ(ierr);
 
+    /* TODO: Peek at contents of C
+     */
 
+    /* Local to global mapping */
+    #define COL_MAP(INDEX) ((INDEX) - N_C_final * (nprocs - 1))
 
-    // if(C_temp)  ierr = MatDestroy(&C_temp); CHKERRQ(ierr);
+    /* TODO: Create a new square matrix and populate with
+     * elements using COL_MAP
+     */
+    ierr = MatCreate(comm, &C); CHKERRQ(ierr);
+    ierr = MatSetSizes(C, PETSC_DECIDE, PETSC_DECIDE, M_C_final, N_C_final); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(C); CHKERRQ(ierr);
+
+    /* TODO: Replace with preallocation */
+    ierr = MatSetUp(C);
+
+    /* TODO: Check correct ownership ranges */
+
+    ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_NO_OFF_PROC_ZERO_ROWS,       PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES,     PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN,        PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR,    PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR,  PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR,  PETSC_FALSE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_IGNORE_ZERO_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
+
+    const PetscInt    *cols;
+    const PetscScalar *vals;
+    PetscInt *cols_shifted, ncols;
+    ierr = PetscMalloc1(N_C_final, &cols_shifted);
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+    {
+        ierr = MatGetRow(C_sub, Irow, &ncols, &cols, &vals);
+
+        for (PetscInt Icol = 0; Icol < ncols; ++Icol)
+            cols_shifted[Icol] = COL_MAP(cols[Icol]);
+
+        ierr = MatSetValues(C, 1, &Irow, ncols, cols_shifted, vals, INSERT_VALUES); CHKERRQ(ierr);
+
+        ierr = MatRestoreRow(C_sub, Irow, &ncols, &cols, &vals);
+    }
+    ierr = PetscFree(cols_shifted);
+
+    #undef COL_MAP
+
+    // PetscPrintf(comm, "is_rows\n");
+    // ISView(is_rows, PETSC_VIEWER_STDOUT_WORLD);
+    // PetscPrintf(comm, "is_cols\n");
+    // ISView(is_cols, PETSC_VIEWER_STDOUT_WORLD);
+
+    if(C_temp)  ierr = MatDestroy(&C_temp); CHKERRQ(ierr);
+    if(C_sub)   ierr = MatDestroy(&C_sub); CHKERRQ(ierr);
     if(is_rows) ierr = ISDestroy(&is_rows); CHKERRQ(ierr);
     if(is_cols) ierr = ISDestroy(&is_cols); CHKERRQ(ierr);
 
