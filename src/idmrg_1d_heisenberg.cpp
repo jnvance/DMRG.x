@@ -350,11 +350,13 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         // printf("size: %lu\n", restricted_basis_indices.size());
         if(do_target_Sz){
             ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
+            ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
             // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         } else {
             std::vector<PetscInt> full_idx(M_H);
             for (PetscInt i = 0; i < M_H; ++i) full_idx[i] = i;
             ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
+            ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         }
 
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_CONSTRUCTION)

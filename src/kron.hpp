@@ -8,6 +8,7 @@
 #include <set>
 #include <vector>
 #include <map>
+#include <algorithm> /* std::find */
 
 /* Inspect the timings inside matkron */
 #ifdef __KRON_TIMINGS
@@ -214,6 +215,7 @@ PetscErrorCode MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const
 /* Interface for single-term operation */
 PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat& C);
 
+
 PetscErrorCode MatKronProdSum(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
@@ -223,6 +225,14 @@ PetscErrorCode MatKronProdSum(
 
 
 PetscErrorCode MatKronProdSumIdx(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx);
+
+
+PetscErrorCode MatKronProdSumIdx_copy(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
     const std::vector<Mat>& B,
