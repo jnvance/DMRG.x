@@ -593,6 +593,7 @@ PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat
 }
 
 
+/* FIXME: Add timings later*/
 #undef __FUNCT__
 #define __FUNCT__ "MatKronProdSumIdx_copy"
 PetscErrorCode MatKronProdSumIdx_copy(
@@ -622,6 +623,11 @@ PetscErrorCode MatKronProdSumIdx_copy(
             SETERRQ1(comm,1,"Invalid key: %d", id);
 
     /* Calculate full matrix */
+
+    /*
+        TODO: Create a separate routine to calculate only selected rows of
+        C_temp and rewrite indexing here accordingly
+    */
 
     Mat C_temp = nullptr;
     ierr = MatKronProdSum(a, A, B, C_temp, PETSC_TRUE); CHKERRQ(ierr);
@@ -670,6 +676,9 @@ PetscErrorCode MatKronProdSumIdx_copy(
 
     Mat C_sub;
     ierr = MatGetSubMatrix(C_temp, is_rows, is_cols, MAT_INITIAL_MATRIX, &C_sub); CHKERRQ(ierr);
+
+    /* Destroy C_temp earlier */
+    if(C_temp)  ierr = MatDestroy(&C_temp); CHKERRQ(ierr);
 
     /* Local to global mapping */
 
@@ -759,7 +768,6 @@ PetscErrorCode MatKronProdSumIdx_copy(
 
     /* Free/destroy temporary data structures */
 
-    if(C_temp)  ierr = MatDestroy(&C_temp); CHKERRQ(ierr);
     if(C_sub)   ierr = MatDestroy(&C_sub); CHKERRQ(ierr);
     if(is_rows) ierr = ISDestroy(&is_rows); CHKERRQ(ierr);
     if(is_cols) ierr = ISDestroy(&is_cols); CHKERRQ(ierr);
@@ -1114,7 +1122,7 @@ PetscErrorCode MatKronProdSumIdx(
     PetscInt            ncols_A, ncols_B;
     PetscInt            Arow, Brow, Irow;
 
-    PetscInt        max_ncols_C = N_A[0] * N_B[0]; /* Assumes same size of matrices in A and B */
+    PetscInt        max_ncols_C = idx.size();
     PetscInt        *cols_C;
     PetscScalar     *vals_C;
     ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
@@ -1122,6 +1130,83 @@ PetscErrorCode MatKronProdSumIdx(
 
 
     #if 0
+
+    /*
+        Use MatGetValues instead
+    */
+
+    PetscInt Acol, Bcol, Icol, ncols_C;
+
+    PetscInt *idxm_A, *idxm_B, *idxn_A, *idxn_B;
+    ierr = PetscMalloc1(1,          &idxm_A); CHKERRQ(ierr);
+    ierr = PetscMalloc1(1,          &idxm_B); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C,&idxn_A); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C,&idxn_B); CHKERRQ(ierr);
+
+    PetscScalar *v_A, *v_B, val;
+    ierr = PetscMalloc1(max_ncols_C,&v_A); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C,&v_B); CHKERRQ(ierr);
+
+    /*
+        Prepare column indices idxn for A and B
+        Get only the columns that are needed
+    */
+
+    for (PetscInt Ccol = 0; Ccol < idx.size(); ++Ccol)
+        idxn_A[Ccol] = COL_INV_A(idx[Ccol] / N_B[0]);
+
+    for (PetscInt Ccol = 0; Ccol < idx.size(); ++Ccol)
+        idxn_B[Ccol] = COL_INV_B(idx[Ccol] % N_B[0]);
+
+    for (PetscInt Crow = Istart; Crow < Iend; ++Crow)
+    {
+        Irow = idx[Crow];
+
+        idxm_A[0] = ROW_MAP_A(Irow / M_B[0]); /*Arow*/
+        idxm_B[0] = ROW_MAP_B(Irow % M_B[0]); /*Brow*/
+
+        for (PetscInt i = 0; i < nterms; ++i)
+        {
+
+            KRON_PS_TIMINGS_ACCUM_START(__CALC_VALUES);
+
+            /*
+                m = 1
+                idxm = ROW_MAP_X(Xrow)
+                n = ncols_A, ncols_B;
+            */
+
+            ierr = MatGetValues(submat_A[i], 1, idxm_A, idx.size(), idxn_A, v_A);
+            ierr = MatGetValues(submat_B[i], 1, idxm_B, idx.size(), idxn_B, v_B);
+            ncols_C = 0;
+            for (PetscInt j = 0; j < idx.size(); ++j)
+            {
+                val = a[i] * v_A[j] * v_B[j];
+                if(val!=0.0)
+                {
+                    cols_C[ncols_C] = j;
+                    vals_C[ncols_C] = val;
+                    ++ncols_C;
+                }
+            }
+
+            KRON_PS_TIMINGS_ACCUM_END(__CALC_VALUES);
+
+            KRON_PS_TIMINGS_ACCUM_START(__MATSETVALUES);
+            ierr = MatSetValues(C, 1, &Crow, ncols_C, cols_C, vals_C, ADD_VALUES ); CHKERRQ(ierr);
+            KRON_PS_TIMINGS_ACCUM_END(__MATSETVALUES);
+        }
+    }
+    ierr = PetscFree(idxm_A);
+    ierr = PetscFree(idxm_B);
+    ierr = PetscFree(idxn_A);
+    ierr = PetscFree(idxn_B);
+    ierr = PetscFree(v_A);
+    ierr = PetscFree(v_B);
+
+    #else
+
+    #if 1
 
     /*
         FIXME: Implement lookup from idx
@@ -1260,6 +1345,7 @@ PetscErrorCode MatKronProdSumIdx(
 
     #endif
 
+    #endif
 
 
 
