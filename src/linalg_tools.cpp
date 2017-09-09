@@ -323,6 +323,68 @@ PetscErrorCode VecReshapeToLocalMat(const Vec& vec, Mat& mat, const PetscInt M, 
 
 
 #undef __FUNCT__
+#define __FUNCT__ "LocalVecReshapeToLocalMat"
+PetscErrorCode LocalVecReshapeToLocalMat(
+    const Vec& vec_seq, Mat& mat_seq,
+    const PetscInt M, const PetscInt N,
+    const std::vector<PetscInt> idx)
+{
+    PetscErrorCode ierr = 0;
+
+    /* Checkpoints */
+
+    PetscBool flg;
+    ierr = PetscObjectTypeCompare((PetscObject)vec_seq,VECSEQ,&flg);CHKERRQ(ierr);
+    if(!flg) SETERRQ(PETSC_COMM_SELF,1,"Argument 1 vec_seq must be a sequential vector (VECSEQ) object.");
+
+    if(idx.size()>0 && idx.size() != M*N)
+        SETERRQ2(PETSC_COMM_SELF,1,"Index size and M*N mismatch. Expected M*N size %d. Got %d.",M*N, idx.size());
+
+    PetscScalar *vec_vals;
+    ierr = VecGetArray(vec_seq, &vec_vals); CHKERRQ(ierr);
+    ierr = MatCreateSeqDense(PETSC_COMM_SELF, M, N, NULL, &mat_seq); CHKERRQ(ierr);
+
+    /* Prepare column indices*/
+    PetscInt    *col_idx;
+    ierr = PetscMalloc1(N, &col_idx); CHKERRQ(ierr);
+    for (PetscInt i = 0; i < N; ++i)
+        col_idx[i] = i;
+
+    /* With idx: copy only values of vec_vals indexed by idx in row-order */
+    if(idx.size()>0)
+    {
+        PetscScalar *row_vals;
+        ierr = PetscMalloc1(N, &row_vals); CHKERRQ(ierr);
+        for (PetscInt Irow = 0; Irow < M; ++Irow)
+        {
+            for (PetscInt Icol = 0; Irow < N; ++Irow)
+                row_vals[Icol] = vec_vals[idx[Irow*N + Icol]];
+            ierr = MatSetValues(mat_seq, 1, &Irow, N, col_idx, row_vals, INSERT_VALUES);
+            CHKERRQ(ierr);
+        }
+        ierr = PetscFree(row_vals); CHKERRQ(ierr);
+    }
+    /* Without idx: copy all values of vec_vals in row-order */
+    else
+    {
+        for (PetscInt Irow = 0; Irow < M; ++Irow)
+        {
+            ierr = MatSetValues(mat_seq, 1, &Irow, N, col_idx, &vec_vals[Irow*N], INSERT_VALUES);
+            CHKERRQ(ierr);
+        }
+    }
+
+    ierr = MatAssemblyBegin(mat_seq, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat_seq, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+    ierr = PetscFree(col_idx); CHKERRQ(ierr);
+    ierr = VecRestoreArray(vec_seq, &vec_vals); CHKERRQ(ierr);
+
+    return ierr;
+};
+
+
+#undef __FUNCT__
 #define __FUNCT__ "VecToMatMultHC"
 PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
     const PetscInt M, const PetscInt N, const PetscBool hc_right = PETSC_TRUE)

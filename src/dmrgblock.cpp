@@ -53,10 +53,10 @@ PetscErrorCode DMRGBlock::destroy()
 {
     PetscErrorCode  ierr = 0;
 
-    // All matrices created in init() must be destroyed here
-    ierr = MatDestroy(&H_); CHKERRQ(ierr);
-    ierr = MatDestroy(&Sz_); CHKERRQ(ierr);
-    ierr = MatDestroy(&Sp_); CHKERRQ(ierr);
+    /* All matrices created in init() must be destroyed here */
+    if(H_) ierr = MatDestroy(&H_); CHKERRQ(ierr);
+    if(Sz_) ierr = MatDestroy(&Sz_); CHKERRQ(ierr);
+    if(Sp_) ierr = MatDestroy(&Sp_); CHKERRQ(ierr);
 
     length_ = 0;
     basis_size_ = 0;

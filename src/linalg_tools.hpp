@@ -135,6 +135,15 @@ PetscErrorCode VecReshapeToLocalMat(
 
 
 /**
+    Reshape an \f$ (M \cdot N) \f$-length local vector to an \f$ M \times N \f$ sequential
+    matrix with a full copy on each MPI process.
+ */
+PetscErrorCode LocalVecReshapeToLocalMat(
+    const Vec& vec_seq, Mat& mat, const PetscInt M, const PetscInt N,
+    const std::vector<PetscInt> idx = std::vector<PetscInt>());
+
+
+/**
     Reshapes a vector into a matrix and multiplies the matrix to its own Hermitian conjugate.
 
     @param[in]   vec_r          Real part of the input vector

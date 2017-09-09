@@ -11,7 +11,7 @@
 #include <slepceps.h>
 #include <petscmat.h>
 #include <vector>
-
+#include <unordered_map>
 
 /**
     @addtogroup dmrgblock
@@ -158,6 +158,16 @@ public:
         Keeps track of the Sz sectors
      */
     std::vector<PetscScalar>   basis_sector_array;
+
+    /**
+        Keeps track of the basis in each Sz sector
+     */
+    std::unordered_map<PetscScalar,std::vector<PetscInt>> basis_by_sector;
+
+    /**
+        Keeps track of the basis in each Sz sector
+     */
+    std::unordered_map<PetscScalar, Mat> rho_block_dict;
 
 };
 

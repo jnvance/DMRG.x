@@ -107,6 +107,21 @@ protected:
     PetscBool   parameters_set = PETSC_FALSE;
 
     /**
+        Whether to perform targetting of magnetization sector
+     */
+    PetscBool do_target_Sz = PETSC_FALSE;
+
+    /**
+        Target magnetization
+     */
+    PetscReal target_Sz = 0;
+
+    /**
+        Target magnetization has been set
+     */
+    PetscBool target_Sz_set = PETSC_FALSE;
+
+    /**
         Completed number of steps.
     */
     PetscInt    iter_ = 0;
@@ -252,6 +267,11 @@ public:
         Explicit destructor
      */
     PetscErrorCode destroy();
+
+    /**
+        Set target magnetization
+     */
+    PetscErrorCode SetTargetSz(PetscReal Sz_in, PetscBool do_target_Sz_in);
 
     /**
         Returns the number of sites in the left block

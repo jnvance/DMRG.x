@@ -24,7 +24,7 @@
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG_Heisenberg::SetParameters"
-PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in, PetscReal Mz_in , PetscBool do_target_Sz_in)
+PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_in)
 {
     PetscErrorCode  ierr = 0;
 
@@ -36,9 +36,6 @@ PetscErrorCode iDMRG_Heisenberg::SetParameters(PetscScalar J_in, PetscScalar Jz_
     {
         J = J_in;
         Jz = Jz_in;
-        Mz = Mz_in;
-        do_target_Sz = do_target_Sz_in;
-
         parameters_set = PETSC_TRUE;
     }
 
@@ -242,30 +239,31 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     if (do_target_Sz)
     {
         if(sector_indices.size() > 0) sector_indices.clear();
-        /* Return type: std::map<PetscScalar,std::vector<PetscInt>> */
-        auto sys_enl_basis_by_sector = IndexMap(BlockLeft_.basis_sector_array);
-        auto env_enl_basis_by_sector = IndexMap(BlockRight_.basis_sector_array);
 
-        // auto M_sys_enl = BlockLeft_.basis_size();
+        /* Return type: std::map<PetscScalar,std::vector<PetscInt>> */
+        BlockLeft_.basis_by_sector = IndexMap(BlockLeft_.basis_sector_array);
+        BlockRight_.basis_by_sector = IndexMap(BlockRight_.basis_sector_array);
+        auto& sys_enl_basis_by_sector = BlockLeft_.basis_by_sector;
+        auto& env_enl_basis_by_sector = BlockRight_.basis_by_sector;
+
         auto M_env_enl = BlockRight_.basis_size();
 
-        PetscScalar target_Sz = Mz * (BlockLeft_.length()+BlockRight_.length() + 2);
+        PetscScalar total_Sz = target_Sz * (BlockLeft_.length()+BlockRight_.length() + 2);
 
         for (auto elem: sys_enl_basis_by_sector)
         {
             auto& sys_enl_Sz = elem.first;
             auto& sys_enl_basis_states = elem.second;
-            auto  env_enl_Sz = target_Sz - sys_enl_Sz;
+            auto  env_enl_Sz = total_Sz - sys_enl_Sz;
 
             sector_indices[sys_enl_Sz].reserve(
                 sys_enl_basis_states.size()*env_enl_basis_by_sector[env_enl_Sz].size());
 
-            std::cout << "sys_enl_Sz:  " << sys_enl_Sz << std::endl;
-            std::cout << "env_enl_Sz:  " << env_enl_Sz << std::endl;
+            // std::cout << "sys_enl_Sz:  " << sys_enl_Sz << std::endl;
+            // std::cout << "env_enl_Sz:  " << env_enl_Sz << std::endl;
 
-            if (env_enl_basis_by_sector.find(env_enl_Sz) == env_enl_basis_by_sector.end()){
-            } else {
-                /* found */
+            if (env_enl_basis_by_sector.find(env_enl_Sz) != env_enl_basis_by_sector.end())
+            {
                 for (auto i : sys_enl_basis_states)
                 {
                     auto i_offset = M_env_enl * i;
@@ -279,9 +277,11 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             }
         }
 
-        std::cout << "restricted_basis_indices:  ";
-        for (auto elem: restricted_basis_indices) std::cout << "  " << elem;
-        std::cout << std::endl;
+        if(1){
+            std::cout << "\nrestricted_basis_indices:  ";
+            for (auto elem: restricted_basis_indices) std::cout << "  " << elem;
+            std::cout << "\n" <<std::endl;
+        }
     }
 
     /*
@@ -349,13 +349,15 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
         // printf("size: %lu\n", restricted_basis_indices.size());
         if(do_target_Sz){
-            ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
+            // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
             ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
             // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         } else {
+            // ierr = MatKronProdSum(a, A, B, superblock_H_, PETSC_TRUE);
+
             std::vector<PetscInt> full_idx(M_H);
             for (PetscInt i = 0; i < M_H; ++i) full_idx[i] = i;
-            ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
+            // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
             ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         }
 

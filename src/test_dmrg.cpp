@@ -44,12 +44,14 @@ int main(int argc, char **argv)
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_operators",&do_save_operators,NULL); CHKERRQ(ierr);
 
 
-    PetscPrintf(comm,"%s\n", do_target_Sz ? "TRUE" : "FALSE");
+    // PetscPrintf(comm,"%s\n", do_target_Sz ? "TRUE" : "FALSE");
 
     iDMRG_Heisenberg heis;
 
     heis.init(comm, nsites, mstates);
-    heis.SetParameters(J, Jz, 0.0, do_target_Sz);
+
+    heis.SetParameters(J, Jz);
+    heis.SetTargetSz(0.0, do_target_Sz);
 
     /*
         Timings
@@ -89,6 +91,7 @@ int main(int argc, char **argv)
     FILE *fp;
 
     ierr = PetscFOpen(PETSC_COMM_WORLD, "eigvals.dat", "w", &fp); CHKERRQ(ierr);
+
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
@@ -240,6 +243,7 @@ int main(int argc, char **argv)
     #endif
 
     ierr = PetscFClose(PETSC_COMM_WORLD, fp); CHKERRQ(ierr);
+
     ierr = heis.destroy(); CHKERRQ(ierr);
 
     SlepcFinalize();

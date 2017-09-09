@@ -83,6 +83,16 @@ PetscErrorCode iDMRG::destroy()
     return ierr;
 }
 
+PetscErrorCode iDMRG::SetTargetSz(PetscReal Sz_in, PetscBool do_target_Sz_in)
+{
+    PetscErrorCode ierr = 0;
+    if(target_Sz_set==PETSC_TRUE)
+        SETERRQ(comm_,1,"Target Sz has been set.");
+    target_Sz = Sz_in;
+    do_target_Sz = do_target_Sz_in;
+    target_Sz_set=PETSC_TRUE;
+    return ierr;
+}
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG::CheckSetParameters"
@@ -244,31 +254,97 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     if(groundstate_solved_ == PETSC_FALSE)
         SETERRQ(comm_, 1, "Ground state not yet solved.");
 
-    /*
-        Collect information regarding the basis size of the
-        left and right blocks
-     */
-    PetscInt size_left, size_right;
-    ierr = MatGetSize(BlockLeft_.H(), &size_left, nullptr); CHKERRQ(ierr);
-    ierr = MatGetSize(BlockRight_.H(), &size_right, nullptr); CHKERRQ(ierr);
+    if (do_target_Sz) {
 
-    /*
-        Collect entire groundstate vector to all processes
-     */
-    ierr = VecReshapeToLocalMat(gsv_r_, gsv_mat_seq, size_left, size_right); CHKERRQ(ierr);
-    ierr = MatMultSelfHC(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatMultSelfHC(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+        // std::map<PetscInt, Mat> rho_block_dict;
+
+        /* Clear rho_block_dict for both blocks */
+        if(BlockLeft_.rho_block_dict.size())
+            for (auto item: BlockLeft_.rho_block_dict)
+                MatDestroy(&item.second);
+
+        if(BlockRight_.rho_block_dict.size())
+            for (auto item: BlockRight_.rho_block_dict)
+                MatDestroy(&item.second);
+
+        /* Using VecScatter gather all elements of gsv */
+        Vec         vec = gsv_r_;
+        Vec         vec_seq;
+        VecScatter  ctx;
+
+        ierr = VecScatterCreateToAll(vec, &ctx, &vec_seq); CHKERRQ(ierr);
+        ierr = VecScatterBegin(ctx, vec, vec_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+        ierr = VecScatterEnd(ctx, vec, vec_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+
+        PetscInt size_left, size_right;
+
+        Mat psi0_sector = nullptr;
+
+        for(auto elem: sector_indices)
+        {
+            auto& sys_enl_Sz = elem.first;
+            auto& indices    = elem.second;
+
+            if(indices.size() > 0)
+            {
+                auto& sys_enl_basis_by_sector = BlockLeft_.basis_by_sector;
+                auto& env_enl_basis_by_sector = BlockRight_.basis_by_sector;
+                size_left  = sys_enl_basis_by_sector[sys_enl_Sz].size();
+                size_right = indices.size() / size_left;
+
+                if(size_left*size_right != indices.size())
+                    SETERRQ(comm_, 1, "Reshape dimension mismatch.");
+
+                ierr = LocalVecReshapeToLocalMat(
+                    vec_seq, psi0_sector, size_left, size_right, indices); CHKERRQ(ierr);
+
+                ierr = MatMultSelfHC(psi0_sector, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+                ierr = MatMultSelfHC(psi0_sector, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+
+                BlockLeft_.rho_block_dict[sys_enl_Sz] = dm_left;
+                BlockRight_.rho_block_dict[sys_enl_Sz] = dm_right;
+
+                dm_left = nullptr;
+                dm_right = nullptr;
+
+                if(psi0_sector) {
+                    ierr = MatDestroy(&psi0_sector); CHKERRQ(ierr);
+                    psi0_sector = nullptr;
+                }
+            }
+        }
+
+        ierr = VecScatterDestroy(&ctx); CHKERRQ(ierr);
+        ierr = VecDestroy(&vec_seq); CHKERRQ(ierr);
+
+    } else {
+        /*
+            Collect information regarding the basis size of the
+            left and right blocks
+         */
+        PetscInt size_left, size_right;
+        ierr = MatGetSize(BlockLeft_.H(), &size_left, nullptr); CHKERRQ(ierr);
+        ierr = MatGetSize(BlockRight_.H(), &size_right, nullptr); CHKERRQ(ierr);
+
+        /*
+            Collect entire groundstate vector to all processes
+         */
+        ierr = VecReshapeToLocalMat(gsv_r_, gsv_mat_seq, size_left, size_right); CHKERRQ(ierr);
+        ierr = MatMultSelfHC(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+        ierr = MatMultSelfHC(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+
+        /*
+            Destroy temporary matrices
+        */
+        if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
+
+    }
 
     /*
         Toggle switches
     */
     groundstate_solved_ = PETSC_FALSE;
     dm_solved = PETSC_TRUE;
-
-    /*
-        Destroy temporary matrices
-    */
-    if (gsv_mat_seq) MatDestroy(&gsv_mat_seq); gsv_mat_seq = nullptr;
 
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
@@ -283,44 +359,108 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__)
 
-    if(!(dm_left && dm_right && dm_solved))
-        SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
-    PetscScalar trunc_error_left, trunc_error_right;
-    FILE *fp_left = nullptr, *fp_right = nullptr;
+    if (do_target_Sz) {
 
-    #ifdef __TESTING
-        char filename[PETSC_MAX_PATH_LEN];
-        sprintf(filename,"data/dm_left_singularvalues_%06d.dat",iter());
-        ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_left); CHKERRQ(ierr);
-        sprintf(filename,"data/dm_right_singularvalues_%06d.dat",iter());
-        ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_right); CHKERRQ(ierr);
-    #endif
+        /* Checkpoint */
+        if(!dm_solved)
+            SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
+        if(BlockLeft_.rho_block_dict.size()==0)
+            SETERRQ(comm_, 1, "No density matrices for left block.");
+        if(BlockLeft_.rho_block_dict.size()==0)
+            SETERRQ(comm_, 1, "No density matrices for right block.");
 
-    #define __GET_SVD "    GetSVD"
-    DMRG_SUB_TIMINGS_START(__GET_SVD)
+        /*
+            # Diagonalize each block of the reduced density matrix and sort the
+            # eigenvectors by eigenvalue.
+            possible_eigenstates = [] # vector of tupled objects
+                # may be split into separate vectors
 
-    PetscInt M_left, M_right;
-    ierr = MatGetSize(dm_left, &M_left, nullptr); CHKERRQ(ierr);
-    ierr = MatGetSize(dm_right, &M_right, nullptr); CHKERRQ(ierr);
-    M_left = std::min(M_left, mstates_);
-    M_right = std::min(M_right, mstates_);
+            for Sz_sector, rho_block in rho_block_dict.items():
+                evals, evecs = np.linalg.eigh(rho_block)
+                current_sector_basis = sys_enl_basis_by_sector[Sz_sector]
 
-    #ifdef __SVD_USE_EPS
-        ierr = EPSLargestEigenpairs(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
-        ierr = EPSLargestEigenpairs(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
-    #else
-        ierr = SVDLargestStates(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
-        ierr = SVDLargestStates(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
-    #endif
+                for eval, evec in zip(evals, evecs.transpose()):
+                    possible_eigenstates.append((eval, evec, Sz_sector, current_sector_basis))
+            possible_eigenstates.sort(reverse=True, key=lambda x: x[0])  # largest eigenvalue first
+         */
+
+        /* (eval, evec, Sz_sector, current_sector_basis) */
+
+        #ifdef __SVD_USE_EPS
+            #define SVD_OBJECT EPS
+        #else
+            #define SVD_OBJECT SVD
+        #endif
+
+        /*
+            Define the tuple type representing a possible eigenstate
+            0 - PetscScalar - eigenvalue
+            1 - SVD_OBJECT - EPS or SVD object used for getting the eigenstate
+            2 - PetscInt - index of eigenstate in SVD_OBJECT
+            3 - std::vector<PetscInt> - current sector basis from basis by sector
+        */
+        typedef std::tuple<PetscScalar, SVD_OBJECT, PetscInt, std::vector<PetscInt>> eigenstate_t;
+
+        #undef SVD_OBJECT
+
+        /* TODO: Put in a separate function */
+        std::vector< eigenstate_t >  possible_eigenstates;
+        for (auto elem: BlockLeft_.rho_block_dict)
+        {
+            const PetscScalar&  Sz_sector = elem.first;
+            Mat&                rho_block = elem.second;
+
+            /* Perform SVD on each rho_block*/
+            #ifdef __SVD_USE_EPS
+
+            #else
+
+            #endif
+
+
+        }
+
+    } else {
+
+        if(!(dm_left && dm_right && dm_solved))
+            SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
+
+        PetscScalar trunc_error_left, trunc_error_right;
+        FILE *fp_left = nullptr, *fp_right = nullptr;
+
+        #ifdef __TESTING
+            char filename[PETSC_MAX_PATH_LEN];
+            sprintf(filename,"data/dm_left_singularvalues_%06d.dat",iter());
+            ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_left); CHKERRQ(ierr);
+            sprintf(filename,"data/dm_right_singularvalues_%06d.dat",iter());
+            ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_right); CHKERRQ(ierr);
+        #endif
+
+        #define __GET_SVD "    GetSVD"
+        DMRG_SUB_TIMINGS_START(__GET_SVD)
+
+        PetscInt M_left, M_right;
+        ierr = MatGetSize(dm_left, &M_left, nullptr); CHKERRQ(ierr);
+        ierr = MatGetSize(dm_right, &M_right, nullptr); CHKERRQ(ierr);
+        M_left = std::min(M_left, mstates_);
+        M_right = std::min(M_right, mstates_);
+
+        #ifdef __SVD_USE_EPS
+            ierr = EPSLargestEigenpairs(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
+            ierr = EPSLargestEigenpairs(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+        #else
+            ierr = SVDLargestStates(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
+            ierr = SVDLargestStates(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+        #endif
+
+        #ifdef __TESTING
+            ierr = PetscFClose(PETSC_COMM_WORLD, fp_left); CHKERRQ(ierr);
+            ierr = PetscFClose(PETSC_COMM_WORLD, fp_right); CHKERRQ(ierr);
+        #endif
+    }
 
     DMRG_SUB_TIMINGS_END(__GET_SVD)
-
-    #ifdef __TESTING
-        ierr = PetscFClose(PETSC_COMM_WORLD, fp_left); CHKERRQ(ierr);
-        ierr = PetscFClose(PETSC_COMM_WORLD, fp_right); CHKERRQ(ierr);
-    #endif
-
 
     #ifdef __PRINT_TRUNCATION_ERROR
         ierr = PetscPrintf(comm_,
