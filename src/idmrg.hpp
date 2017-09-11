@@ -4,7 +4,9 @@
 #include <slepceps.h>
 #include <petsctime.h>
 #include "dmrgblock.hpp"
+#include <map>
 #include <unordered_map>
+#include <algorithm>
 
 #ifdef __TIMINGS
     #define DMRG_TIMINGS_START(FUNC_NAME) \
@@ -57,6 +59,13 @@
     #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
 #endif
 
+
+#ifdef __SVD_USE_EPS
+    #define SVD_OBJECT EPS
+    SETERRQ(comm_, 1, "GetRotationMatrices: Not implemented with __SVD_USE_EPS flag.");
+#else
+    #define SVD_OBJECT SVD
+#endif
 
 /**
     @defgroup   idmrg   iDMRG

@@ -321,7 +321,7 @@ PetscErrorCode VecReshapeToLocalMat(const Vec& vec, Mat& mat, const PetscInt M, 
     return ierr;
 };
 
-
+/* FIXME */
 #undef __FUNCT__
 #define __FUNCT__ "LocalVecReshapeToLocalMat"
 PetscErrorCode LocalVecReshapeToLocalMat(
@@ -357,7 +357,7 @@ PetscErrorCode LocalVecReshapeToLocalMat(
         ierr = PetscMalloc1(N, &row_vals); CHKERRQ(ierr);
         for (PetscInt Irow = 0; Irow < M; ++Irow)
         {
-            for (PetscInt Icol = 0; Irow < N; ++Irow)
+            for (PetscInt Icol = 0; Icol < N; ++Icol)
                 row_vals[Icol] = vec_vals[idx[Irow*N + Icol]];
             ierr = MatSetValues(mat_seq, 1, &Irow, N, col_idx, row_vals, INSERT_VALUES);
             CHKERRQ(ierr);
@@ -900,4 +900,102 @@ std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<Petsc
         map[array[i]].push_back(i);
 
     return map;
+}
+
+
+#undef __FUNCT__
+#define __FUNCT__ "MatGetSVD"
+PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScalar& error, FILE *fp)
+{
+    PetscErrorCode  ierr = 0;
+
+    MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
+    PetscBool assembled;
+    ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
+    if (assembled == PETSC_FALSE){
+        ierr = MatAssemblyBegin(mat_in, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(mat_in, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    PetscInt mat_in_nrows, mat_in_ncols;
+    ierr = MatGetSize(mat_in, &mat_in_nrows, &mat_in_ncols);
+    if(mat_in_nrows != mat_in_ncols)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Matrix dimension mismatch. "
+                         "Number of rows (%d) is not equal to number of columns (%d).",
+                         mat_in_nrows, mat_in_ncols);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    svd = nullptr;
+    ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
+    ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
+    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
+    ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
+    // ierr = SVDSetType(svd, SVDLAPACK); CHKERRQ(ierr);
+    ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = SVDSetWhichSingularTriplets(svd, SVD_LARGEST); CHKERRQ(ierr);
+    // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
+
+    #define __SVD_SOLVE "        SVDSolve"
+    LINALG_TOOLS_TIMINGS_START(__SVD_SOLVE)
+
+    ierr = SVDSolve(svd);CHKERRQ(ierr);
+
+    LINALG_TOOLS_TIMINGS_END(__SVD_SOLVE)
+    #undef __SVD_SOLVE
+
+    #define __SVD_LOAD  "        SVDLoad"
+    LINALG_TOOLS_TIMINGS_START(__SVD_LOAD)
+
+
+    ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
+    if (nconv < mat_in_nrows)
+    {
+        char errormsg[80];
+        sprintf(errormsg,"Number of converged singular values (%d) is less than requested (%d).", nconv, mat_in_nrows);
+        SETERRQ(comm, 1, errormsg);
+    }
+
+    #ifdef __PRINT_SVD_CONVERGENCE
+        PetscPrintf(comm, "%12sSVD requested mstates: %d\n","",mstates);
+        PetscPrintf(comm, "%12sSVD no of conv states: %d\n","",nconv);
+    #endif
+
+    #ifdef __PRINT_SVD_LARGEST
+        SVDType        type;
+        PetscReal      tol;
+        PetscInt       maxit,its,nsv;
+        PetscBool      terse;
+
+        ierr = SVDGetIterationNumber(svd,&its);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of iterations of the method: %D\n",its);CHKERRQ(ierr);
+
+        ierr = SVDGetType(svd,&type);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Solution method: %s\n\n",type);CHKERRQ(ierr);
+        ierr = SVDGetDimensions(svd,&nsv,NULL,NULL);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of requested singular values: %D\n",nsv);CHKERRQ(ierr);
+        ierr = SVDGetTolerances(svd,&tol,&maxit);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);CHKERRQ(ierr);
+        /*
+            Show detailed info unless -terse option is given by user
+         */
+        ierr = PetscOptionsHasName(NULL,NULL,"-terse",&terse);CHKERRQ(ierr);
+        if (terse) {
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,NULL);CHKERRQ(ierr);
+        } else {
+            ierr = PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);CHKERRQ(ierr);
+            ierr = SVDReasonView(svd,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+        }
+    #endif
+
+
+
+    LINALG_TOOLS_TIMINGS_END(__SVD_LOAD)
+
+    // ierr = SVDDestroy(&svd);
+    return ierr;
 }

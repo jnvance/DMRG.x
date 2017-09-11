@@ -193,6 +193,12 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
 PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
 
 /**
+
+ */
+PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScalar& error, FILE *fp);
+
+
+/**
     Takes the first mstates eigenpairs of mat_in with highest eigenvalues and calculates it with eps,
     places them as columns of a matrix, and calculates the truncation error.
 

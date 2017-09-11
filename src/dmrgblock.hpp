@@ -136,7 +136,7 @@ public:
     /**
         Returns the number of states used to represent the operators
      */
-    PetscInt basis_size()
+    PetscInt basis_size() const
     {
         return basis_size_;
     }
@@ -157,7 +157,7 @@ public:
     /**
         Keeps track of the Sz sectors
      */
-    std::vector<PetscScalar>   basis_sector_array;
+    std::vector<PetscScalar> basis_sector_array;
 
     /**
         Keeps track of the basis in each Sz sector
