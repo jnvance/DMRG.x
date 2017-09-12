@@ -33,14 +33,18 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
 
     sector_indices = {};
 
-    #define PRINT_VEC(stdvectorpetscscalar) \
-        for (std::vector<PetscScalar>::const_iterator i = stdvectorpetscscalar.begin(); \
-            i != stdvectorpetscscalar.end(); ++i) printf("%f\n",PetscRealPart(*i)); \
-            printf("\n");
+    #ifdef __TESTING
+        #define PRINT_VEC(stdvectorpetscscalar) \
+            for (std::vector<PetscScalar>::const_iterator i = stdvectorpetscscalar.begin(); \
+                i != stdvectorpetscscalar.end(); ++i) printf("%f\n",PetscRealPart(*i)); \
+                printf("\n");
+    #else
+        #define PRINT_VEC(stdvectorpetscscalar)
+    #endif
 
-    PRINT_VEC(single_site_sectors)
-    PRINT_VEC(BlockLeft_.basis_sector_array)
-    PRINT_VEC(BlockRight_.basis_sector_array)
+    // PRINT_VEC(single_site_sectors)
+    // PRINT_VEC(BlockLeft_.basis_sector_array)
+    // PRINT_VEC(BlockRight_.basis_sector_array)
 
     #undef PRINT_VEC
 
@@ -60,19 +64,21 @@ PetscErrorCode iDMRG::destroy()
 {
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
-
-    /* Destroy block objects */
+    /*
+     * Destroy block objects
+     */
     ierr = BlockLeft_.destroy(); CHKERRQ(ierr);
     ierr = BlockRight_.destroy(); CHKERRQ(ierr);
-
-    /* Destroy single-site operators */
+    /*
+     * Destroy single-site operators
+     */
     LINALG_TOOLS__MATDESTROY(eye1_);
     LINALG_TOOLS__MATDESTROY(Sz1_);
     LINALG_TOOLS__MATDESTROY(Sp1_);
     LINALG_TOOLS__MATDESTROY(Sm1_);
     LINALG_TOOLS__MATDESTROY(superblock_H_);
-
-    /* Close log files after ending timings otherwise,
+    /*
+     * Close log files after ending timings otherwise,
      * this causes a segmentation fault
      */
     #ifdef __TIMINGS

@@ -259,9 +259,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             sector_indices[sys_enl_Sz].reserve(
                 sys_enl_basis_states.size()*env_enl_basis_by_sector[env_enl_Sz].size());
 
-            // std::cout << "sys_enl_Sz:  " << sys_enl_Sz << std::endl;
-            // std::cout << "env_enl_Sz:  " << env_enl_Sz << std::endl;
-
             if (env_enl_basis_by_sector.find(env_enl_Sz) != env_enl_basis_by_sector.end())
             {
                 for (auto i : sys_enl_basis_states)
