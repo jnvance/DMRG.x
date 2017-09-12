@@ -81,11 +81,12 @@ PetscErrorCode iDMRG::destroy()
      * Close log files after ending timings otherwise,
      * this causes a segmentation fault
      */
+    DMRG_TIMINGS_END(__FUNCT__);
+
     #ifdef __TIMINGS
         ierr = PetscFClose(PETSC_COMM_WORLD, fp_timings); CHKERRQ(ierr);
     #endif
 
-    DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
 
