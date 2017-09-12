@@ -231,6 +231,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     Mat eye_R = nullptr;
     Mat Sm_L = nullptr;
     Mat Sm_R = nullptr;
+
+    #define BUILD_BASIS "    Building of restricted basis and misc"
+    DMRG_SUB_TIMINGS_START(BUILD_BASIS)
+
     /*
         Build a restricted basis of states
     */
@@ -324,7 +328,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     /*
         Do preallocation at each iteration
     */
-    // prealloc = PETSC_TRUE;
+    prealloc = PETSC_TRUE;
 
     if(prealloc && superblock_H_)
     {
@@ -333,6 +337,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         superblock_set_=PETSC_FALSE;
         PetscPrintf(comm_, "Prealloc H\n");
     }
+
+    DMRG_SUB_TIMINGS_END(BUILD_BASIS)
+
     /*
         Construct the Hamiltonian matrix
     */
