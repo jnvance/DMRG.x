@@ -609,6 +609,8 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__)
 
+    #define __GET_SVD "    GetSVD"
+
     if (do_target_Sz) {
 
         /* Checkpoint */
@@ -619,9 +621,13 @@ PetscErrorCode iDMRG::GetRotationMatrices()
         if(BlockLeft_.rho_block_dict.size()==0)
             SETERRQ(comm_, 1, "No density matrices for right block.");
 
+        DMRG_SUB_TIMINGS_START(__GET_SVD)
+
         PetscReal truncation_error;
         ierr = GetRotationMatrices_targetSz(mstates_, BlockLeft_, U_left_, truncation_error); CHKERRQ(ierr);
         ierr = GetRotationMatrices_targetSz(mstates_, BlockRight_, U_right_, truncation_error); CHKERRQ(ierr);
+
+        DMRG_SUB_TIMINGS_END(__GET_SVD)
 
         /* Clear rho_block_dict for both blocks */
         if(BlockLeft_.rho_block_dict.size())
@@ -651,14 +657,13 @@ PetscErrorCode iDMRG::GetRotationMatrices()
             ierr = PetscFOpen(PETSC_COMM_WORLD, filename, "w", &fp_right); CHKERRQ(ierr);
         #endif
 
-        #define __GET_SVD "    GetSVD"
-        DMRG_SUB_TIMINGS_START(__GET_SVD)
-
         PetscInt M_left, M_right;
         ierr = MatGetSize(dm_left, &M_left, nullptr); CHKERRQ(ierr);
         ierr = MatGetSize(dm_right, &M_right, nullptr); CHKERRQ(ierr);
         M_left = std::min(M_left, mstates_);
         M_right = std::min(M_right, mstates_);
+
+        DMRG_SUB_TIMINGS_START(__GET_SVD)
 
         #ifdef __SVD_USE_EPS
             ierr = EPSLargestEigenpairs(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
@@ -668,13 +673,13 @@ PetscErrorCode iDMRG::GetRotationMatrices()
             ierr = SVDLargestStates(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
         #endif
 
+        DMRG_SUB_TIMINGS_END(__GET_SVD)
+
         #ifdef __TESTING
             ierr = PetscFClose(PETSC_COMM_WORLD, fp_left); CHKERRQ(ierr);
             ierr = PetscFClose(PETSC_COMM_WORLD, fp_right); CHKERRQ(ierr);
         #endif
     }
-
-    DMRG_SUB_TIMINGS_END(__GET_SVD)
 
     #ifdef __PRINT_TRUNCATION_ERROR
         ierr = PetscPrintf(comm_,

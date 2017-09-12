@@ -233,7 +233,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     Mat Sm_R = nullptr;
     /*
         Build a restricted basis of states
-
     */
     std::vector<PetscInt> restricted_basis_indices = {};
     if (do_target_Sz)
