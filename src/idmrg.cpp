@@ -256,8 +256,6 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 
     if (do_target_Sz) {
 
-        // std::map<PetscInt, Mat> rho_block_dict;
-
         /* Clear rho_block_dict for both blocks */
         if(BlockLeft_.rho_block_dict.size())
             for (auto item: BlockLeft_.rho_block_dict)
@@ -266,6 +264,9 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
         if(BlockRight_.rho_block_dict.size())
             for (auto item: BlockRight_.rho_block_dict)
                 MatDestroy(&item.second);
+
+        BlockLeft_.rho_block_dict.clear();
+        BlockRight_.rho_block_dict.clear();
 
         /* Using VecScatter gather all elements of gsv */
         Vec         vec = gsv_r_;
@@ -276,21 +277,26 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
         ierr = VecScatterBegin(ctx, vec, vec_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
         ierr = VecScatterEnd(ctx, vec, vec_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
 
-        PetscInt size_left, size_right;
+        PetscInt size_left, size_right, size_right2;
 
         Mat psi0_sector = nullptr;
 
         for(auto elem: sector_indices)
         {
             const PetscScalar&      sys_enl_Sz = elem.first;
+            const PetscScalar       env_enl_Sz = target_Sz - sys_enl_Sz;
             std::vector<PetscInt>&  indices    = elem.second;
 
             if(indices.size() > 0)
             {
                 auto& sys_enl_basis_by_sector = BlockLeft_.basis_by_sector;
-                // auto& env_enl_basis_by_sector = BlockRight_.basis_by_sector;
+                auto& env_enl_basis_by_sector = BlockRight_.basis_by_sector;
                 size_left  = sys_enl_basis_by_sector[sys_enl_Sz].size();
                 size_right = indices.size() / size_left;
+                size_right2= env_enl_basis_by_sector[target_Sz - sys_enl_Sz].size();
+
+                if(size_right != size_right2)
+                    SETERRQ(comm_, 1, "Right block dimension mismatch.");
 
                 if(size_left*size_right != indices.size())
                     SETERRQ(comm_, 1, "Reshape dimension mismatch.");
@@ -302,7 +308,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
                 ierr = MatMultSelfHC(psi0_sector, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
                 BlockLeft_.rho_block_dict[sys_enl_Sz] = dm_left;
-                BlockRight_.rho_block_dict[sys_enl_Sz] = dm_right;
+                BlockRight_.rho_block_dict[env_enl_Sz] = dm_right;
 
                 dm_left = nullptr;
                 dm_right = nullptr;
@@ -386,8 +392,8 @@ PetscErrorCode GetRotationMatrices_targetSz(
     const std::unordered_map<PetscScalar,std::vector<PetscInt>>&
         sys_enl_basis_by_sector = block.basis_by_sector;
 
-    std::vector< SVD_OBJECT >   svd_list;
-    std::vector< Vec >          vec_list;
+    std::vector< SVD_OBJECT >   svd_list(block.rho_block_dict.size());
+    std::vector< Vec >          vec_list(block.rho_block_dict.size());
     std::vector< eigenstate_t > possible_eigenstates;
 
     /* Diagonalize each block of the reduced density matrix */
@@ -408,14 +414,20 @@ PetscErrorCode GetRotationMatrices_targetSz(
         ierr = MatGetSVD(rho_block, svd, nconv, error, NULL); CHKERRQ(ierr);
 
         /* Dump svd into map */
-        svd_list.push_back(svd);
+        svd_list[counter] = svd;
 
         /* Create corresponding vector for later use */
         ierr = MatCreateVecs(rho_block, &Vr, nullptr); CHKERRQ(ierr);
-        vec_list.push_back(Vr);
+        vec_list[counter] = Vr;
 
         /* Get current sector basis indices */
         std::vector<PetscInt> current_sector_basis = sys_enl_basis_by_sector.at(Sz_sector);
+
+        /* Verify that sizes match */
+        PetscInt vec_size;
+        ierr = VecGetSize(Vr, &vec_size); CHKERRQ(ierr);
+        if(vec_size!=current_sector_basis.size())
+            SETERRQ2(comm,1,"Vector size mismatch. Expected %d from current sector basis. Got %d from Vec.",current_sector_basis.size(),vec_size);
 
         /* Loop through the eigenstates and dump as tuple to vector */
         for (PetscInt svd_id = 0; svd_id < nconv; ++svd_id)
@@ -424,9 +436,11 @@ PetscErrorCode GetRotationMatrices_targetSz(
             ierr = SVDGetSingularTriplet(svd, svd_id, &sigma, nullptr, nullptr); CHKERRQ(ierr);
             eigenstate_t tuple(sigma, counter, svd_id, Sz_sector, current_sector_basis);
             possible_eigenstates.push_back(tuple);
+
         }
 
         svd = nullptr;
+        Vr = nullptr;
         ++counter;
     }
 
@@ -488,6 +502,8 @@ PetscErrorCode GetRotationMatrices_targetSz(
         PetscInt    svd_id    = std::get<2>(tuple);
         PetscScalar Sz_sector = std::get<3>(tuple);
         std::vector<PetscInt>&  current_sector_basis = std::get<4>(tuple);
+
+        // PetscPrintf(comm, "Sigma: %f\n",sigma);
 
         sum_sigma += sigma;
 
@@ -599,6 +615,18 @@ PetscErrorCode iDMRG::GetRotationMatrices()
         PetscReal truncation_error;
         ierr = GetRotationMatrices_targetSz(mstates_, BlockLeft_, U_left_, truncation_error); CHKERRQ(ierr);
         ierr = GetRotationMatrices_targetSz(mstates_, BlockRight_, U_right_, truncation_error); CHKERRQ(ierr);
+
+        /* Clear rho_block_dict for both blocks */
+        if(BlockLeft_.rho_block_dict.size())
+            for (auto item: BlockLeft_.rho_block_dict)
+                MatDestroy(&item.second);
+
+        if(BlockRight_.rho_block_dict.size())
+            for (auto item: BlockRight_.rho_block_dict)
+                MatDestroy(&item.second);
+
+        BlockLeft_.rho_block_dict.clear();
+        BlockRight_.rho_block_dict.clear();
 
     } else {
 

@@ -277,11 +277,11 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
             }
         }
 
-        if(1){
+        #if 0
             std::cout << "\nrestricted_basis_indices:  ";
             for (auto elem: restricted_basis_indices) std::cout << "  " << elem;
             std::cout << "\n" <<std::endl;
-        }
+        #endif
     }
 
     /*
@@ -328,7 +328,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     /*
         Do preallocation at each iteration
     */
-    prealloc = PETSC_TRUE;
+    // prealloc = PETSC_TRUE;
+
     if(prealloc && superblock_H_)
     {
         ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
@@ -349,16 +350,14 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
         // printf("size: %lu\n", restricted_basis_indices.size());
         if(do_target_Sz){
-            // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
             ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
-            // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         } else {
-            // ierr = MatKronProdSum(a, A, B, superblock_H_, PETSC_TRUE);
+            ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc);
 
-            std::vector<PetscInt> full_idx(M_H);
-            for (PetscInt i = 0; i < M_H; ++i) full_idx[i] = i;
+            // std::vector<PetscInt> full_idx(M_H);
+            // for (PetscInt i = 0; i < M_H; ++i) full_idx[i] = i;
             // ierr = MatKronProdSumIdx(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
-            ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
+            // ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, full_idx); CHKERRQ(ierr);
         }
 
     DMRG_SUB_TIMINGS_END(SUPERBLOCK_CONSTRUCTION)
