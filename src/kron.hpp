@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 #include <algorithm> /* std::find */
+#include <unordered_set>
 
 /* Inspect the timings inside matkron */
 #ifdef __KRON_TIMINGS
