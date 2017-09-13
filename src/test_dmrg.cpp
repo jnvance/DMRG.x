@@ -56,21 +56,19 @@ int main(int argc, char **argv)
     char scalar_type[80];
     sprintf(scalar_type, (petsc_use_complex == PETSC_TRUE) ? "COMPLEX" : "REAL");
 
-    ierr = PetscPrintf(comm,   "\n"
+    ierr = PetscPrintf(comm,
                         "iDMRG of the 1D Heisenberg model\n"
-                        "J = %f    Jz = %f\n"
+                        "Coupling J              : %-f\n"
+                        "Anisotropy Jz           : %-f\n"
                         "PetscScalar type        : %-s\n"
                         "Target number of sites  : %-d\n"
                         "Number of states to keep: %-d\n"
                         "Number of MPI processes : %-d\n"
-                        "Do target magnetization : %-s\n",
+                        "Do target magnetization : %-s\n"
+                        "Target magnetization    : %-f\n"
+                        "\n",
                         J, Jz, scalar_type, nsites, mstates, nprocs,
-                        do_target_Sz==PETSC_TRUE ? "yes" : "no" ); CHKERRQ(ierr);
-
-    if(do_target_Sz==PETSC_TRUE) ierr = PetscPrintf(comm,
-                        "Target magnetization    : %-f\n", target_Sz);
-
-    ierr = PetscPrintf(comm,"\n");
+                        do_target_Sz==PETSC_TRUE ? "yes" : "no", target_Sz); CHKERRQ(ierr);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
             "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"
