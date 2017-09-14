@@ -148,7 +148,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     /*
         If compatible, use previously solved ground state vector as initial guess
      */
-    if (gsv_r_ && superblock_H_ && ntruncations_ > 1)
+    if ((!do_target_Sz) && gsv_r_ && superblock_H_ && ntruncations_ > 1)
     {
         PetscInt gsv_size, superblock_H_size;
 
