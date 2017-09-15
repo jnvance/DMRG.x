@@ -351,7 +351,8 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         std::vector<Mat>            B = {eye_R, H_R,   Sz_R, Sm_R, Sp_R};
 
         if(do_target_Sz){
-            ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
+            // ierr = MatKronProdSumIdx_copy(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
+            ierr = MatKronProdSumIdx(a, A, B, superblock_H_, restricted_basis_indices); CHKERRQ(ierr);
         } else {
             ierr = MatKronProdSum(a, A, B, superblock_H_, prealloc);
         }

@@ -1263,7 +1263,7 @@ PetscErrorCode MatKronProdSumIdx_copy(
 
 #undef __FUNCT__
 #define __FUNCT__ "MatKronProdSumIdx"
-PetscErrorCode MatKronProdSumIdx(
+PetscErrorCode MatKronProdSumIdx_1(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
     const std::vector<Mat>& B,
@@ -1866,6 +1866,101 @@ PetscErrorCode MatKronProdSumIdx(
 
     PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(C);
+
+    return ierr;
+}
+
+
+/*
+ *  Activate MAT_IGNORE_ZERO_ENTRIES
+ *  Options:
+ *  1.  Construct selected full matrix rows in correct location
+ *      Use MatGetValues on to put into correct location
+ *
+ */
+PetscErrorCode MatKronProdSumIdx_2(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx)
+{
+    PetscErrorCode ierr = 0;
+
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
+    /*
+        Get information from MPI
+    */
+    PetscMPIInt     nprocs, rank;
+    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+    /*
+        Perform initial checks and get sizes
+    */
+    std::vector<PetscInt>   M_A, N_A, M_B, N_B;
+    PetscInt                nterms, M_C, N_C;
+    ierr = InitialChecks(a,A,B,C,comm,nterms,M_A,N_A,M_B,N_B,M_C,N_C); CHKERRQ(ierr);
+    /*
+        Determine final sizes based on desired indices
+    */
+    PetscInt M_C_final = idx.size();
+    PetscInt N_C_final = idx.size();
+    /*
+        Guess the local ownership of resultant matrix C
+    */
+    PetscInt remrows = M_C_final % nprocs;
+    PetscInt locrows = M_C_final / nprocs;
+    PetscInt Istart = locrows * rank;
+
+    if (rank < remrows){
+        locrows += 1;
+        Istart += rank;
+    } else {
+        Istart += remrows;
+    }
+
+    PetscInt Iend = Istart + locrows;
+    /*
+        Determine which rows of idx are locally owned
+    */
+    std::vector<PetscInt> rowsC_local(locrows);
+    for (PetscInt i = Istart; i < Iend; ++i)
+        rowsC_local[i-Istart] = idx[i];
+    /*
+        Determine which rows of A and B to take and populate corresponding arrays
+    */
+    std::vector<PetscInt> rowsA_local(locrows);
+    std::vector<PetscInt> rowsB_local(locrows);
+
+    for (PetscInt i = Istart; i < Iend; ++i)
+        rowsA_local[i-Istart] = idx[i] / M_B[0];
+
+    for (PetscInt i = Istart; i < Iend; ++i)
+        rowsB_local[i-Istart] = idx[i] % M_B[0];
+
+    KRON_TIMINGS_END(__FUNCT__);
+
+    return ierr;
+}
+
+
+PetscErrorCode MatKronProdSumIdx(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx)
+{
+    PetscErrorCode ierr = 0;
+
+    // ierr = MatKronProdSumIdx_1(a, A, B, C, idx); CHKERRQ(ierr);
+    // ierr = MatKronProdSumIdx_2(a, A, B, C, idx); CHKERRQ(ierr);
+
+    ierr = MatKronProdSumIdx_copy(a, A, B, C, idx); CHKERRQ(ierr);
+
+    if (!C) SETERRQ(PETSC_COMM_WORLD, 1, "Matrix was not generated.");
 
     return ierr;
 }
