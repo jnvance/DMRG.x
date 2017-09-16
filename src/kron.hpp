@@ -28,7 +28,7 @@
     #define KRON_TIMINGS_END(SECTION_LABEL) \
         ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
         funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
 
     /* Inspect accumulated timings for a section of code inside a loop */
 
@@ -43,7 +43,7 @@
         funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
 
     #define KRON_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
 
 #else
 
@@ -76,7 +76,7 @@
     #define KRON_PS_TIMINGS_END(SECTION_LABEL) \
         ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
         funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
 
     /* Inspect accumulated timings for a section of code inside a loop */
 
@@ -91,7 +91,7 @@
         funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
 
     #define KRON_PS_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
 
 #else
 
