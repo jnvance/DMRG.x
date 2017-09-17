@@ -2539,6 +2539,214 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
 }
 
 
+#undef __FUNCT__
+#define __FUNCT__ "MatKronProdSumIdx_3"
+PetscErrorCode MatKronProdSumIdx_3(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx)
+{
+    PetscErrorCode ierr = 0;
+
+    /**************************************************/
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
+
+    #define KRON_SUBMATRIX "    KronIdx_3: Init and Submatrix collection"
+    KRON_PS_TIMINGS_INIT(KRON_SUBMATRIX)
+    KRON_PS_TIMINGS_START(KRON_SUBMATRIX)
+    /**************************************************/
+
+    /*
+        Get information from MPI
+    */
+    PetscMPIInt     nprocs, rank;
+    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+
+    /*
+        Perform initial checks and get sizes
+    */
+    std::vector<PetscInt>   M_A, N_A, M_B, N_B;
+    PetscInt                nterms, M_C, N_C;
+    ierr = InitialChecks(a,A,B,C,comm,nterms,M_A,N_A,M_B,N_B,M_C,N_C); CHKERRQ(ierr);
+    /*
+        Determine final sizes based on desired indices
+    */
+    PetscInt M_C_final = idx.size();
+    PetscInt N_C_final = idx.size();
+    /*
+        Guess the local ownership of resultant matrix C
+    */
+    PetscInt remrows = M_C_final % nprocs;
+    PetscInt locrows = M_C_final / nprocs;
+    PetscInt Istart  = locrows * rank;
+
+    if (rank < remrows){
+        locrows += 1;
+        Istart += rank;
+    } else {
+        Istart += remrows;
+    }
+    PetscInt Iend = Istart + locrows;
+    /*
+        Determine which rows of A and B to take and populate corresponding sets
+        Then dump (ordered) set into array
+    */
+    std::set<PetscInt> set_Arows, set_Brows;
+
+    for (PetscInt i = Istart; i < Iend; ++i)
+        set_Arows.insert(idx[i] / M_B[0]);
+
+    for (PetscInt i = Istart; i < Iend; ++i)
+        set_Brows.insert(idx[i] % M_B[0]);
+
+    PetscInt M_req_A = set_Arows.size();
+    PetscInt M_req_B = set_Brows.size();
+
+    PetscInt *id_rows_A;
+    ierr = PetscMalloc1(M_req_A, &id_rows_A); CHKERRQ(ierr);
+    {
+        PetscInt i = 0;
+        for (auto elem: set_Arows){
+            id_rows_A[i] = elem;
+            ++i;
+        }
+    }
+
+    PetscInt *id_rows_B;
+    ierr = PetscMalloc1(M_req_B, &id_rows_B); CHKERRQ(ierr);
+    {
+        PetscInt i = 0;
+        for (auto elem: set_Brows){
+            id_rows_B[i] = elem;
+            ++i;
+        }
+    }
+
+    /* Map idx to its column or row position */
+
+    std::map<PetscInt,PetscInt>             idx_map;
+    std::map<PetscInt,PetscInt>::iterator   idx_map_it;
+    {
+        PetscInt i = 0;
+        for (auto elem: idx){
+            idx_map[elem] = i;
+            ++i;
+        }
+    }
+
+    std::vector<Mat>    submat_A(nterms), submat_B(nterms);
+    PetscInt            A_sub_start, A_sub_end, B_sub_start, B_sub_end;
+
+    ierr = GetSubmatrix(A,N_A,nterms,M_req_A,id_rows_A,submat_A,A_sub_start,A_sub_end); CHKERRQ(ierr);
+
+    ierr = GetSubmatrix(B,N_B,nterms,M_req_B,id_rows_B,submat_B,B_sub_start,B_sub_end); CHKERRQ(ierr);
+
+    /*
+        Create map from global matrix row index to local submatrix index
+        TODO: integrate ROW_MAP_A function here
+    */
+    std::map<PetscInt,PetscInt> map_A;
+    for (PetscInt i = 0; i < set_Arows.size(); ++i)
+        map_A[ id_rows_A[i] ] = i;
+
+    std::map<PetscInt,PetscInt> map_B;
+    for (PetscInt i = 0; i < set_Brows.size(); ++i)
+        map_B[ id_rows_B[i] ] = i;
+
+    ierr = PetscFree(id_rows_A); CHKERRQ(ierr);
+    ierr = PetscFree(id_rows_B); CHKERRQ(ierr);
+
+    /*
+        Map ownership
+        Input: the row INDEX in the global matrix A/B
+        Output: the corresponding row index in the locally-owned rows of submatrix A/B
+    */
+    #define ROW_MAP_A(INDEX) (map_A[INDEX] + A_sub_start)
+    #define ROW_MAP_B(INDEX) (map_B[INDEX] + B_sub_start)
+    /*
+        Submatrix constructions offsets the starting column
+        Input: the corresponding column index in the locally-owned submatrix A/B
+        Output: the column INDEX in the global matrix A/B
+    */
+    PetscInt A_shift = N_A[0] * (nprocs - 1);
+    PetscInt B_shift = N_B[0] * (nprocs - 1);
+    #define COL_MAP_A(INDEX) ((INDEX) - A_shift)
+    #define COL_MAP_B(INDEX) ((INDEX) - B_shift)
+    /*
+        Input: the column INDEX in the global matrix A/B
+        Output: the corresponding column index in the locally-owned submatrix A/B
+    */
+    #define COL_INV_A(INDEX) ((INDEX) + A_shift)
+    #define COL_INV_B(INDEX) ((INDEX) + B_shift)
+
+    /**************************************************/
+    KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
+    #undef KRON_SUBMATRIX
+
+    #define KRON_PREALLOC "    KronIdx_3: Preallocation"
+    KRON_PS_TIMINGS_INIT(KRON_PREALLOC)
+    KRON_PS_TIMINGS_START(KRON_PREALLOC)
+    /**************************************************/
+
+    /*
+        PREALLOCATION
+
+        Run through all terms and calculate an overestimated preallocation
+        by adding all the non-zeros needed for each row.
+
+        Build a vector of vectors of booleans
+
+        Note: Always preallocate for this routine
+    */
+
+
+
+
+
+
+
+
+    /**************************************************/
+    KRON_PS_TIMINGS_END(KRON_PREALLOC)
+    #undef KRON_PREALLOC
+    /**************************************************/
+
+
+
+    /*** FAKE ***/
+    ierr = MatKronProdSumIdx_copy(a, A, B, C, idx); CHKERRQ(ierr);
+
+    /*
+        Destroy submatrices
+    */
+    for (PetscInt i = 0; i < nterms; ++i){
+        if(submat_A.data()+i) ierr = MatDestroy(submat_A.data()+i); CHKERRQ(ierr);
+    }
+    for (PetscInt i = 0; i < nterms; ++i){
+        if(submat_B.data()+i) ierr = MatDestroy(submat_B.data()+i); CHKERRQ(ierr);
+    }
+
+    #undef ROW_MAP_A
+    #undef ROW_MAP_B
+    #undef COL_MAP_A
+    #undef COL_MAP_B
+    #undef COL_INV_A
+    #undef COL_INV_B
+
+    KRON_TIMINGS_END(__FUNCT__);
+    return ierr;
+}
+
+
+
+
+
+
 PetscErrorCode MatKronProdSumIdx(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
@@ -2554,7 +2762,9 @@ PetscErrorCode MatKronProdSumIdx(
     // ierr = MatKronProdSumIdx_2(a, A, B, C, idx); CHKERRQ(ierr);
 
     // ierr = MatKronProdSumIdx_copy(a, A, B, C, idx); CHKERRQ(ierr);
-    ierr = MatKronProdSumIdx_copy_2(a, A, B, C, idx); CHKERRQ(ierr);
+    // ierr = MatKronProdSumIdx_copy_2(a, A, B, C, idx); CHKERRQ(ierr);
+
+    ierr = MatKronProdSumIdx_3(a, A, B, C, idx); CHKERRQ(ierr);
 
     if (!C) SETERRQ(PETSC_COMM_WORLD, 1, "Matrix was not generated.");
 
