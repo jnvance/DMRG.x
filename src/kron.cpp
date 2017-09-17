@@ -2213,13 +2213,13 @@ PetscErrorCode MatKronProdSum_selectiverows_2(
     KRON_PS_TIMINGS_END(KRON_PREALLOC)
     #undef KRON_PREALLOC
 
-    #define __KRONLOOP     "            KronLoop"
+    #define __KRONLOOP     "    KronLoop"
     KRON_PS_TIMINGS_INIT(__KRONLOOP);
 
-    #define __MATSETVALUES "                MatSetValues"
+    #define __MATSETVALUES "        MatSetValues"
     KRON_PS_TIMINGS_ACCUM_INIT(__MATSETVALUES);
 
-    #define __CALC_VALUES  "                CalculateKronValues"
+    #define __CALC_VALUES  "        CalculateKronValues"
     KRON_PS_TIMINGS_ACCUM_INIT(__CALC_VALUES);
 
     KRON_PS_TIMINGS_START(__KRONLOOP);
@@ -2322,8 +2322,6 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
     const std::vector<PetscInt> idx)
 {
     PetscErrorCode ierr = 0;
-    KRON_TIMINGS_INIT(__FUNCT__);
-    KRON_TIMINGS_START(__FUNCT__);
 
     PetscMPIInt     nprocs, rank;
     MPI_Comm comm = PETSC_COMM_WORLD;
@@ -2351,6 +2349,13 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
     Mat C_temp = nullptr;
     ierr = MatKronProdSum_selectiverows_2(a, A, B, C_temp, idx); CHKERRQ(ierr);
 
+    KRON_TIMINGS_INIT(__FUNCT__);
+    KRON_TIMINGS_START(__FUNCT__);
+
+    #define __PREP     "    Prep"
+    KRON_PS_TIMINGS_INIT(__PREP);
+    KRON_PS_TIMINGS_START(__PREP);
+
     /* Check the size of C_temp */
     PetscInt M_C_temp, N_C_temp;
     ierr = MatGetSize(C_temp, &M_C_temp, &N_C_temp); CHKERRQ(ierr);
@@ -2359,10 +2364,6 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
     if(N_C_temp != M_C)
         SETERRQ2(comm,1,"Incorrect number of rows in C_temp. Expected %d. Got %d.",M_C,N_C_temp);
 
-
-    #define __PREP     "        Prep"
-    KRON_PS_TIMINGS_INIT(__PREP);
-    KRON_PS_TIMINGS_START(__PREP);
 
     /* Guess final row ownership ranges */
 
@@ -2410,7 +2411,7 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
     KRON_PS_TIMINGS_END(__PREP);
     #undef __PREP
 
-    #define __GETSUBMAT     "        MatGetSubMatrix"
+    #define __GETSUBMAT     "    MatGetSubMatrix"
     KRON_PS_TIMINGS_INIT(__GETSUBMAT);
     KRON_PS_TIMINGS_START(__GETSUBMAT);
 
@@ -2423,7 +2424,7 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
     KRON_PS_TIMINGS_END(__GETSUBMAT);
     #undef __GETSUBMAT
 
-    #define __PREALLOC      "        Preallocation"
+    #define __PREALLOC      "    Preallocation"
     KRON_PS_TIMINGS_INIT(__PREALLOC);
     KRON_PS_TIMINGS_START(__PREALLOC);
 
@@ -2500,7 +2501,7 @@ PetscErrorCode MatKronProdSumIdx_copy_2(
 
     /* Dump values from submatrix to final matrix in correct location */
 
-    #define __SETVALS     "        SetValues"
+    #define __SETVALS     "    SetValues"
     KRON_PS_TIMINGS_INIT(__SETVALS);
     KRON_PS_TIMINGS_START(__SETVALS);
 
@@ -2546,6 +2547,8 @@ PetscErrorCode MatKronProdSumIdx(
     const std::vector<PetscInt> idx)
 {
     PetscErrorCode ierr = 0;
+
+    C = nullptr;
 
     // ierr = MatKronProdSumIdx_1(a, A, B, C, idx); CHKERRQ(ierr);
     // ierr = MatKronProdSumIdx_2(a, A, B, C, idx); CHKERRQ(ierr);
