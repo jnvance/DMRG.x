@@ -86,6 +86,13 @@ int main(int argc, char **argv)
 
     ierr = PetscFOpen(PETSC_COMM_WORLD, "eigvals.dat", "w", &fp); CHKERRQ(ierr);
 
+    /* Pre-grow the blocks */
+    while(heis.TotalBasisSize() < heis.mstates())
+    {
+        ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
+        ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
+    }
+
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
@@ -103,6 +110,17 @@ int main(int argc, char **argv)
                 Printout data on ground state energy and wavevector
         */
         superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
+
+        /*
+            From the ground state wavevector get the reduced density matrices of the left
+            and right blocks, and construct the rectangular rotation matrices to perform the
+            truncation of site and block operators.
+         */
+        ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
+        ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
+        ierr = heis.TruncateOperators(); CHKERRQ(ierr);
+
+
         if (gse_i!=0.0) {
             /*
                 TODO: Implement error printing for complex values
@@ -121,15 +139,6 @@ int main(int argc, char **argv)
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
                 error_rel, (double)(error)); CHKERRQ(ierr);
         }
-        /*
-            From the ground state wavevector get the reduced density matrices of the left
-            and right blocks, and construct the rectangular rotation matrices to perform the
-            truncation of site and block operators.
-         */
-        ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
-        ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
-        ierr = heis.TruncateOperators(); CHKERRQ(ierr);
-
         heis.iter()++;
     }
 

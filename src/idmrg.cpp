@@ -133,6 +133,9 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(superblock_H_);
 
+    PetscInt superblock_H_size;
+    ierr = MatGetSize(superblock_H_, nullptr, &superblock_H_size); CHKERRQ(ierr);
+
     /*
         Solve the eigensystem using SLEPC EPS
     */
@@ -142,8 +145,8 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     ierr = EPSSetOperators(eps, superblock_H_, nullptr); CHKERRQ(ierr);
     ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
     ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL); CHKERRQ(ierr);
-    ierr = EPSSetType(eps, EPSKRYLOVSCHUR); CHKERRQ(ierr);
-    ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
+    // ierr = EPSSetType(eps, EPSKRYLOVSCHUR); CHKERRQ(ierr);
+    // ierr = EPSSetDimensions(eps, 1, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
 
     /*
         If compatible, use previously solved ground state vector as initial guess
@@ -153,7 +156,7 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
         PetscInt gsv_size, superblock_H_size;
 
         ierr = VecGetSize(gsv_r_, &gsv_size); CHKERRQ(ierr);
-        ierr = MatGetSize(superblock_H_, nullptr, &superblock_H_size); CHKERRQ(ierr);
+
 
         if(gsv_size==superblock_H_size){
             ierr = EPSSetInitialSpace(eps, 1, &gsv_r_); CHKERRQ(ierr);
