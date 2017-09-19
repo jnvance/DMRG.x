@@ -91,6 +91,7 @@ int main(int argc, char **argv)
     {
         ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
         ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
+        heis.iter()++;
     }
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
@@ -119,7 +120,6 @@ int main(int argc, char **argv)
         ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
         ierr = heis.TruncateOperators(); CHKERRQ(ierr);
 
-
         if (gse_i!=0.0) {
             /*
                 TODO: Implement error printing for complex values
@@ -138,6 +138,7 @@ int main(int argc, char **argv)
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
                 error_rel, (double)(error)); CHKERRQ(ierr);
         }
+
         heis.iter()++;
     }
 
