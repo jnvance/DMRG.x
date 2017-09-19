@@ -2103,7 +2103,7 @@ PetscErrorCode MatKronProdSum_selectiverows_2(
         /*
             More accurate preallocation (slightly overestimated)
         */
-        PetscInt *d_nnz, *o_nnz, ncols_A, ncols_B, ncols_C;
+        PetscInt *d_nnz, *o_nnz, ncols_A, ncols_B;
         PetscInt Arow, Brow, Irow, Ccol;
         const PetscInt *cols_A, *cols_B;
         ierr = PetscMalloc1(locrows,&d_nnz); CHKERRQ(ierr);
@@ -2708,7 +2708,7 @@ PetscErrorCode MatKronProdSumIdx_3(
     const PetscInt  *cols_A;
     const PetscInt  *cols_B;
 
-    PetscInt        ncols_A, ncols_B, ncols_C;
+    PetscInt        ncols_A, ncols_B;
     const PetscInt  M_B_0 = M_B[0];
     const PetscInt  N_B_0 = N_B[0];
 

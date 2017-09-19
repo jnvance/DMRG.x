@@ -153,10 +153,9 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
      */
     if ((!do_target_Sz) && gsv_r_ && superblock_H_ && ntruncations_ > 1)
     {
-        PetscInt gsv_size, superblock_H_size;
+        PetscInt gsv_size;
 
         ierr = VecGetSize(gsv_r_, &gsv_size); CHKERRQ(ierr);
-
 
         if(gsv_size==superblock_H_size){
             ierr = EPSSetInitialSpace(eps, 1, &gsv_r_); CHKERRQ(ierr);
