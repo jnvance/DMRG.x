@@ -87,12 +87,11 @@ int main(int argc, char **argv)
     ierr = PetscFOpen(PETSC_COMM_WORLD, "eigvals.dat", "w", &fp); CHKERRQ(ierr);
 
     /* Pre-grow the blocks */
-    while(heis.TotalBasisSize() < heis.mstates())
+    while(heis.TotalBasisSize() < heis.mstates()*heis.mstates())
     {
         ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
         ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
     }
-
 
     while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
     {
