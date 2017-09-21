@@ -2989,7 +2989,6 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     KRON_PS_TIMINGS_INIT(KRON_SUBMATRIX)
     KRON_PS_TIMINGS_START(KRON_SUBMATRIX)
     /**************************************************/
-
     /*
         Get information from MPI
     */
@@ -2997,6 +2996,22 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     MPI_Comm comm = PETSC_COMM_WORLD;
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
+
+    {
+        /* Verify that idx are all valid
+         * Assumes A and B matrices have the same sizes
+         */
+        PetscInt M_A, M_B, M_C;
+        ierr = MatGetSize(A[0], &M_A, nullptr); CHKERRQ(ierr);
+        ierr = MatGetSize(B[0], &M_B, nullptr); CHKERRQ(ierr);
+
+        M_C = M_A * M_B;
+        for (auto id: idx)
+            if (id >= M_C)
+                SETERRQ1(comm,1,"Invalid key: %d", id);
+    }
+
+
     /*
         Perform initial checks and get sizes
     */
@@ -3137,7 +3152,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
     #undef KRON_SUBMATRIX
 
-    #define KRON_PREALLOC "    Kron: Preallocation"
+    #define KRON_PREALLOC "    Kron:Preallocation"
     KRON_PS_TIMINGS_INIT(KRON_PREALLOC)
     KRON_PS_TIMINGS_START(KRON_PREALLOC)
     /**************************************************/
@@ -3195,8 +3210,8 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
         PetscInt tot_entries, tot_entries_reduced;
         for (int i = 0; i < locrows; ++i) tot_entries += nnz[i];
         MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
-        PetscPrintf(comm, "%24s Nonzeros: %d/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final,
-            100.0*(double)tot_entries_reduced/((double)(M_C_final) * (double)(M_C_final)));
+        PetscPrintf(comm, "%24s Nonzeros: %d/(%-d x %-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final, N_C_final,
+            100.0*(double)tot_entries_reduced/( (double)(M_C_final) * (double)(N_C_final)) );
     #endif
 
     ierr = PetscFree(nnz); CHKERRQ(ierr);
@@ -3226,13 +3241,13 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
 
     /**************************************************/
-    #define __KRONLOOP     "    KronLoop"
+    #define __KRONLOOP     "    Kron:Loop"
     KRON_PS_TIMINGS_INIT(__KRONLOOP);
 
-    #define __MATSETVALUES "        MatSetValues"
+    #define __MATSETVALUES "        Kron:MatSetValues"
     KRON_PS_TIMINGS_ACCUM_INIT(__MATSETVALUES);
 
-    #define __CALC_VALUES  "        CalculateKronValues"
+    #define __CALC_VALUES  "        Kron:CalculateKronValues"
     KRON_PS_TIMINGS_ACCUM_INIT(__CALC_VALUES);
 
     KRON_PS_TIMINGS_START(__KRONLOOP);
@@ -3312,7 +3327,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     #undef COL_INV_B
 
     /**************************************************/
-    #define __FINALASSEMBLY     "    FinalAssemly"
+    #define __FINALASSEMBLY     "    Kron:FinalAssemly"
     KRON_PS_TIMINGS_INIT(__FINALASSEMBLY);
     KRON_PS_TIMINGS_START(__FINALASSEMBLY);
     /**************************************************/
@@ -3346,17 +3361,17 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
-    /* Verify that idx are all valid
-     * Assumes A and B matrices have the same sizes
-     */
+    // /* Verify that idx are all valid
+    //  * Assumes A and B matrices have the same sizes
+    //  */
     PetscInt M_A, M_B, M_C;
     ierr = MatGetSize(A[0], &M_A, nullptr); CHKERRQ(ierr);
     ierr = MatGetSize(B[0], &M_B, nullptr); CHKERRQ(ierr);
 
     M_C = M_A * M_B;
-    for (auto id: idx)
-        if (id >= M_C)
-            SETERRQ1(comm,1,"Invalid key: %d", id);
+    // for (auto id: idx)
+    //     if (id >= M_C)
+    //         SETERRQ1(comm,1,"Invalid key: %d", id);
 
     /*
         Calculate partial elements of full matrix.
@@ -3383,7 +3398,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     KRON_TIMINGS_INIT(__FUNCT__);
     KRON_TIMINGS_START(__FUNCT__);
 
-    #define __PREP     "    Prep"
+    #define __PREP     "    Kron:Prep"
     KRON_PS_TIMINGS_INIT(__PREP);
     KRON_PS_TIMINGS_START(__PREP);
     /**************************************************/
@@ -3501,6 +3516,15 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
 
     ierr = MatMPIAIJSetPreallocation(C, -1, d_nnz, -1, o_nnz); CHKERRQ(ierr);
     ierr = MatSeqAIJSetPreallocation(C, -1, d_nnz); CHKERRQ(ierr);
+
+    #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
+        PetscInt tot_entries=0, tot_entries_reduced=0;
+        for (size_t i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
+        MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
+        PetscPrintf(comm, "%24s Nonzeros: %d/(%-d)^2 = %f%%\n", " ", tot_entries_reduced, M_C_final,
+            100.0*(double)tot_entries_reduced/((double)(M_C_final) * (double)(M_C_final)));
+        PetscPrintf(comm, "%24s TotalRows: %-10d LocalRows: %d\n", " ", M_C_final, locrows);
+    #endif
 
     ierr = PetscFree(d_nnz); CHKERRQ(ierr);
     ierr = PetscFree(o_nnz); CHKERRQ(ierr);

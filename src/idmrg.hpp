@@ -32,7 +32,7 @@
     #define DMRG_SUB_TIMINGS_END(SECTION_LABEL) \
         ierr = PetscTime(&subfunct_time ## SECTION_LABEL); CHKERRQ(ierr); \
         subfunct_time ## SECTION_LABEL = subfunct_time ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
 
     /* Inspect accumulated timings for a section of code inside a loop */
 
@@ -47,7 +47,7 @@
         subfunct_time ## SECTION_LABEL += subfunct_time1 ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
 
     #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
 
 #else
     #define DMRG_SUB_TIMINGS_INIT(SECTION_LABEL)
