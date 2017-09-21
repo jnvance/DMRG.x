@@ -931,12 +931,10 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
     svd = nullptr;
     ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
     ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
-    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
     ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
-    // ierr = SVDSetType(svd, SVDLAPACK); CHKERRQ(ierr);
     ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd, SVD_LARGEST); CHKERRQ(ierr);
-    // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
+    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
 
     #define __SVD_SOLVE "        SVDSolve"
     LINALG_TOOLS_TIMINGS_START(__SVD_SOLVE)
@@ -953,7 +951,7 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
     ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
     if (nconv < mat_in_nrows)
     {
-        char errormsg[80];
+        char errormsg[120];
         sprintf(errormsg,"Number of converged singular values (%d) is less than requested (%d).", nconv, mat_in_nrows);
         SETERRQ(comm, 1, errormsg);
     }
