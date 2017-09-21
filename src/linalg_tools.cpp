@@ -909,7 +909,7 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
 {
     PetscErrorCode  ierr = 0;
 
-    MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
+    MPI_Comm comm = PETSC_COMM_WORLD;
     PetscBool assembled;
     ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
     if (assembled == PETSC_FALSE){
@@ -953,7 +953,8 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
     {
         char errormsg[120];
         sprintf(errormsg,"Number of converged singular values (%d) is less than requested (%d).", nconv, mat_in_nrows);
-        SETERRQ(comm, 1, errormsg);
+        PetscPrintf(comm,"WARNING: %s\n", errormsg);
+        // SETERRQ(comm, 1, errormsg);
     }
 
     #ifdef __PRINT_SVD_CONVERGENCE

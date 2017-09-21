@@ -133,7 +133,7 @@ protected:
     /**
         Completed number of steps.
     */
-    PetscInt    iter_ = 0;
+    PetscInt    iter_ = -1;
 
     /**
         DMRGBlock object representing the left block of sites
@@ -383,7 +383,7 @@ public:
     /**
         Construct the rotation matrices for truncating the block and spin operators.
      */
-    PetscErrorCode GetRotationMatrices();
+    PetscErrorCode GetRotationMatrices(PetscReal& truncerr_left, PetscReal& truncerr_right);
 
     /**
 

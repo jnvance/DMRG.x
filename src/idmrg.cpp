@@ -605,7 +605,7 @@ PetscErrorCode GetRotationMatrices_targetSz(
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG::GetRotationMatrices"
-PetscErrorCode iDMRG::GetRotationMatrices()
+PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& truncerr_right)
 {
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
@@ -625,9 +625,8 @@ PetscErrorCode iDMRG::GetRotationMatrices()
 
         DMRG_SUB_TIMINGS_START(__GET_SVD)
 
-        PetscReal truncation_error;
-        ierr = GetRotationMatrices_targetSz(mstates_, BlockLeft_, U_left_, truncation_error); CHKERRQ(ierr);
-        ierr = GetRotationMatrices_targetSz(mstates_, BlockRight_, U_right_, truncation_error); CHKERRQ(ierr);
+        ierr = GetRotationMatrices_targetSz(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
+        ierr = GetRotationMatrices_targetSz(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
 
         DMRG_SUB_TIMINGS_END(__GET_SVD)
 
@@ -648,7 +647,6 @@ PetscErrorCode iDMRG::GetRotationMatrices()
         if(!(dm_left && dm_right && dm_solved))
             SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
 
-        PetscScalar trunc_error_left, trunc_error_right;
         FILE *fp_left = nullptr, *fp_right = nullptr;
 
         #ifdef __TESTING
@@ -668,11 +666,11 @@ PetscErrorCode iDMRG::GetRotationMatrices()
         DMRG_SUB_TIMINGS_START(__GET_SVD)
 
         #ifdef __SVD_USE_EPS
-            ierr = EPSLargestEigenpairs(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
-            ierr = EPSLargestEigenpairs(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+            ierr = EPSLargestEigenpairs(dm_left, M_left, truncerr_left, U_left_,fp_left); CHKERRQ(ierr);
+            ierr = EPSLargestEigenpairs(dm_right, M_right, truncerr_right, U_right_,fp_right); CHKERRQ(ierr);
         #else
-            ierr = SVDLargestStates(dm_left, M_left, trunc_error_left, U_left_,fp_left); CHKERRQ(ierr);
-            ierr = SVDLargestStates(dm_right, M_right, trunc_error_right, U_right_,fp_right); CHKERRQ(ierr);
+            ierr = SVDLargestStates(dm_left, M_left, truncerr_left, U_left_,fp_left); CHKERRQ(ierr);
+            ierr = SVDLargestStates(dm_right, M_right, truncerr_right, U_right_,fp_right); CHKERRQ(ierr);
         #endif
 
         DMRG_SUB_TIMINGS_END(__GET_SVD)
@@ -686,11 +684,11 @@ PetscErrorCode iDMRG::GetRotationMatrices()
     #ifdef __PRINT_TRUNCATION_ERROR
         ierr = PetscPrintf(comm_,
             "%12sTruncation error (left):  %12e\n",
-            " ", trunc_error_left);
+            " ", truncerr_left);
 
         ierr = PetscPrintf(comm_,
             "%12sTruncation error (right): %12e\n",
-            " ", trunc_error_right); CHKERRQ(ierr);
+            " ", truncerr_right); CHKERRQ(ierr);
     #endif
 
     dm_solved = PETSC_FALSE;

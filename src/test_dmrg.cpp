@@ -71,43 +71,39 @@ int main(int argc, char **argv)
                         do_target_Sz==PETSC_TRUE ? "yes" : "no", target_Sz); CHKERRQ(ierr);
 
     ierr = PetscPrintf(PETSC_COMM_WORLD,
-            "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||\n"
-            "  -------- -------- ----------- ----------------- ----------- ------------------\n"); CHKERRQ(ierr);
+            "   iter     nsites   gs energy   gs energy /site   rel error   ||Ax-kx||/||kx||     Truncation Errors\n"
+            "  -------- -------- ----------- ----------------- ----------- ------------------ -------------------------\n"); CHKERRQ(ierr);
     PetscReal gse_r, gse_i, error;
+    PetscReal truncerr_left, truncerr_right;
 
     double gse_site_theor =  -0.4431471805599;
     PetscInt superblocklength = 0;
 
-    /*
-        Opens file to save eigenenergies
-        TODO: File may also be used to save other data
-     */
     FILE *fp;
-
     ierr = PetscFOpen(PETSC_COMM_WORLD, "eigvals.dat", "w", &fp); CHKERRQ(ierr);
 
-    /* Pre-grow the blocks */
-    while(heis.TotalBasisSize() < heis.mstates()*heis.mstates())
+    while(heis.TotalLength() < heis.TargetLength())
     {
-        ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
-        ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
         heis.iter()++;
-    }
-
-    while(heis.TotalLength() < heis.TargetLength() && heis.iter() < heis.TargetLength())
-    {
         /*
             Grow the left and right blocks by adding one site in the junction
-         */
+        */
         ierr = heis.BuildBlockLeft(); CHKERRQ(ierr);
         ierr = heis.BuildBlockRight(); CHKERRQ(ierr);
+        /*
+            As long as the basis size is less than
+            the number of kept states, continue adding sites
+        */
+        if (heis.TotalBasisSize() <= heis.mstates()*heis.mstates())
+            continue;
+
         ierr = heis.BuildSuperBlock(); CHKERRQ(ierr);
-        if(do_save_operators){
+        if (do_save_operators){
             ierr = heis.MatSaveOperators(); CHKERRQ(ierr);
         }
         ierr = heis.SolveGroundState(gse_r, gse_i, error); CHKERRQ(ierr);
         /*
-                Printout data on ground state energy and wavevector
+            Printout data on ground state energy and wavevector
         */
         superblocklength = heis.LengthBlockLeft() + heis.LengthBlockRight();
 
@@ -117,31 +113,22 @@ int main(int argc, char **argv)
             truncation of site and block operators.
          */
         ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
-        ierr = heis.GetRotationMatrices(); CHKERRQ(ierr);
+        ierr = heis.GetRotationMatrices(truncerr_left, truncerr_right); CHKERRQ(ierr);
         ierr = heis.TruncateOperators(); CHKERRQ(ierr);
 
         if (gse_i!=0.0) {
-            /*
-                TODO: Implement error printing for complex values
-             */
             SETERRQ(comm,1,"Not implemented for complex ground state energy.\n");
-            // ierr = PetscPrintf(PETSC_COMM_WORLD," %6d    %9f%+9fi %12g\n",
-            //     superblocklength, (double)gse_r/((double)(superblocklength)),
-            //     (double)gse_i/((double)(superblocklength)),(double)error); CHKERRQ(ierr);
         } else {
             double gse_site  = (double)gse_r/((double)(superblocklength));
             double error_rel = (gse_site - gse_site_theor) / std::abs(gse_site_theor);
-            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f    %12g\n",
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f     %12g     %+8.5g  %+8.5g\n",
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
-                error_rel, (double)(error)); CHKERRQ(ierr);
-            ierr = PetscFPrintf(PETSC_COMM_WORLD, fp,"   %6d   %6d    %.20g    %.20g    %.20g    %.20g\n",
+                error_rel, (double)(error), (double)(truncerr_left), (double)(truncerr_right)); CHKERRQ(ierr);
+            ierr = PetscFPrintf(PETSC_COMM_WORLD, fp,"   %6d   %6d    %.20g    %.20g    %.20g    %.20g    %.20g    %.20g\n",
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
-                error_rel, (double)(error)); CHKERRQ(ierr);
+                error_rel, (double)(error), (double)(truncerr_left), (double)(truncerr_right)); CHKERRQ(ierr);
         }
-
-        heis.iter()++;
     }
-
 
     ierr = PetscTime(&total_time); CHKERRQ(ierr); \
     total_time = total_time - total_time0; \

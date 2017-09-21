@@ -1795,7 +1795,6 @@ PetscErrorCode MatKronProdSumIdx_1(
     std::map<PetscInt,PetscScalar>::iterator C_it;
 
 
-    PetscInt Ccol;
     for (PetscInt Crow = Istart; Crow < Iend; ++Crow)
     {
         Irow = idx[Crow];
@@ -3052,7 +3051,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
         Cstart += remcols;
     }
 
-    PetscInt Cend = Cstart + locdiag;
+    // PetscInt Cend = Cstart + locdiag;
     /*
         Determine which rows of A and B to take and populate corresponding sets
         to remove duplicates. Then dump (ordered) set into array
@@ -3178,7 +3177,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     PetscInt *nnz;
     ierr = PetscMalloc1(locrows,&nnz); CHKERRQ(ierr);
 
-    PetscInt ncols_A, ncols_B, Arow, Brow, Irow, Ccol;
+    PetscInt ncols_A, ncols_B, Arow, Brow, Irow;
     const PetscInt *cols_A, *cols_B;
 
     for (PetscInt Crow = Istart; Crow < Iend; ++Crow)
@@ -3207,7 +3206,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     ierr = MatSeqAIJSetPreallocation(C, -1, nnz); CHKERRQ(ierr);
 
     #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
-        PetscInt tot_entries, tot_entries_reduced;
+        PetscInt tot_entries=0, tot_entries_reduced=0;
         for (int i = 0; i < locrows; ++i) tot_entries += nnz[i];
         MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
         PetscPrintf(comm, "%24s Nonzeros: %d/(%-d x %-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final, N_C_final,
