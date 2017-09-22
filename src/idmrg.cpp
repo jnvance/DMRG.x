@@ -77,6 +77,9 @@ PetscErrorCode iDMRG::destroy()
     LINALG_TOOLS__MATDESTROY(Sp1_);
     LINALG_TOOLS__MATDESTROY(Sm1_);
     LINALG_TOOLS__MATDESTROY(superblock_H_);
+    LINALG_TOOLS__VECDESTROY(gsv_r_);
+    LINALG_TOOLS__VECDESTROY(gsv_i_);
+
     /*
      * Close log files after ending timings otherwise,
      * this causes a segmentation fault

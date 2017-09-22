@@ -248,6 +248,10 @@ std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<Petsc
     if(&MATRIX){ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); MATRIX = nullptr;}
     /* Requires ierr to be defined */
 
+#define LINALG_TOOLS__VECDESTROY(VECTOR) \
+    if(&VECTOR){ierr = VecDestroy(&VECTOR); CHKERRQ(ierr); VECTOR = nullptr;}
+    /* Requires ierr to be defined */
+
 #ifdef __LINALG_TOOLS_TIMINGS
 
     #include <petsctime.h>
