@@ -703,7 +703,6 @@ PetscErrorCode MatKronProdSum_2(
             map_B[ id_rows_B[i] ] = i + B_sub_start;
         }
 
-        const PetscInt ROW_SHIFT_B = + B_sub_start;
         #define ROW_MAP_B(INDEX) (map_B[INDEX])
 
     #else
