@@ -410,9 +410,23 @@ PetscErrorCode GetRotationMatrices_targetSz(
 
     /* Diagonalize each block of the reduced density matrix */
 
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscLogDouble svd_total_time0, svd_total_time;
+        ierr = PetscTime(&svd_total_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
     PetscInt counter = 0;
     for (auto elem: block.rho_block_dict)
     {
+        /*********************TIMINGS**********************/
+        #if defined(__DMRG_SUB_TIMINGS) && (__DMRG_SUB_SVD_TIMINGS)
+            PetscLogDouble svd_time0, svd_time;
+            ierr = PetscTime(&svd_time0); CHKERRQ(ierr);
+        #endif
+        /**************************************************/
+
         /* Keys and values of rho_block_dict */
         PetscScalar         Sz_sector = elem.first;
         Mat&                rho_block = elem.second;
@@ -454,7 +468,22 @@ PetscErrorCode GetRotationMatrices_targetSz(
         svd = nullptr;
         Vr = nullptr;
         ++counter;
+
+        /*********************TIMINGS**********************/
+        #if defined(__DMRG_SUB_TIMINGS) && (__DMRG_SUB_SVD_TIMINGS)
+            ierr = PetscTime(&svd_time); CHKERRQ(ierr);
+            svd_time = svd_time - svd_time0;
+            ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s SVD %24ssize: %-12d %.20g\n", "","",vec_size, svd_time);
+        #endif
+        /**************************************************/
     }
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20g\n", "","SVD total:", svd_total_time);
+    #endif
+    /**************************************************/
 
     /* Sort all possible eigenstates in descending order of eigenvalues */
     std::stable_sort(possible_eigenstates.begin(),possible_eigenstates.end(),compare_descending_eigenstates);
@@ -501,7 +530,14 @@ PetscErrorCode GetRotationMatrices_targetSz(
 
     std::vector<PetscScalar> new_sector_array(my_m);
 
-    /* Loop through eigenstates*/
+    /* Loop through eigenstates and build the rotation matrix */
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscLogDouble rot_mat_time0, rot_mat_time;
+        ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
 
     for (PetscInt Ieig = 0; Ieig < my_m; ++Ieig)
     {
@@ -576,6 +612,17 @@ PetscErrorCode GetRotationMatrices_targetSz(
         ierr = VecRestoreArrayRead(Vr, &vec_vals);
     }
 
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
+        rot_mat_time = rot_mat_time - rot_mat_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20g\n", "","RotMat Construction:", rot_mat_time);
+
+        ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
+
     /* Output truncation error */
     truncation_error = 1.0 - sum_sigma;
 
@@ -601,6 +648,14 @@ PetscErrorCode GetRotationMatrices_targetSz(
     for (auto vec: vec_list){
         ierr = VecDestroy(&vec); CHKERRQ(ierr);
     }
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
+        rot_mat_time = rot_mat_time - rot_mat_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20g\n", "","RotMat Assembly:", rot_mat_time);
+    #endif
+    /**************************************************/
 
     return ierr;
 }
