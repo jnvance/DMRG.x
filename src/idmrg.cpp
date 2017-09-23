@@ -259,6 +259,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
 {
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
+    DMRG_SUB_TIMINGS_START(__FUNCT__);
 
     /*
         Determine whether ground state has been solved with SolveGroundState()
@@ -364,6 +365,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     groundstate_solved_ = PETSC_FALSE;
     dm_solved = PETSC_TRUE;
 
+    DMRG_SUB_TIMINGS_END(__FUNCT__)
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
@@ -778,6 +780,7 @@ PetscErrorCode iDMRG::TruncateOperators()
 {
     PetscErrorCode ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
+    DMRG_SUB_TIMINGS_START(__FUNCT__);
 
     /* Save operator state before rotation */
     #ifdef __CHECK_ROTATION
@@ -870,6 +873,7 @@ PetscErrorCode iDMRG::TruncateOperators()
     #endif // __CHECK_ROTATION
     #undef __CHECK_ROTATION
 
+    DMRG_SUB_TIMINGS_END(__FUNCT__)
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }

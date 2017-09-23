@@ -805,9 +805,9 @@ PetscErrorCode MatKronProdSum_2(
         ierr = MatSeqAIJSetPreallocation(C, -1, d_nnz); CHKERRQ(ierr);
 
         #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
-            PetscInt tot_entries=0, tot_entries_reduced=0, M_C_final=M_C;
+            unsigned long int tot_entries=0, tot_entries_reduced=0, M_C_final=M_C;
             for (size_t i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
-            MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
+            MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
             PetscPrintf(comm, "%24s Nonzeros: %d/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final,
                 100.0*(double)tot_entries_reduced/((double)(M_C_final) * (double)(M_C_final)));
         #endif
@@ -3667,9 +3667,9 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     ierr = MatSeqAIJSetPreallocation(C, -1, nnz); CHKERRQ(ierr);
 
     #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
-        PetscInt tot_entries=0, tot_entries_reduced=0;
-        for (int i = 0; i < locrows; ++i) tot_entries += nnz[i];
-        MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
+        unsigned long int tot_entries=0, tot_entries_reduced=0;
+        for (size_t i = 0; i < locrows; ++i) tot_entries += nnz[i];
+        MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
         PetscPrintf(comm, "%24s Nonzeros: %d/(%-d x %-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final, N_C_final,
             100.0*(double)tot_entries_reduced/( (double)(M_C_final) * (double)(N_C_final)) );
     #endif
@@ -3978,9 +3978,9 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     ierr = MatSeqAIJSetPreallocation(C, -1, d_nnz); CHKERRQ(ierr);
 
     #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
-        PetscInt tot_entries=0, tot_entries_reduced=0;
+        unsigned long int tot_entries=0, tot_entries_reduced=0;
         for (size_t i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
-        MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_INT, MPI_SUM, 0, comm);
+        MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
         PetscPrintf(comm, "%24s Nonzeros: %d/(%-d)^2 = %f%%\n", " ", tot_entries_reduced, M_C_final,
             100.0*(double)tot_entries_reduced/((double)(M_C_final) * (double)(M_C_final)));
         PetscPrintf(comm, "%24s TotalRows: %-10d LocalRows: %d\n", " ", M_C_final, locrows);
