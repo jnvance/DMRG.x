@@ -746,6 +746,7 @@ PetscErrorCode MatKronProdSum_2(
         Run through all terms and calculate an overestimated preallocation
         by adding all the non-zeros needed for each row.
     */
+    PetscInt max_ncols_C = 0;
     if(prealloc)
     {
         #define KRON_SUBMATRIX "        Kron: Preallocation"
@@ -771,6 +772,8 @@ PetscErrorCode MatKronProdSum_2(
         const PetscInt *cols_A, *cols_B;
         ierr = PetscMalloc1(locrows,&d_nnz); CHKERRQ(ierr);
         ierr = PetscMalloc1(locrows,&o_nnz); CHKERRQ(ierr);
+
+        /* Also determine the maximum number of nonzeros among all rows */
 
         for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
         {
@@ -799,6 +802,7 @@ PetscErrorCode MatKronProdSum_2(
             }
             d_nnz[Irow-Istart] = std::min(diag, locrows);
             o_nnz[Irow-Istart] = std::min(ncols_C_max - diag, M_C - locrows);
+            if (ncols_C_max > max_ncols_C) max_ncols_C = ncols_C_max;
         }
 
         ierr = MatMPIAIJSetPreallocation(C, -1, d_nnz, -1, o_nnz); CHKERRQ(ierr);
@@ -891,6 +895,27 @@ PetscErrorCode MatKronProdSum_2(
     else
     {
         ierr = MatZeroEntries(C); CHKERRQ(ierr);
+
+        PetscInt ncols_A, ncols_B;
+        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+        {
+            PetscInt Arow = Irow / M_B[0];
+            PetscInt Brow = Irow % M_B[0];
+
+            PetscInt ncols_C_max = 0;
+            for (PetscInt i = 0; i < nterms; ++i)
+            {
+                ierr = MatGetRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A, nullptr, nullptr); CHKERRQ(ierr);
+                ierr = MatGetRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B, nullptr, nullptr); CHKERRQ(ierr);
+
+                ncols_C_max += ncols_A * ncols_B;
+
+                ierr = MatRestoreRow(submat_A[i], ROW_MAP_A(Arow), &ncols_A, nullptr, nullptr); CHKERRQ(ierr);
+                ierr = MatRestoreRow(submat_B[i], ROW_MAP_B(Brow), &ncols_B, nullptr, nullptr); CHKERRQ(ierr);
+            }
+            if (ncols_C_max > max_ncols_C) max_ncols_C = ncols_C_max;
+        }
+
     }
     /*
         CALCULATE ENTRIES
@@ -914,11 +939,10 @@ PetscErrorCode MatKronProdSum_2(
     PetscInt            Arow, Brow;
     PetscInt            ncols_C[nterms];
 
-    PetscInt        max_ncols_C = N_A[0] * N_B[0]; /* Assumes same size of matrices in A and B */
     PetscInt*       cols_C;
     PetscScalar*    vals_C;
-    ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
-    ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C+1,&cols_C); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C+1,&vals_C); CHKERRQ(ierr);
 
     // #define __KRON_SWAP_LOOP
     #ifdef __KRON_SWAP_LOOP
@@ -3641,6 +3665,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     PetscInt ncols_A, ncols_B, Arow, Brow, Irow;
     const PetscInt *cols_A, *cols_B;
 
+    PetscInt        max_ncols_C = 0;
     for (PetscInt Crow = Istart; Crow < Iend; ++Crow)
     {
         Irow = idx[Crow];
@@ -3662,6 +3687,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
         }
 
         nnz[Crow-Istart] = std::min(N_C_final, nnz[Crow-Istart]);
+        if(max_ncols_C < nnz[Crow-Istart]) max_ncols_C = nnz[Crow-Istart];
     }
 
     ierr = MatSeqAIJSetPreallocation(C, -1, nnz); CHKERRQ(ierr);
@@ -3694,11 +3720,11 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     */
     const PetscScalar*  vals_A;
     const PetscScalar*  vals_B;
-    PetscInt        max_ncols_C = N_C_final;
+
     PetscInt        *cols_C;
     PetscScalar     *vals_C;
-    ierr = PetscMalloc1(max_ncols_C,&cols_C); CHKERRQ(ierr);
-    ierr = PetscMalloc1(max_ncols_C,&vals_C); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C+1,&cols_C); CHKERRQ(ierr);
+    ierr = PetscMalloc1(max_ncols_C+1,&vals_C); CHKERRQ(ierr);
 
     /**************************************************/
     #define __KRONLOOP     "    Kron:Loop"
