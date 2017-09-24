@@ -2,7 +2,70 @@
 #define __IDMRG_HPP__
 
 #include <slepceps.h>
+#include <petsctime.h>
 #include "dmrgblock.hpp"
+#include <map>
+#include <unordered_map>
+#include <algorithm>
+
+#ifdef __TIMINGS
+    #define DMRG_TIMINGS_START(FUNC_NAME) \
+        PetscLogDouble funct_time0 ## FUNC_NAME, funct_time ## FUNC_NAME; \
+        ierr = PetscTime(&funct_time0 ## FUNC_NAME); CHKERRQ(ierr);
+
+    #define DMRG_TIMINGS_END(FUNC_NAME) \
+        ierr = PetscTime(&funct_time ## FUNC_NAME); CHKERRQ(ierr); \
+        funct_time ## FUNC_NAME = funct_time ## FUNC_NAME - funct_time0 ## FUNC_NAME; \
+        ierr = PetscFPrintf(PETSC_COMM_WORLD, fp_timings, "%10d      %-50s %.20g\n", iter_, FUNC_NAME, funct_time ## FUNC_NAME);
+#else
+    #define DMRG_TIMINGS_START(FUNC_NAME)
+    #define DMRG_TIMINGS_END(FUNC_NAME)
+#endif
+
+
+#ifdef __DMRG_SUB_TIMINGS
+
+    #define DMRG_SUB_TIMINGS_START(SECTION_LABEL) \
+        PetscLogDouble subfunct_time0 ## SECTION_LABEL, subfunct_time ## SECTION_LABEL; \
+        ierr = PetscTime(&subfunct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define DMRG_SUB_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&subfunct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        subfunct_time ## SECTION_LABEL = subfunct_time ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+
+    /* Inspect accumulated timings for a section of code inside a loop */
+
+    #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble subfunct_time0 ## SECTION_LABEL, subfunct_time1 ## SECTION_LABEL, subfunct_time ## SECTION_LABEL = 0.0;
+
+    #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&subfunct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&subfunct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        subfunct_time ## SECTION_LABEL += subfunct_time1 ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
+
+    #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+
+#else
+    #define DMRG_SUB_TIMINGS_INIT(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_START(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_END(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+#endif
+
+
+#ifdef __SVD_USE_EPS
+    #define SVD_OBJECT EPS
+    SETERRQ(comm_, 1, "GetRotationMatrices: Not implemented with __SVD_USE_EPS flag.");
+#else
+    #define SVD_OBJECT SVD
+#endif
 
 /**
     @defgroup   idmrg   iDMRG
@@ -28,6 +91,11 @@ class iDMRG
 protected:
 
     /**
+        Dimension of the local hilbert space
+    */
+    PetscInt    local_dim_;
+
+    /**
         Target number of sites.
     */
     PetscInt    final_nsites_;
@@ -43,9 +111,29 @@ protected:
     PetscInt    nsteps_;
 
     /**
+        Flag for when parameters have been set
+    */
+    PetscBool   parameters_set = PETSC_FALSE;
+
+    /**
+        Whether to perform targetting of magnetization sector
+     */
+    PetscBool do_target_Sz = PETSC_FALSE;
+
+    /**
+        Target magnetization
+     */
+    PetscReal target_Sz = 0;
+
+    /**
+        Target magnetization has been set
+     */
+    PetscBool target_Sz_set = PETSC_FALSE;
+
+    /**
         Completed number of steps.
     */
-    PetscInt    iter_;
+    PetscInt    iter_ = -1;
 
     /**
         DMRGBlock object representing the left block of sites
@@ -56,6 +144,18 @@ protected:
         DMRGBlock object representing the right block of sites
      */
     DMRGBlock   BlockRight_;
+
+    /**
+        Container for the magnetization sectors of a single site
+        TODO: On new layout, move to spin-dependent definitions/class
+     */
+    std::vector<PetscScalar> single_site_sectors;
+
+    /**
+        Container for the magnetization sectors and indices
+        TODO: On new layout, move to spin-dependent definitions/class
+     */
+    std::unordered_map<PetscScalar,std::vector<PetscInt>> sector_indices;
 
     /**
         Matrix operator containing the superblock Hamiltonian
@@ -122,6 +222,11 @@ protected:
     PetscBool   dm_svd = PETSC_FALSE;
 
     /**
+        Counts the number of truncations performed
+     */
+    PetscInt    ntruncations_ = 0;
+
+    /**
         Rotation matrix formed from the singular vectors of the largest
         singular values of dm_left
      */
@@ -155,12 +260,17 @@ protected:
     */
     Mat Sm1_;
 
+    /**
+        Internal function to check whether parameters have been set
+    */
+    PetscErrorCode CheckSetParameters();
+
 public:
 
     /**
         Explicit initializer
      */
-    PetscErrorCode init(MPI_Comm comm = PETSC_COMM_WORLD, PetscInt mstates = 20);
+    PetscErrorCode init(MPI_Comm comm = PETSC_COMM_WORLD, PetscInt nsites = 100, PetscInt mstates = 20);
 
     /**
         Explicit destructor
@@ -168,7 +278,12 @@ public:
     PetscErrorCode destroy();
 
     /**
-        Returns the number of sites in the left block;
+        Set target magnetization
+     */
+    PetscErrorCode SetTargetSz(PetscReal Sz_in, PetscBool do_target_Sz_in);
+
+    /**
+        Returns the number of sites in the left block
      */
     PetscInt LengthBlockLeft()
     {
@@ -176,11 +291,63 @@ public:
     }
 
     /**
-        Returns the number of sites in the right block;
+        Returns the number of sites in the right block
      */
     PetscInt LengthBlockRight()
     {
         return BlockRight_.length();
+    }
+
+    /**
+        Returns the total number of sites
+     */
+     PetscInt TotalLength()
+    {
+        return LengthBlockLeft() + LengthBlockRight();
+    }
+
+    /**
+        Returns the total basis size
+     */
+    PetscInt TotalBasisSize()
+    {
+        if(BlockLeft_.is_valid() && BlockRight_.is_valid()){
+            return BlockLeft_.basis_size() * BlockRight_.basis_size();
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+        Returns the target number of sites
+     */
+    PetscInt TargetLength()
+    {
+        return final_nsites_;
+    }
+
+    /**
+        Returns the target number of states
+     */
+    PetscInt mstates()
+    {
+        return mstates_;
+    }
+
+    /**
+        Returns the number of dimensions of the local Hilbert space
+     */
+    PetscInt local_dim()
+    {
+        return local_dim_;
+    }
+
+    /**
+     *  Reference to iteration number
+     */
+    PetscInt& iter()
+    {
+        return iter_;
     }
 
     /**
@@ -214,6 +381,16 @@ public:
     PetscErrorCode SVDReducedDensityMatrices();
 
     /**
+        Construct the rotation matrices for truncating the block and spin operators.
+     */
+    PetscErrorCode GetRotationMatrices(PetscReal& truncerr_left, PetscReal& truncerr_right);
+
+    /**
+
+     */
+    PetscErrorCode TruncateOperators();
+
+    /**
         Printout operator matrices to standard output
      */
     PetscErrorCode MatPeekOperators();
@@ -222,6 +399,11 @@ public:
         Save operator matrices to subfolder
      */
     PetscErrorCode MatSaveOperators();
+
+    /**
+        Timings
+     */
+    FILE *fp_timings;
 
 };
 

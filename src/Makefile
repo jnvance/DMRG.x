@@ -1,12 +1,37 @@
 
 TARGETS = test_dmrg.x test_kron.x test_reshape.x
 
-CXXFLAGS=-O3 -std=c++11 -D__TESTING
+CXXFLAGS += -O3 -std=c++11
+# CXXFLAGS += -D SUPERBLOCK_OPTIMIZATION=4
+# CXXFLAGS += -D__TESTING
+# CXXFLAGS += -D__DMRG_TIMINGS
+
+CXXFLAGS += -D__TIMINGS
+
+CXXFLAGS += -D__DMRG_SUB_TIMINGS
+CXXFLAGS += -D__DMRG_SUB_SVD_TIMINGS
+
+CXXFLAGS += -D__KRON_TIMINGS
+CXXFLAGS += -D__KRON_PS_TIMINGS
+
+# CXXFLAGS += -D__KRON_TIMINGS_ACCUM
+# CXXFLAGS += -D__KRON_PS_TIMINGS_ACCUM
+
+# CXXFLAGS += -D__LINALG_TOOLS_TIMINGS
+# CXXFLAGS += -D__KRON_DENSE_PREALLOCATION
+# CXXFLAGS += -D__PRINT_SIZES -D__PRINT_TRUNCATION_ERROR
+# CXXFLAGS += -D__PRINT_SVD_CONVERGENCE
+# CXXFLAGS += -D__PRINT_SVD_LARGEST
+# CXXFLAGS += -D__SVD_USE_EPS
+# CXXFLAGS += -D__PRINT_EPS_CONVERGENCE
+# CXXFLAGS += -D__PRINT_EPS_LARGEST
+
+TEST_DMRG_DEPS = test_dmrg.o idmrg_1d_heisenberg.o dmrgblock.o kron.o idmrg.o linalg_tools.o
 
 all: ${TARGETS}
 
-test_dmrg.x: test_dmrg.o dmrgblock.o idmrg.o linalg_tools.o kron.o chkopts
-	-${CLINKER} -o test_dmrg.x test_dmrg.o dmrgblock.o kron.o idmrg.o linalg_tools.o ${SLEPC_EPS_LIB}
+test_dmrg.x: ${TEST_DMRG_DEPS} chkopts
+	-${CLINKER} -o test_dmrg.x ${TEST_DMRG_DEPS} ${SLEPC_EPS_LIB}
 	${RM} test_dmrg.o
 
 test_kron.x: test_kron.o linalg_tools.o kron.o chkopts

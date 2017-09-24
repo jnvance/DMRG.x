@@ -10,7 +10,8 @@
 
 #include <slepceps.h>
 #include <petscmat.h>
-
+#include <vector>
+#include <unordered_map>
 
 /**
     @addtogroup dmrgblock
@@ -92,33 +93,37 @@ public:
     /**
         Update operators simultaneously
 
-        @param[in]   H_new  Replaces \f$H\f$ matrix
-        @param[in]   Sz_new Replaces \f$S_z\f$ matrix
-        @param[in]   Sp_new Replaces \f$S_+\f$ matrix
+        @param[in/out]   H_new  Replaces \f$H\f$ matrix
+        @param[in/out]   Sz_new Replaces \f$S_z\f$ matrix
+        @param[in/out]   Sp_new Replaces \f$S_+\f$ matrix
 
+        After the update the input matrix is set to nullptr to avoid reusing the object.
      */
-    PetscErrorCode  update_operators(const Mat& H_new, const Mat& Sz_new, const Mat& Sp_new);
+    PetscErrorCode  update_operators(Mat& H_new, Mat& Sz_new, Mat& Sp_new);
 
     /**
         Update \f$H\f$ matrix
 
-        @param[in]   H_new  Replaces \f$H\f$ matrix
+        @param[in/out]   H_new  Replaces \f$H\f$ matrix
+        After the update the input matrix is set to nullptr to avoid reusing the object.
      */
-    PetscErrorCode  update_H(const Mat& H_new);
+    PetscErrorCode  update_H(Mat& H_new);
 
     /**
         Update \f$S_z\f$ matrix
 
-        @param[in]   Sz_new  Replaces \f$S_z\f$ matrix
+        @param[in/out]   Sz_new  Replaces \f$S_z\f$ matrix
+        After the update the input matrix is set to nullptr to avoid reusing the object.
      */
-    PetscErrorCode  update_Sz(const Mat& Sz_new);
+    PetscErrorCode  update_Sz(Mat& Sz_new);
 
     /**
         Update \f$S_+\f$ matrix
 
-        @param[in]   Sp_new  Replaces \f$S_+\f$ matrix
+        @param[in/out]   Sp_new  Replaces \f$S_+\f$ matrix
+        After the update the input matrix is set to nullptr to avoid reusing the object.
     */
-    PetscErrorCode  update_Sp(const Mat& Sp_new);
+    PetscErrorCode  update_Sp(Mat& Sp_new);
 
     /**
         Returns the number of sites within the blocks
@@ -131,7 +136,7 @@ public:
     /**
         Returns the number of states used to represent the operators
      */
-    PetscInt basis_size()
+    PetscInt basis_size() const
     {
         return basis_size_;
     }
@@ -143,6 +148,26 @@ public:
     {
         length_ = _length;
     }
+
+    /**
+        Check whether this is a valid block
+     */
+    PetscBool is_valid();
+
+    /**
+        Keeps track of the Sz sectors
+     */
+    std::vector<PetscScalar> basis_sector_array;
+
+    /**
+        Keeps track of the basis in each Sz sector
+     */
+    std::unordered_map<PetscScalar,std::vector<PetscInt>> basis_by_sector;
+
+    /**
+        Keeps track of the basis in each Sz sector
+     */
+    std::unordered_map<PetscScalar, Mat> rho_block_dict;
 
 };
 

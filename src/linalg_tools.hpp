@@ -1,8 +1,11 @@
 #ifndef __LINALG_TOOLS_HPP__
 #define __LINALG_TOOLS_HPP__
 
-// #include <slepceps.h>
+#include <slepceps.h>
 #include <slepcsvd.h>
+#include <vector>
+#include <map>
+#include <unordered_map>
 
 /**
     @defgroup   linalg_tools    Linear Algebra Tools
@@ -132,6 +135,15 @@ PetscErrorCode VecReshapeToLocalMat(
 
 
 /**
+    Reshape an \f$ (M \cdot N) \f$-length local vector to an \f$ M \times N \f$ sequential
+    matrix with a full copy on each MPI process.
+ */
+PetscErrorCode LocalVecReshapeToLocalMat(
+    const Vec& vec_seq, Mat& mat, const PetscInt M, const PetscInt N,
+    const std::vector<PetscInt> idx = std::vector<PetscInt>());
+
+
+/**
     Reshapes a vector into a matrix and multiplies the matrix to its own Hermitian conjugate.
 
     @param[in]   vec_r          Real part of the input vector
@@ -175,30 +187,110 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i,
  */
 PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_right);
 
-
 /**
-    Calculates the singular value decomposition of a matrix sorted from
-    highest to lowest singular values
-
-    @param[in]   mat            Input matrix (may be dense)
-    @param[out]  svd            Output svd object
 
  */
-PetscErrorCode MatGetSVD(const Mat& mat, SVD& svd);
+PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
 
 /**
-    Takes the first mstates singular vectors of mat_in as calculated in svd,
-    places them as columns of a matrix, and calculates the truncation error
-
-    @param[in]   mat_in         Input matrix of size \f$ n \times n \f$
-    @param[in]   svd            Corresponding SVD of mat_in
-    @param[in]   mstates        Number of singular values and vectors to be extracted, i.e. \f$m\f$
-    @param[out]  error          Truncation error calculated from the sum of the
-                                residual singular values
-    @param[out]  mat            Output matrix of size \f$ m \times n \f$
 
  */
-PetscErrorCode SVDGetTruncatedSingularValues(const Mat& mat_in, const SVD& svd, const PetscInt mstates, PetscScalar& error, Mat& mat);
+PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScalar& error, FILE *fp);
+
+
+/**
+    Takes the first mstates eigenpairs of mat_in with highest eigenvalues and calculates it with eps,
+    places them as columns of a matrix, and calculates the truncation error.
+
+    @param[in]  mat_in   The matrix in
+    @param[in]  mstates  The mstates
+    @param      error    The error
+    @param      mat      The matrix
+
+    @return     { description_of_the_return_value }
+ */
+PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates, PetscScalar& error, Mat& mat, FILE *fp);
+
+
+/**
+    Mimics the python operation: np.add.outer(A, B).flatten()
+ */
+std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector<PetscScalar> B);
+
+
+/**
+    Index map
+ */
+std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array);
+
+
+
+
+
+#define LINALG_TOOLS__MATASSEMBLY_INIT() \
+    PetscBool assembled;
+
+#define LINALG_TOOLS__MATASSEMBLY_FINAL(MATRIX) \
+    ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
+    if (assembled == PETSC_FALSE){\
+        ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+        ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    }
+
+#define LINALG_TOOLS__MATASSEMBLY_FLUSH(MATRIX) \
+    ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
+    if (assembled == PETSC_FALSE){\
+        ierr = MatAssemblyBegin(MATRIX, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);\
+        ierr = MatAssemblyEnd(MATRIX, MAT_FLUSH_ASSEMBLY); CHKERRQ(ierr);\
+    }
+
+#define LINALG_TOOLS__MATDESTROY(MATRIX) \
+    if(&MATRIX){ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); MATRIX = nullptr;}
+    /* Requires ierr to be defined */
+
+#define LINALG_TOOLS__VECDESTROY(VECTOR) \
+    if(&VECTOR){ierr = VecDestroy(&VECTOR); CHKERRQ(ierr); VECTOR = nullptr;}
+    /* Requires ierr to be defined */
+
+#ifdef __LINALG_TOOLS_TIMINGS
+
+    #include <petsctime.h>
+
+    #define LINALG_TOOLS_TIMINGS_START(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time ## SECTION_LABEL; \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define LINALG_TOOLS_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+    /* Inspect accumulated timings for a section of code inside a loop */
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL, funct_time1 ## SECTION_LABEL, funct_time ## SECTION_LABEL = 0.0;
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+
+    #define LINALG_TOOLS_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+    #define LINALG_TOOLS_TIMINGS_INIT(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_START(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_END(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define LINALG_TOOLS_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+#endif
+
+
 
 /** @} */
 

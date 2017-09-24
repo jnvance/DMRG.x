@@ -1,8 +1,126 @@
 #ifndef __KRON_HPP__
 #define __KRON_HPP__
 
+#include "linalg_tools.hpp"
 #include <slepceps.h>
 #include <stdlib.h>
+#include <petsctime.h>
+#include <set>
+#include <vector>
+#include <map>
+#include <algorithm> /* std::find */
+#include <unordered_set>
+
+/* Inspect the timings inside matkron */
+/* Inspect timings for a full block of code */
+#ifdef __KRON_TIMINGS
+
+    #define KRON_TIMINGS_PRINT(SOMETEXT) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%s\n",SOMETEXT);
+
+    #define KRON_TIMINGS_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL = 0.0, funct_time ## SECTION_LABEL = 0.0;
+
+    #define KRON_TIMINGS_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define KRON_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20f\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+
+    #define KRON_TIMINGS_PRINT(SOMETEXT)
+    #define KRON_TIMINGS_INIT(SECTION_LABEL)
+    #define KRON_TIMINGS_START(SECTION_LABEL)
+    #define KRON_TIMINGS_END(SECTION_LABEL)
+
+#endif
+
+
+/* Inspect accumulated timings for a section of code inside a loop */
+#ifdef __KRON_TIMINGS_ACCUM
+
+    #define KRON_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL = 0.0, funct_time1 ## SECTION_LABEL = 0.0, funct_time ## SECTION_LABEL = 0.0;
+
+    #define KRON_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define KRON_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+
+    #define KRON_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20f\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+
+    #define KRON_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define KRON_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+
+#endif
+
+
+#ifdef __KRON_PS_TIMINGS
+
+    #define KRON_PS_TIMINGS_PRINT(SOMETEXT) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%s\n",SOMETEXT);
+
+    /* Inspect timings for a full block of code */
+
+    #define KRON_PS_TIMINGS_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL = 0.0, funct_time ## SECTION_LABEL = 0.0;
+
+    #define KRON_PS_TIMINGS_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define KRON_PS_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL = funct_time ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20f\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+
+    #define KRON_PS_TIMINGS_PRINT(SOMETEXT)
+    #define KRON_PS_TIMINGS_INIT(SECTION_LABEL)
+    #define KRON_PS_TIMINGS_START(SECTION_LABEL)
+    #define KRON_PS_TIMINGS_END(SECTION_LABEL)
+
+#endif
+
+
+/* Inspect accumulated timings for a section of code inside a loop */
+#ifdef __KRON_PS_TIMINGS_ACCUM
+
+    #define KRON_PS_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
+        PetscLogDouble funct_time0 ## SECTION_LABEL = 0.0, funct_time1 ## SECTION_LABEL = 0.0, funct_time ## SECTION_LABEL = 0.0;
+
+    #define KRON_PS_TIMINGS_ACCUM_START(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time0 ## SECTION_LABEL); CHKERRQ(ierr);
+
+    #define KRON_PS_TIMINGS_ACCUM_END(SECTION_LABEL) \
+        ierr = PetscTime(&funct_time1 ## SECTION_LABEL); CHKERRQ(ierr); \
+        funct_time ## SECTION_LABEL += funct_time1 ## SECTION_LABEL - funct_time0 ## SECTION_LABEL; \
+
+    #define KRON_PS_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-46s %.20f\n", "", SECTION_LABEL, funct_time ## SECTION_LABEL);
+
+#else
+
+    #define KRON_PS_TIMINGS_ACCUM_INIT(SECTION_LABEL)
+    #define KRON_PS_TIMINGS_ACCUM_START(SECTION_LABEL)
+    #define KRON_PS_TIMINGS_ACCUM_END(SECTION_LABEL)
+    #define KRON_PS_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+
+#endif
+
+
+
+
 
 
 /**
@@ -98,6 +216,33 @@ PetscErrorCode MatKronAdd(const Mat& A, const Mat& B, Mat& C, const MPI_Comm& co
  */
 PetscErrorCode MatKronScaleAdd(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm);
 
+
+PetscErrorCode MatKronScaleAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const MPI_Comm& comm);
+
+
+PetscErrorCode MatKronScalePrealloc(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const MPI_Comm& comm);
+
+
+PetscErrorCode MatKronScalePreallocAddv(const PetscScalar a, const Mat& A, const Mat& B, Mat& C, const InsertMode addv, const PetscBool flush, const PetscBool prealloc, const MPI_Comm& comm);
+
+/* Interface for single-term operation */
+PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat& C);
+
+
+PetscErrorCode MatKronProdSum(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const PetscBool prealloc);
+
+
+PetscErrorCode MatKronProdSumIdx(
+    const std::vector<PetscScalar>& a,
+    const std::vector<Mat>& A,
+    const std::vector<Mat>& B,
+    Mat& C,
+    const std::vector<PetscInt> idx);
 
 /** @} */
 #endif // __KRON_HPP__
