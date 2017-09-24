@@ -634,7 +634,8 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
     ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
     // ierr = SVDSetType(svd, SVDLAPACK); CHKERRQ(ierr);
-    // ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    // ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = SVDSetDimensions(svd, mstates, mat_in_ncols, PETSC_DEFAULT); CHKERRQ(ierr);
     // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
 
@@ -932,7 +933,8 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
     ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
     ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
     ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
-    ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    // ierr = SVDSetDimensions(svd, mat_in_nrows, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = SVDSetDimensions(svd, mat_in_nrows, mat_in_nrows, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd, SVD_LARGEST); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
 
