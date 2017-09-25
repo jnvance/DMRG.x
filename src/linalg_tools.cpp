@@ -622,7 +622,9 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
         SETERRQ(comm, 1, errormsg);
     }
 
-    // PetscInt mstates = mat_in_nrows < mstates_in ? mat_in_nrows : mstates_in;
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscPrintf(comm,"%16s SVD size: %lu\n","",(unsigned long int)(mat_in_nrows));
+    #endif
 
     PetscInt mstates = mstates_in;
 
