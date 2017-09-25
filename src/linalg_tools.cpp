@@ -597,6 +597,13 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
         // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
 
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscLogDouble svd_total_time0, svd_total_time;
+        ierr = PetscTime(&svd_total_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
     PetscBool assembled;
     ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
     if (assembled == PETSC_FALSE){
@@ -639,6 +646,18 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
 
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD prep:", svd_total_time);
+
+        PetscLogDouble svd_solve_time0, svd_solve_time;
+        ierr = PetscTime(&svd_solve_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
     #define __SVD_SOLVE "        SVDSolve"
     LINALG_TOOLS_TIMINGS_START(__SVD_SOLVE)
 
@@ -646,6 +665,17 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
 
     LINALG_TOOLS_TIMINGS_END(__SVD_SOLVE)
     #undef __SVD_SOLVE
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_solve_time); CHKERRQ(ierr);
+        svd_solve_time = svd_solve_time - svd_solve_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD solve:", svd_solve_time);
+
+        PetscLogDouble svd_post_time0, svd_post_time;
+        ierr = PetscTime(&svd_post_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
 
     #define __SVD_LOAD  "        SVDLoad"
     LINALG_TOOLS_TIMINGS_START(__SVD_LOAD)
@@ -740,6 +770,19 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     LINALG_TOOLS_TIMINGS_END(__SVD_LOAD)
 
     ierr = SVDDestroy(&svd);
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_post_time); CHKERRQ(ierr);
+        svd_post_time = svd_post_time - svd_post_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD post:", svd_post_time);
+
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n\n", "","SVD TOTAL:", svd_total_time);
+    #endif
+    /**************************************************/
+
     return ierr;
 }
 
