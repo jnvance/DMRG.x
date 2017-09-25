@@ -22,8 +22,8 @@ int main(int argc, char **argv)
         the number of states retained at each truncation, and
         the coupling constants
     */
-    PetscInt nsites = 12;
-    PetscInt mstates = 15;
+    PetscInt nsites = 4;
+    PetscInt mstates = 2;
     PetscScalar J  = 1.0;
     PetscScalar Jz = 1.0;
     PetscScalar target_Sz = 0.0;

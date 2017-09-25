@@ -642,7 +642,6 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
     ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
-    // ierr = SVDSetType(svd, SVDLAPACK); CHKERRQ(ierr);
     // ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetDimensions(svd, mstates, mat_in_ncols, PETSC_DEFAULT); CHKERRQ(ierr);
     // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
