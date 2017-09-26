@@ -336,7 +336,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         superblock_H_ = nullptr;
         superblock_set_=PETSC_FALSE;
         #ifdef __DMRG_SUB_TIMINGS
-            PetscPrintf(comm_, "%4sPrealloc H\n","");
+            PetscPrintf(comm_, "   %6d   Prealloc H\n",iter());
         #endif
     }
 
