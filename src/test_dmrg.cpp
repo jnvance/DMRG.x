@@ -84,7 +84,10 @@ int main(int argc, char **argv)
 
     while(heis.TotalLength() < heis.TargetLength())
     {
+        PetscLogDouble iter_time0;
+        ierr = PetscTime(&iter_time0); CHKERRQ(ierr);
         heis.iter()++;
+
         /*
             Grow the left and right blocks by adding one site in the junction
         */
@@ -116,6 +119,9 @@ int main(int argc, char **argv)
         ierr = heis.GetRotationMatrices(truncerr_left, truncerr_right); CHKERRQ(ierr);
         ierr = heis.TruncateOperators(); CHKERRQ(ierr);
 
+        PetscLogDouble iter_time1;
+        ierr = PetscTime(&iter_time1); CHKERRQ(ierr);
+
         if (gse_i!=0.0) {
             SETERRQ(comm,1,"Not implemented for complex ground state energy.\n");
         } else {
@@ -124,6 +130,7 @@ int main(int argc, char **argv)
             ierr = PetscPrintf(PETSC_COMM_WORLD,"   %6d   %6d%12f    %12f     %9f     %12g     %+8.5g  %+8.5g\n",
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
                 error_rel, (double)(error), (double)(truncerr_left), (double)(truncerr_right)); CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_WORLD,"%4sTime: %8f s\n\n","",iter_time1-iter_time0);
             ierr = PetscFPrintf(PETSC_COMM_WORLD, fp,"   %6d   %6d    %.20g    %.20g    %.20g    %.20g    %.20g    %.20g\n",
                 heis.iter(), superblocklength, (double)gse_r, gse_site,
                 error_rel, (double)(error), (double)(truncerr_left), (double)(truncerr_right)); CHKERRQ(ierr);
