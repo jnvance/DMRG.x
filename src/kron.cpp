@@ -3957,6 +3957,22 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     KRON_PS_TIMINGS_END(__GETSUBMAT);
     #undef __GETSUBMAT
 
+/* Test this feature */
+#if 1
+
+    #define __CONCATENATE      "    Concatenate"
+    KRON_PS_TIMINGS_INIT(__CONCATENATE);
+    KRON_PS_TIMINGS_START(__CONCATENATE);
+    /**************************************************/
+
+    MatCreateMPIMatConcatenateSeqMat(comm, C_sub, PETSC_DECIDE, MAT_INITIAL_MATRIX, &C);
+
+    /**************************************************/
+    KRON_PS_TIMINGS_END(__CONCATENATE);
+    #undef __CONCATENATE
+    /**************************************************/
+
+#else
     #define __PREALLOC      "    Preallocation"
     KRON_PS_TIMINGS_INIT(__PREALLOC);
     KRON_PS_TIMINGS_START(__PREALLOC);
@@ -4060,6 +4076,8 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     #undef __SETVALS
     /**************************************************/
 
+#endif
+
     /* Free/destroy temporary data structures */
 
     if(C_sub)   ierr = MatDestroy(&C_sub); CHKERRQ(ierr);
@@ -4068,6 +4086,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
 
     ierr = PetscFree(id_cols); CHKERRQ(ierr);
     ierr = PetscFree(id_rows); CHKERRQ(ierr);
+
 
     /**************************************************/
     KRON_TIMINGS_END(__FUNCT__);
