@@ -193,6 +193,8 @@ PetscErrorCode MatMultSelfHC_AIJ(const Mat& mat_in, Mat& mat, const PetscBool hc
  */
 PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
 
+PetscErrorCode SVDLargestStates_split(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
+
 /**
 
  */

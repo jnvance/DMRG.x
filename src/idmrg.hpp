@@ -244,6 +244,16 @@ protected:
     MPI_Comm    comm_ = PETSC_COMM_WORLD;
 
     /**
+        Indicates how many slave subcommunicators will perform the SVD
+     */
+    PetscInt svd_nsubcomm = 0;
+
+    /**
+        Indicates whether to do subcommunicator splitting to perform SVD
+     */
+    PetscBool do_svd_commsplit = PETSC_FALSE;
+
+    /**
         2x2 identity matrix
     */
     Mat eye1_;

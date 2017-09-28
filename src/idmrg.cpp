@@ -41,13 +41,31 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     #else
         #define PRINT_VEC(stdvectorpetscscalar)
     #endif
-
+    /* For debugging */
     // PRINT_VEC(single_site_sectors)
     // PRINT_VEC(BlockLeft_.basis_sector_array)
     // PRINT_VEC(BlockRight_.basis_sector_array)
 
     #undef PRINT_VEC
 
+    /*
+        Check whether to perform SVD on a subset of processes
+    */
+    ierr = PetscOptionsGetInt(NULL,NULL,"-svd_nsubcomm",&svd_nsubcomm,NULL); CHKERRQ(ierr);
+    if(svd_nsubcomm > 1)
+    {
+        /* Get information on MPI */
+        PetscMPIInt nprocs;
+        MPI_Comm_size(comm_, &nprocs);
+
+        /* Check whether splitting is viable */
+        if(nprocs % svd_nsubcomm)
+            SETERRQ2(comm_, 1,  "The number of processes in comm (%d) must be divisible "
+                                "by svd_nsubcomm (%d).", nprocs, svd_nsubcomm);
+
+        /* Set object-wide flag */
+        do_svd_commsplit = PETSC_TRUE;
+    }
 
     /* Initialize log file for timings */
     #ifdef __TIMINGS
@@ -317,8 +335,8 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
                 ierr = LocalVecReshapeToLocalMat(
                     vec_seq, psi0_sector, size_left, size_right, indices); CHKERRQ(ierr);
 
-                ierr = MatMultSelfHC(psi0_sector, dm_left, PETSC_TRUE); CHKERRQ(ierr);
-                ierr = MatMultSelfHC(psi0_sector, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+                ierr = MatMultSelfHC_AIJ(psi0_sector, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+                ierr = MatMultSelfHC_AIJ(psi0_sector, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
                 BlockLeft_.rho_block_dict[sys_enl_Sz] = dm_left;
                 BlockRight_.rho_block_dict[env_enl_Sz] = dm_right;
@@ -349,8 +367,9 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
             Collect entire groundstate vector to all processes
          */
         ierr = VecReshapeToLocalMat(gsv_r_, gsv_mat_seq, size_left, size_right); CHKERRQ(ierr);
-        ierr = MatMultSelfHC(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
-        ierr = MatMultSelfHC(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+
+        ierr = MatMultSelfHC_AIJ(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+        ierr = MatMultSelfHC_AIJ(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
         /*
             Destroy temporary matrices
@@ -725,13 +744,25 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
 
         DMRG_SUB_TIMINGS_START(__GET_SVD)
 
-        #ifdef __SVD_USE_EPS
-            ierr = EPSLargestEigenpairs(dm_left, M_left, truncerr_left, U_left_,fp_left); CHKERRQ(ierr);
-            ierr = EPSLargestEigenpairs(dm_right, M_right, truncerr_right, U_right_,fp_right); CHKERRQ(ierr);
-        #else
+        /* Do SVD on subcommunicator */
+        if(do_svd_commsplit)
+        {
+            Mat dm_left_red, dm_right_red; //, U_left_red, U_right_red;
+            ierr = MatCreateRedundantMatrix(dm_left, svd_nsubcomm, MPI_COMM_NULL, MAT_INITIAL_MATRIX, &dm_left_red); CHKERRQ(ierr);
+            ierr = MatCreateRedundantMatrix(dm_right, svd_nsubcomm, MPI_COMM_NULL, MAT_INITIAL_MATRIX, &dm_right_red); CHKERRQ(ierr);
+
+            ierr = SVDLargestStates_split(dm_left_red, M_left, truncerr_left, U_left_, nullptr); CHKERRQ(ierr);
+            ierr = SVDLargestStates_split(dm_right_red, M_right, truncerr_right, U_right_, nullptr); CHKERRQ(ierr);
+
+            /* Reconstruct global rotation matrices */
+
+            ierr = MatDestroy(&dm_left_red);
+            ierr = MatDestroy(&dm_right_red);
+
+        } else {
             ierr = SVDLargestStates(dm_left, M_left, truncerr_left, U_left_,fp_left); CHKERRQ(ierr);
             ierr = SVDLargestStates(dm_right, M_right, truncerr_right, U_right_,fp_right); CHKERRQ(ierr);
-        #endif
+        }
 
         DMRG_SUB_TIMINGS_END(__GET_SVD)
 
