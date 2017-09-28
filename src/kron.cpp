@@ -3843,7 +3843,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     PetscErrorCode ierr = 0;
 
     PetscMPIInt     nprocs, rank;
-    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm comm = PetscObjectComm((PetscObject) A[0]);
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
@@ -3880,6 +3880,8 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         SETERRQ2(comm,1,"Wrong matrix type. Expected %s. Got %s.",MATSEQAIJ,type);
     }
 
+    MPI_Comm comm_temp = PetscObjectComm((PetscObject) C_temp);
+
     /**************************************************/
     KRON_TIMINGS_INIT(__FUNCT__);
     KRON_TIMINGS_START(__FUNCT__);
@@ -3911,9 +3913,9 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     PetscInt M_C_temp, N_C_temp;
     ierr = MatGetSize(C_temp, &M_C_temp, &N_C_temp); CHKERRQ(ierr);
     if(M_C_temp != locrows)
-        SETERRQ2(comm,1,"Incorrect number of rows in C_temp. Expected %d. Got %d.",locrows,M_C_temp);
+        SETERRQ2(comm_temp,1,"Incorrect number of rows in C_temp. Expected %d. Got %d.",locrows,M_C_temp);
     if(N_C_temp != M_C)
-        SETERRQ2(comm,1,"Incorrect number of columns in C_temp. Expected %d. Got %d.",M_C,N_C_temp);
+        SETERRQ2(comm_temp,1,"Incorrect number of columns in C_temp. Expected %d. Got %d.",M_C,N_C_temp);
 
     /* Construct row indices */
 
@@ -3923,7 +3925,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         id_rows[Irow] = Irow;
 
     IS is_rows = nullptr;
-    ierr = ISCreateGeneral(comm, locrows, id_rows, PETSC_USE_POINTER, &is_rows); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(comm_temp, locrows, id_rows, PETSC_USE_POINTER, &is_rows); CHKERRQ(ierr);
 
     /* Construct column indices */
 
@@ -3933,7 +3935,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         id_cols[Icol] = idx[Icol];
 
     IS is_cols = nullptr;
-    ierr = ISCreateGeneral(comm, idx.size(), id_cols, PETSC_USE_POINTER, &is_cols); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(comm_temp, idx.size(), id_cols, PETSC_USE_POINTER, &is_cols); CHKERRQ(ierr);
 
     /* Get submatrix based on desired indices */
 
