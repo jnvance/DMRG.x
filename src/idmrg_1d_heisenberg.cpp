@@ -379,7 +379,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     if(!do_target_Sz && M_superblock != TotalBasisSize())
         SETERRQ2(comm_, 1, "Basis size mismatch. Expected %d. Got %d.\n",TotalBasisSize(),M_superblock);
 
-    if( do_target_Sz && M_superblock != restricted_basis_indices.size())
+    if( do_target_Sz && M_superblock != (PetscInt) restricted_basis_indices.size())
         SETERRQ2(comm_, 1, "Sector size mismatch. Expected %d. Got %d\n",restricted_basis_indices.size(),M_superblock);
     /*
         Final Assembly

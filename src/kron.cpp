@@ -17,7 +17,7 @@ PetscErrorCode InitialChecks(
     PetscInt& M_C,
     PetscInt& N_C)
 {
-    PetscErrorCode ierr;
+    PetscErrorCode ierr = 0;
 
     /*
         INITIAL CHECKPOINTS
@@ -46,8 +46,8 @@ PetscErrorCode InitialChecks(
 
     for (PetscInt i = 0; i < nterms; ++i)
     {
-        ierr = MatGetSize(A[i], M_A.data()+i, N_A.data()+i);
-        ierr = MatGetSize(B[i], M_B.data()+i, N_B.data()+i);
+        ierr = MatGetSize(A[i], M_A.data()+i, N_A.data()+i); CHKERRQ(ierr);
+        ierr = MatGetSize(B[i], M_B.data()+i, N_B.data()+i); CHKERRQ(ierr);
     }
     /*
         Check whether the resulting sizes of the tensor products are equal
@@ -115,7 +115,7 @@ PetscErrorCode GetSubmatrix(
         id_cols_A[Icol] = Icol;
 
     IS isrow_A = nullptr, iscol_A = nullptr;
-    PetscInt A_sub_start_temp, A_sub_end_temp;
+    PetscInt A_sub_start_temp = 0, A_sub_end_temp = 0;
 
     for (PetscInt i = 0; i < nterms; ++i)
     {
@@ -156,7 +156,7 @@ PetscErrorCode GetSubmatrix(
 }
 
 
-
+#if 0
 #undef __FUNCT__
 #define __FUNCT__ "MatKronProdSum_1"
 PetscErrorCode MatKronProdSum_1(
@@ -574,6 +574,7 @@ PetscErrorCode MatKronProdSum_1(
     KRON_TIMINGS_END(__FUNCT__);
     return ierr;
 }
+#endif
 
 
 #undef __FUNCT__
@@ -699,7 +700,7 @@ PetscErrorCode MatKronProdSum_2(
         ierr = GetSubmatrix(B,N_B,nterms,M_req_B,id_rows_B,submat_B,B_sub_start,B_sub_end); CHKERRQ(ierr);
 
         std::vector<PetscInt> map_B(M_B[0]);
-        for (PetscInt i = 0; i < set_Brows.size(); ++i){
+        for (size_t i = 0; i < set_Brows.size(); ++i){
             map_B[ id_rows_B[i] ] = i + B_sub_start;
         }
 
@@ -810,7 +811,7 @@ PetscErrorCode MatKronProdSum_2(
 
         #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
             unsigned long int tot_entries=0, tot_entries_reduced=0, M_C_final=M_C;
-            for (size_t i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
+            for (PetscInt i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
             MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
             PetscPrintf(comm, "%24s Nonzeros: %lu/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final,
                 100.0*(double)tot_entries_reduced/((double)(M_C_final) * (double)(M_C_final)));
@@ -1077,6 +1078,7 @@ PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat
 }
 
 
+#if 0
 #undef __FUNCT__
 #define __FUNCT__ "MatKronProdSum_selectiverows"
 PetscErrorCode MatKronProdSum_selectiverows(
@@ -3451,7 +3453,7 @@ PetscErrorCode MatKronProdSumIdx_3(
     KRON_TIMINGS_END(__FUNCT__);
     return ierr;
 }
-
+#endif
 
 /* Dump values to sequential matrices */
 #undef __FUNCT__
@@ -3597,10 +3599,10 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
 
         std::vector<PetscInt> map_A(M_A[0]);
         std::vector<PetscInt> map_B(M_B[0]);
-        for (PetscInt i = 0; i < set_Arows.size(); ++i){
+        for (size_t i = 0; i < set_Arows.size(); ++i){
             map_A[ id_rows_A[i] ] = i + A_sub_start;
         }
-        for (PetscInt i = 0; i < set_Brows.size(); ++i){
+        for (size_t i = 0; i < set_Brows.size(); ++i){
             map_B[ id_rows_B[i] ] = i + B_sub_start;
         }
 
@@ -3694,7 +3696,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
 
     #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
         unsigned long int tot_entries=0, tot_entries_reduced=0;
-        for (size_t i = 0; i < locrows; ++i) tot_entries += nnz[i];
+        for (PetscInt i = 0; i < locrows; ++i) tot_entries += nnz[i];
         MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
         PetscPrintf(comm, "%24s Nonzeros: %lu/(%-d x %-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final, N_C_final,
             100.0*(double)tot_entries_reduced/( (double)(M_C_final) * (double)(N_C_final)) );
@@ -3894,7 +3896,6 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     /* Guess final row ownership ranges */
 
     PetscInt M_C_final = idx.size();
-    PetscInt N_C_final = idx.size();
     PetscInt remrows = M_C_final % nprocs;
     PetscInt locrows = M_C_final / nprocs;
     PetscInt Istart = locrows * rank;
@@ -3905,8 +3906,6 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     } else {
         Istart += remrows;
     }
-
-    PetscInt Iend = Istart + locrows;
 
     /* Check the size of C_temp */
 
@@ -3931,7 +3930,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
 
     PetscInt *id_cols;
     ierr = PetscMalloc1(idx.size(), &id_cols); CHKERRQ(ierr);
-    for (PetscInt Icol = 0; Icol < idx.size(); ++Icol)
+    for (size_t Icol = 0; Icol < idx.size(); ++Icol)
         id_cols[Icol] = idx[Icol];
 
     IS is_cols = nullptr;
@@ -3975,6 +3974,10 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     /**************************************************/
 
 #else
+
+    PetscInt N_C_final = idx.size();
+    PetscInt Iend = Istart + locrows;
+
     #define __PREALLOC      "    Preallocation"
     KRON_PS_TIMINGS_INIT(__PREALLOC);
     KRON_PS_TIMINGS_START(__PREALLOC);

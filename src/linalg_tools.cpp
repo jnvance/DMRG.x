@@ -337,7 +337,7 @@ PetscErrorCode LocalVecReshapeToLocalMat(
     ierr = PetscObjectTypeCompare((PetscObject)vec_seq,VECSEQ,&flg);CHKERRQ(ierr);
     if(!flg) SETERRQ(PETSC_COMM_SELF,1,"Argument 1 vec_seq must be a sequential vector (VECSEQ) object.");
 
-    if(idx.size()>0 && idx.size() != M*N)
+    if(idx.size()>0 && idx.size() != (size_t)(M*N))
         SETERRQ2(PETSC_COMM_SELF,1,"Index size and M*N mismatch. Expected M*N size %d. Got %d.",M*N, idx.size());
 
     PetscScalar *vec_vals;

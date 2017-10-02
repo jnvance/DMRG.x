@@ -329,7 +329,7 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
                 if(size_right != size_right2)
                     SETERRQ(comm_, 1, "Right block dimension mismatch.");
 
-                if(size_left*size_right != indices.size())
+                if((size_t)(size_left*size_right) != indices.size())
                     SETERRQ(comm_, 1, "Reshape dimension mismatch.");
 
                 ierr = LocalVecReshapeToLocalMat(
@@ -473,7 +473,7 @@ PetscErrorCode GetRotationMatrices_targetSz(
         /* Verify that sizes match */
         PetscInt vec_size;
         ierr = VecGetSize(Vr, &vec_size); CHKERRQ(ierr);
-        if(vec_size!=current_sector_basis.size())
+        if((size_t)vec_size!=current_sector_basis.size())
             SETERRQ2(comm,1,"Vector size mismatch. Expected %d from current sector basis. Got %d from Vec.",current_sector_basis.size(),vec_size);
 
         /* Loop through the eigenstates and dump as tuple to vector */
@@ -594,7 +594,7 @@ PetscErrorCode GetRotationMatrices_targetSz(
         // PetscInt Vloc = Vend - Vstart;
 
         ierr = VecGetSize(Vr,&vec_size); CHKERRQ(ierr);
-        if(vec_size!=current_sector_basis.size())
+        if((size_t)vec_size!=current_sector_basis.size())
             SETERRQ2(comm,1,"Vector size mismatch. Expected %d. Got %d.",current_sector_basis.size(),vec_size);
 
 
