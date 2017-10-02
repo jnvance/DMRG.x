@@ -1,7 +1,7 @@
 
 TARGETS = test_dmrg.x test_kron.x test_reshape.x
 
-CXXFLAGS += -O3 -std=c++11
+CXXFLAGS += -O3 -std=c++11 -Wall
 # CXXFLAGS += -D SUPERBLOCK_OPTIMIZATION=4
 # CXXFLAGS += -D__TESTING
 # CXXFLAGS += -D__DMRG_TIMINGS
