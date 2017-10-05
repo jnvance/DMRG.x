@@ -131,6 +131,11 @@ protected:
     PetscBool target_Sz_set = PETSC_FALSE;
 
     /**
+        Whether to perform full SVD on a root MPI process
+     */
+    PetscBool do_svd_on_root = PETSC_FALSE;
+
+    /**
         Completed number of steps.
     */
     PetscInt    iter_ = -1;
@@ -242,6 +247,16 @@ protected:
         MPI communicator for distributed arrays
     */
     MPI_Comm    comm_ = PETSC_COMM_WORLD;
+
+    /**
+        MPI process rank on comm_
+    */
+    PetscMPIInt rank_;
+
+    /**
+        MPI number of processes on comm_
+    */
+    PetscMPIInt nprocs_;
 
     /**
         Indicates how many slave subcommunicators will perform the SVD

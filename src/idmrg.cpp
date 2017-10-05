@@ -10,6 +10,10 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     DMRG_TIMINGS_START(__FUNCT__);
 
     comm_ = comm;
+
+    ierr = MPI_Comm_rank(comm_, &rank_); CHKERRQ(ierr);
+    ierr = MPI_Comm_size(comm_, &nprocs_); CHKERRQ(ierr);
+
     mstates_ = mstates;
     final_nsites_ = nsites;
 
@@ -66,6 +70,12 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
         /* Set object-wide flag */
         do_svd_commsplit = PETSC_TRUE;
     }
+
+    /*
+        Check whether to perform SVD on root process
+    */
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_svd_on_root",&do_svd_on_root,NULL); CHKERRQ(ierr);
+
 
     /* Initialize log file for timings */
     #ifdef __TIMINGS
@@ -335,8 +345,17 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
                 ierr = LocalVecReshapeToLocalMat(
                     vec_seq, psi0_sector, size_left, size_right, indices); CHKERRQ(ierr);
 
-                ierr = MatMultSelfHC_AIJ(psi0_sector, dm_left, PETSC_TRUE); CHKERRQ(ierr);
-                ierr = MatMultSelfHC_AIJ(psi0_sector, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+                /* Decide whether to do build RDMs serially on 0th process */
+
+                MPI_Comm comm = comm_;
+                if (do_svd_on_root)
+                {
+                    if (rank_ != 0) continue;
+                    comm = PETSC_COMM_SELF;
+                }
+
+                ierr = MatMultSelfHC_AIJ(comm, psi0_sector, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+                ierr = MatMultSelfHC_AIJ(comm, psi0_sector, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
                 BlockLeft_.rho_block_dict[sys_enl_Sz] = dm_left;
                 BlockRight_.rho_block_dict[env_enl_Sz] = dm_right;
@@ -368,8 +387,8 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
          */
         ierr = VecReshapeToLocalMat(gsv_r_, gsv_mat_seq, size_left, size_right); CHKERRQ(ierr);
 
-        ierr = MatMultSelfHC_AIJ(gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
-        ierr = MatMultSelfHC_AIJ(gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
+        ierr = MatMultSelfHC_AIJ(comm_, gsv_mat_seq, dm_left, PETSC_TRUE); CHKERRQ(ierr);
+        ierr = MatMultSelfHC_AIJ(comm_, gsv_mat_seq, dm_right, PETSC_FALSE); CHKERRQ(ierr);
 
         /*
             Destroy temporary matrices
@@ -682,6 +701,269 @@ PetscErrorCode GetRotationMatrices_targetSz(
 }
 
 
+PetscErrorCode GetRotationMatrices_targetSz_root(
+    const PetscInt mstates,
+    DMRGBlock& block,
+    Mat& mat,
+    PetscReal& truncation_error)
+{
+    PetscErrorCode ierr = 0;
+
+    /* Get information on MPI */
+
+    PetscMPIInt     nprocs, rank;
+    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+
+    /* Do the SVD step only on the root processor */
+    PetscInt my_m = 0;
+    std::vector< SVD_OBJECT >   svd_list;
+    std::vector< Vec >          vec_list;
+    std::vector< eigenstate_t > possible_eigenstates;
+
+    if (!rank)
+    {
+        const std::unordered_map<PetscScalar,std::vector<PetscInt>>&
+            sys_enl_basis_by_sector = block.basis_by_sector;
+
+        svd_list.resize(block.rho_block_dict.size());
+        vec_list.resize(block.rho_block_dict.size());
+
+        /* Diagonalize each block of the reduced density matrix */
+
+        /*********************TIMINGS**********************/
+        #ifdef __DMRG_SUB_TIMINGS
+            PetscLogDouble svd_total_time0, svd_total_time;
+            ierr = PetscTime(&svd_total_time0); CHKERRQ(ierr);
+        #endif
+        /**************************************************/
+
+        PetscInt counter = 0;
+        for (auto elem: block.rho_block_dict)
+        {
+            /*********************TIMINGS**********************/
+            #if defined(__DMRG_SUB_TIMINGS) && (__DMRG_SUB_SVD_TIMINGS)
+                PetscLogDouble svd_time0, svd_time;
+                ierr = PetscTime(&svd_time0); CHKERRQ(ierr);
+            #endif
+            /**************************************************/
+
+            /* Keys and values of rho_block_dict */
+            PetscScalar         Sz_sector = elem.first;
+            Mat&                rho_block = elem.second;
+
+            /* SVD of the reduced density matrices */
+            SVD_OBJECT          svd;
+            Vec                 Vr;
+            PetscScalar         error;
+            PetscInt            nconv;
+
+            ierr = MatGetSVD(rho_block, svd, nconv, error, NULL); CHKERRQ(ierr);
+
+            /* Dump svd into map */
+            svd_list[counter] = svd;
+
+            /* Create corresponding vector for later use */
+            ierr = MatCreateVecs(rho_block, &Vr, nullptr); CHKERRQ(ierr);
+            vec_list[counter] = Vr;
+
+            /* Get current sector basis indices */
+            std::vector<PetscInt> current_sector_basis = sys_enl_basis_by_sector.at(Sz_sector);
+
+            /* Verify that sizes match */
+            PetscInt vec_size;
+            ierr = VecGetSize(Vr, &vec_size); CHKERRQ(ierr);
+            if((size_t)vec_size!=current_sector_basis.size())
+                SETERRQ2(PETSC_COMM_SELF,1,"Vector size mismatch. Expected %d from current sector basis. Got %d from Vec.",current_sector_basis.size(),vec_size);
+
+            /* Loop through the eigenstates and dump as tuple to vector */
+            for (PetscInt svd_id = 0; svd_id < nconv; ++svd_id)
+            {
+                PetscReal sigma; /* May require PetscReal */
+                ierr = SVDGetSingularTriplet(svd, svd_id, &sigma, nullptr, nullptr); CHKERRQ(ierr);
+                eigenstate_t tuple(sigma, counter, svd_id, Sz_sector, current_sector_basis);
+                possible_eigenstates.push_back(tuple);
+            }
+
+            svd = nullptr;
+            Vr = nullptr;
+            ++counter;
+
+            /*********************TIMINGS**********************/
+            #if defined(__DMRG_SUB_TIMINGS) && (__DMRG_SUB_SVD_TIMINGS)
+                ierr = PetscTime(&svd_time); CHKERRQ(ierr);
+                svd_time = svd_time - svd_time0;
+                ierr = PetscPrintf(PETSC_COMM_SELF, "%16s SVD %24ssize: %-12d %.20g\n", "","",vec_size, svd_time);
+            #endif
+            /**************************************************/
+        }
+        /*********************TIMINGS**********************/
+        #ifdef __DMRG_SUB_TIMINGS
+            ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+            svd_total_time = svd_total_time - svd_total_time0;
+            ierr = PetscPrintf(PETSC_COMM_SELF, "%16s %-42s %.20g\n", "","SVD total:", svd_total_time);
+        #endif
+        /**************************************************/
+
+        /* Sort all possible eigenstates in descending order of eigenvalues */
+        std::stable_sort(possible_eigenstates.begin(),possible_eigenstates.end(),compare_descending_eigenstates);
+
+        /* Build the transformation matrix from the `m` overall most significant eigenvectors */
+
+        my_m = std::min((PetscInt) possible_eigenstates.size(), (PetscInt) mstates);
+
+    } // if (rank == 0)
+
+    /* Broadcast my_m to all processes */
+    ierr = MPI_Bcast(&my_m, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+    /* Create the global transformation matrix */
+    PetscInt nrows = block.basis_size();
+    PetscInt ncols = my_m;
+    PetscReal sum_sigma = 0.0;
+
+    ierr = MatCreate(PETSC_COMM_WORLD, &mat); CHKERRQ(ierr);
+    ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, nrows, ncols); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
+    ierr = MatSetUp(mat); CHKERRQ(ierr);
+
+    /* FIXME: Preallocate w/ optimization options */
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscLogDouble rot_mat_time0, rot_mat_time;
+        ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
+    /* Prepare buffers */
+    PetscInt*       mat_rows;
+    PetscScalar*    mat_vals;
+    std::vector<PetscScalar> new_sector_array(my_m);
+
+    if(rank == 0)
+    {
+        ierr = PetscMalloc1(nrows,&mat_rows); CHKERRQ(ierr);
+        ierr = PetscMalloc1(nrows,&mat_vals); CHKERRQ(ierr);
+
+        /* Loop through eigenstates and build the rotation matrix */
+        for (PetscInt Ieig = 0; Ieig < my_m; ++Ieig)
+        {
+            /* Unpack tuple */
+
+            eigenstate_t tuple = possible_eigenstates[Ieig];
+
+            PetscReal   sigma     = std::get<0>(tuple);
+            PetscInt    block_id  = std::get<1>(tuple);
+            PetscInt    svd_id    = std::get<2>(tuple);
+            PetscScalar Sz_sector = std::get<3>(tuple);
+            std::vector<PetscInt>&  current_sector_basis = std::get<4>(tuple);
+
+            // PetscPrintf(comm, "Sigma: %f\n",sigma);
+
+            sum_sigma += sigma;
+
+            /* Get a copy of the vector's array associated to this process */
+
+            SVD_OBJECT& svd = svd_list[block_id];
+            Vec&        Vr  = vec_list[block_id];
+
+            PetscReal sigma_svd;
+            ierr = SVDGetSingularTriplet(svd, svd_id, &sigma_svd, Vr, nullptr); CHKERRQ(ierr);
+            if(sigma_svd!=sigma)
+                SETERRQ2(PETSC_COMM_SELF,1,"Eigenvalue mismatch. Expected %f. Got %f.", sigma, sigma_svd);
+
+            /* Get ownership and check sizes */
+
+            PetscInt vec_size, Vstart, Vend;
+            // PetscInt vec_size;
+
+            ierr = VecGetOwnershipRange(Vr, &Vstart, &Vend);
+            // PetscInt Vloc = Vend - Vstart;
+
+            ierr = VecGetSize(Vr,&vec_size); CHKERRQ(ierr);
+            if((size_t)vec_size!=current_sector_basis.size())
+                SETERRQ2(PETSC_COMM_SELF,1,"Vector size mismatch. Expected %d. Got %d.",current_sector_basis.size(),vec_size);
+
+            const PetscScalar *vec_vals;
+            ierr = VecGetArrayRead(Vr, &vec_vals);
+
+            /* TODO: Perform proper preallocation here by sending nnz data to other processes */
+
+            PetscInt nrows_write = 0;
+            for (PetscInt Jsec = Vstart; Jsec < Vend; ++Jsec)
+            {
+                PetscInt j_idx = current_sector_basis[Jsec];
+
+                mat_rows[nrows_write] = j_idx;
+                mat_vals[nrows_write] = vec_vals[Jsec-Vstart];
+                ++nrows_write;
+            }
+            new_sector_array[Ieig] = Sz_sector;
+
+            /* Set values over one possibly non-local column */
+            ierr = MatSetValues(mat, nrows_write, mat_rows, 1, &Ieig, mat_vals, INSERT_VALUES);
+            ierr = VecRestoreArrayRead(Vr, &vec_vals);
+        }
+
+    }
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
+        rot_mat_time = rot_mat_time - rot_mat_time0;
+        ierr = PetscPrintf(PETSC_COMM_SELF, "%16s %-42s %.20g\n", "","RotMat Construction:", rot_mat_time);
+        ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
+    /* Final assembly of output matrix */
+    PetscBool assembled;
+    ierr = MatAssembled(mat, &assembled); CHKERRQ(ierr);
+    if (!assembled)
+    {
+        ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    /******************** TIMINGS *********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
+        rot_mat_time = rot_mat_time - rot_mat_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20g\n", "","RotMat Assembly:", rot_mat_time);
+    #endif
+    /**************************************************/
+
+    /* Broadcast sum_sigma and new_sector_array */
+    ierr = MPI_Bcast(&sum_sigma, 1, MPIU_REAL, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&new_sector_array[0], my_m, MPIU_SCALAR, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+    /* Output truncation error */
+    truncation_error = 1.0 - sum_sigma;
+
+    /* Replace block's sector_array */
+    block.basis_sector_array = new_sector_array;
+
+    if(!rank)
+    {
+        /* Destroy temporary PETSc objects */
+        for (auto svd: svd_list){
+            ierr = SVDDestroy(&svd); CHKERRQ(ierr);
+        }
+        for (auto vec: vec_list){
+            ierr = VecDestroy(&vec); CHKERRQ(ierr);
+        }
+
+        /* Destroy buffers */
+        ierr = PetscFree(mat_rows); CHKERRQ(ierr);
+        ierr = PetscFree(mat_vals); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
+
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG::GetRotationMatrices"
 PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& truncerr_right)
@@ -697,29 +979,50 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
         /* Checkpoint */
         if(!dm_solved)
             SETERRQ(comm_, 1, "Reduced density matrices not yet solved.");
-        if(BlockLeft_.rho_block_dict.size()==0)
-            SETERRQ(comm_, 1, "No density matrices for left block.");
-        if(BlockLeft_.rho_block_dict.size()==0)
-            SETERRQ(comm_, 1, "No density matrices for right block.");
 
+        if((do_svd_on_root && rank_ == 0) || !do_svd_on_root )
+        {
+            if(BlockLeft_.rho_block_dict.size()==0)
+                SETERRQ(PETSC_COMM_SELF, 1, "No density matrices for left block.");
+            if(BlockLeft_.rho_block_dict.size()==0)
+                SETERRQ(PETSC_COMM_SELF, 1, "No density matrices for right block.");
+        }
+
+        /******************** TIMINGS *********************/
         DMRG_SUB_TIMINGS_START(__GET_SVD)
+        /**************************************************/
 
-        ierr = GetRotationMatrices_targetSz(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
-        ierr = GetRotationMatrices_targetSz(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
+        if(do_svd_on_root)
+        {
+            ierr = GetRotationMatrices_targetSz_root(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
+            ierr = GetRotationMatrices_targetSz_root(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
+        }
+        else
+        {
+            ierr = GetRotationMatrices_targetSz(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
+            ierr = GetRotationMatrices_targetSz(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
+        }
 
+        /******************** TIMINGS *********************/
         DMRG_SUB_TIMINGS_END(__GET_SVD)
+        /**************************************************/
 
-        /* Clear rho_block_dict for both blocks */
-        if(BlockLeft_.rho_block_dict.size())
-            for (auto item: BlockLeft_.rho_block_dict)
-                MatDestroy(&item.second);
+        if((do_svd_on_root && rank_ == 0) || !do_svd_on_root )
+        {
+            /* Clear rho_block_dict for both blocks */
+            if(BlockLeft_.rho_block_dict.size())
+                for (auto item: BlockLeft_.rho_block_dict)
+                    MatDestroy(&item.second);
 
-        if(BlockRight_.rho_block_dict.size())
-            for (auto item: BlockRight_.rho_block_dict)
-                MatDestroy(&item.second);
+            if(BlockRight_.rho_block_dict.size())
+                for (auto item: BlockRight_.rho_block_dict)
+                    MatDestroy(&item.second);
 
-        BlockLeft_.rho_block_dict.clear();
-        BlockRight_.rho_block_dict.clear();
+            BlockLeft_.rho_block_dict.clear();
+            BlockRight_.rho_block_dict.clear();
+        }
+
+
 
     } else {
 
@@ -742,7 +1045,9 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
         M_left = std::min(M_left, mstates_);
         M_right = std::min(M_right, mstates_);
 
+        /******************** TIMINGS *********************/
         DMRG_SUB_TIMINGS_START(__GET_SVD)
+        /**************************************************/
 
         /* Do SVD on subcommunicator */
         if(do_svd_commsplit)
@@ -764,7 +1069,9 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
             ierr = SVDLargestStates(dm_right, M_right, truncerr_right, U_right_,fp_right); CHKERRQ(ierr);
         }
 
+        /******************** TIMINGS *********************/
         DMRG_SUB_TIMINGS_END(__GET_SVD)
+        /**************************************************/
 
         #ifdef __TESTING
             ierr = PetscFClose(PETSC_COMM_WORLD, fp_left); CHKERRQ(ierr);

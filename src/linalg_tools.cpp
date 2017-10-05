@@ -490,13 +490,12 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
 
 #undef __FUNCT__
 #define __FUNCT__ "MatMultSelfHC_AIJ"
-PetscErrorCode MatMultSelfHC_AIJ(const Mat& mat_in, Mat& mat, const PetscBool hc_right)
+PetscErrorCode MatMultSelfHC_AIJ(const MPI_Comm comm, const Mat& mat_in, Mat& mat, const PetscBool hc_right)
 {
     PetscErrorCode  ierr = 0;
     /*
-        The resulting matrix will be created in PETSC_COMM_WORLD
+        The resulting matrix will be created in comm
     */
-    MPI_Comm comm = PETSC_COMM_WORLD;
     #ifndef PETSC_USE_COMPLEX
         // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
@@ -517,14 +516,14 @@ PetscErrorCode MatMultSelfHC_AIJ(const Mat& mat_in, Mat& mat, const PetscBool hc
     else {
         mat_dim = N;
     }
-    ierr = MatCreate(PETSC_COMM_WORLD, &mat); CHKERRQ(ierr);
+    ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
     ierr = MatSetType(mat, MATAIJ);
     ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_dim, mat_dim); CHKERRQ(ierr);
     ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
 
     PetscMPIInt nprocs, rank;
-    MPI_Comm_size(PETSC_COMM_WORLD, &nprocs);
-    MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
     PetscInt remrows = mat_dim % nprocs;
     PetscInt locrows = mat_dim / nprocs + (rank < remrows ? 1 : 0 );
 
@@ -538,7 +537,7 @@ PetscErrorCode MatMultSelfHC_AIJ(const Mat& mat_in, Mat& mat, const PetscBool hc
     nrows = Iend - Istart;
 
     if(nrows != locrows)
-        SETERRQ(PETSC_COMM_WORLD, 1, "Matrix layout different from expected.");
+        SETERRQ(comm, 1, "Matrix layout different from expected.");
 
     Mat mat_in_loc = nullptr;
     Mat mat_out_loc = nullptr;
@@ -1058,7 +1057,7 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
 {
     PetscErrorCode  ierr = 0;
 
-    MPI_Comm comm = PETSC_COMM_WORLD;
+    const MPI_Comm comm = PetscObjectComm((PetscObject) mat_in);
     PetscBool assembled;
     ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
     if (assembled == PETSC_FALSE){

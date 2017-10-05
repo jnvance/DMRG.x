@@ -185,7 +185,7 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i,
     Note: This function is implemented only for complex scalars so that vec_i is ignored.
 
  */
-PetscErrorCode MatMultSelfHC_AIJ(const Mat& mat_in, Mat& mat, const PetscBool hc_right);
+PetscErrorCode MatMultSelfHC_AIJ(const MPI_Comm comm, const Mat& mat_in, Mat& mat, const PetscBool hc_right);
 
 
 /**
