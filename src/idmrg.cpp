@@ -913,7 +913,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     #ifdef __DMRG_SUB_TIMINGS
         ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
         rot_mat_time = rot_mat_time - rot_mat_time0;
-        ierr = PetscPrintf(PETSC_COMM_SELF, "%16s %-42s %.20g\n", "","RotMat Construction:", rot_mat_time);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20g\n", "","RotMat Construction:", rot_mat_time);
         ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
     #endif
     /**************************************************/
