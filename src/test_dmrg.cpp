@@ -120,17 +120,8 @@ int main(int argc, char **argv)
             truncation of site and block operators.
          */
         ierr = heis.BuildReducedDensityMatrices(); CHKERRQ(ierr);
-
-        ierr = MPI_Barrier(comm); CHKERRQ(ierr);
-
         ierr = heis.GetRotationMatrices(truncerr_left, truncerr_right); CHKERRQ(ierr);
-
-        ierr = MPI_Barrier(comm); CHKERRQ(ierr);
-
         ierr = heis.TruncateOperators(); CHKERRQ(ierr);
-
-        ierr = MPI_Barrier(comm); CHKERRQ(ierr);
-
 
         PetscLogDouble iter_time1;
         ierr = PetscTime(&iter_time1); CHKERRQ(ierr);
