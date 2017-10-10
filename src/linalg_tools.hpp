@@ -234,11 +234,18 @@ std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<Petsc
     PetscBool assembled;
 
 #define LINALG_TOOLS__MATASSEMBLY_FINAL(MATRIX) \
-    ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
-    if (assembled == PETSC_FALSE){\
-        ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
-        ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    {\
+        PetscBool assembled;\
+        ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
+        if (assembled == PETSC_FALSE){\
+            ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+            ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+        }\
     }
+
+#define LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(MATRIX) \
+    ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
 #define LINALG_TOOLS__MATASSEMBLY_FLUSH(MATRIX) \
     ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\

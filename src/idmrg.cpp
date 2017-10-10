@@ -161,7 +161,6 @@ PetscErrorCode iDMRG::SolveGroundState(PetscReal& gse_r, PetscReal& gse_i, Petsc
     if (superblock_set_ == PETSC_FALSE)
         SETERRQ(comm_, 1, "Superblock Hamiltonian has not been set with BuildSuperBlock().");
 
-    PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(superblock_H_);
 
     PetscInt superblock_H_size;
@@ -670,12 +669,8 @@ PetscErrorCode GetRotationMatrices_targetSz(
     block.basis_sector_array = new_sector_array;
 
     /* Final assembly of output matrix */
-    PetscBool assembled;
-    ierr = MatAssembled(mat, &assembled); CHKERRQ(ierr);
-    if (assembled == PETSC_FALSE){
-        ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    }
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
     /* Destroy buffers */
     ierr = PetscFree(mat_rows); CHKERRQ(ierr);
@@ -1049,13 +1044,9 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     /**************************************************/
 
     /* Final assembly of output matrix */
-    PetscBool assembled;
-    ierr = MatAssembled(mat, &assembled); CHKERRQ(ierr);
-    if (!assembled)
-    {
-        ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-        ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    }
+    ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
 
     /******************** TIMINGS *********************/
     #ifdef __DMRG_SUB_TIMINGS
@@ -1090,11 +1081,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
         ierr = PetscFree(mat_vals); CHKERRQ(ierr);
     }
 
-    #ifdef __BARRIERS
-        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sEnd of GetRotationMatrices subfunction\n",""); CHKERRQ(ierr);
-    #endif
-
+    DMRG_MPI_BARRIER("End of GetRotationMatrices subfunction");
     return ierr;
 }
 
@@ -1242,11 +1229,7 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
         ierr = MatWrite(U_right_, filename); CHKERRQ(ierr);
     #endif
 
-    #ifdef __BARRIERS
-        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sEnd of GetRotationMatrices\n",""); CHKERRQ(ierr);
-    #endif
-
+    DMRG_MPI_BARRIER("End of GetRotationMatrices");
     DMRG_SUB_TIMINGS_END(__FUNCT__)
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
@@ -1260,13 +1243,7 @@ PetscErrorCode iDMRG::TruncateOperators()
     PetscErrorCode ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
-
-    PetscBool assembled;
-
-    #ifdef __BARRIERS
-        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sStart of TruncateOperators\n",""); CHKERRQ(ierr);
-    #endif
+    DMRG_MPI_BARRIER("Start of TruncateOperators");
 
     /* Save operator state before rotation */
     #ifdef __CHECK_ROTATION
@@ -1301,7 +1278,8 @@ PetscErrorCode iDMRG::TruncateOperators()
         SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
 
     ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
-    LINALG_TOOLS__MATASSEMBLY_FINAL(U_hc);
+    ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
@@ -1319,7 +1297,8 @@ PetscErrorCode iDMRG::TruncateOperators()
         SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
 
     ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
-    LINALG_TOOLS__MATASSEMBLY_FINAL(U_hc);
+    ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
     ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
@@ -1361,11 +1340,7 @@ PetscErrorCode iDMRG::TruncateOperators()
     #endif // __CHECK_ROTATION
     #undef __CHECK_ROTATION
 
-    #ifdef __BARRIERS
-        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sEnd of TruncateOperators\n",""); CHKERRQ(ierr);
-    #endif
-
+    DMRG_MPI_BARRIER("End of TruncateOperators");
     DMRG_SUB_TIMINGS_END(__FUNCT__)
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;

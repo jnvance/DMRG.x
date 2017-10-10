@@ -50,10 +50,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+    DMRG_MPI_BARRIER("Start of BuildBlockLeft");
 
     ierr = CheckSetParameters(); CHKERRQ(ierr);
 
-    PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
     */
@@ -73,9 +73,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     */
     ierr = MatEyeCreate(comm_, eye_L, M_L); CHKERRQ(ierr);
 
-    LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_L);
+    LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(Sp_L);
     ierr = MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L); CHKERRQ(ierr);
-    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_L);
+    LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(Sm_L);
+    DMRG_MPI_BARRIER("MatHermitianTranspose");
     /*
         Update the block Hamiltonian
     */
@@ -119,6 +120,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = MatDestroy(&Sm_L); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
 
+    DMRG_MPI_BARRIER("End of BuildBlockLeft");
     DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
@@ -132,10 +134,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+    DMRG_MPI_BARRIER("Start of BuildBlockRight");
 
     ierr = CheckSetParameters(); CHKERRQ(ierr);
 
-    PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
     */
@@ -201,6 +203,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     ierr = MatDestroy(&Sm_R); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_R); CHKERRQ(ierr);
 
+    DMRG_MPI_BARRIER("End of BuildBlockRight");
     DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
@@ -219,7 +222,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     ierr = CheckSetParameters(); CHKERRQ(ierr);
 
-    PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
     */

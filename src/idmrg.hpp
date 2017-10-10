@@ -60,6 +60,15 @@
 #endif
 
 
+#ifdef __DMRG_MPI_BARRIERS
+    #define DMRG_MPI_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== %s ========\n\n",MESSAGE); CHKERRQ(ierr);
+#else
+    #define DMRG_MPI_BARRIER(MESSAGE)
+#endif
+
+
 #ifdef __SVD_USE_EPS
     #define SVD_OBJECT EPS
     SETERRQ(comm_, 1, "GetRotationMatrices: Not implemented with __SVD_USE_EPS flag.");

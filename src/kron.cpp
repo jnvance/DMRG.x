@@ -106,7 +106,6 @@ PetscErrorCode GetSubmatrix(
     PetscInt&               A_sub_end)
 {
     PetscErrorCode ierr = 0;
-    PetscBool      assembled;
     MPI_Comm comm = PETSC_COMM_WORLD;
 
     PetscInt *id_cols_A;
@@ -3820,7 +3819,6 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     KRON_PS_TIMINGS_START(__FINALASSEMBLY);
     /**************************************************/
 
-    PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(C);
 
     /**************************************************/
@@ -3870,7 +3868,6 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     Mat C_temp = nullptr;
     ierr = MatKronProdSum_selectiverows_3(a, A, B, C_temp, idx); CHKERRQ(ierr);
 
-    PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(C_temp);
 
     /* Verify that matrix is of sequential type */
