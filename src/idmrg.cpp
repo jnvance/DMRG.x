@@ -1090,6 +1090,11 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
         ierr = PetscFree(mat_vals); CHKERRQ(ierr);
     }
 
+    #ifdef __BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sEnd of GetRotationMatrices subfunction\n",""); CHKERRQ(ierr);
+    #endif
+
     return ierr;
 }
 
@@ -1207,6 +1212,10 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
             ierr = PetscFClose(PETSC_COMM_WORLD, fp_left); CHKERRQ(ierr);
             ierr = PetscFClose(PETSC_COMM_WORLD, fp_right); CHKERRQ(ierr);
         #endif
+
+        if (dm_left)   {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
+        if (dm_right)  {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
+
     }
 
     #ifdef __PRINT_TRUNCATION_ERROR
@@ -1233,8 +1242,10 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
         ierr = MatWrite(U_right_, filename); CHKERRQ(ierr);
     #endif
 
-    if (dm_left)   {ierr = MatDestroy(&dm_left); CHKERRQ(ierr);}
-    if (dm_right)  {ierr = MatDestroy(&dm_right); CHKERRQ(ierr);}
+    #ifdef __BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sEnd of GetRotationMatrices\n",""); CHKERRQ(ierr);
+    #endif
 
     DMRG_SUB_TIMINGS_END(__FUNCT__)
     DMRG_TIMINGS_END(__FUNCT__);
@@ -1249,6 +1260,13 @@ PetscErrorCode iDMRG::TruncateOperators()
     PetscErrorCode ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+
+    PetscBool assembled;
+
+    #ifdef __BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sStart of TruncateOperators\n",""); CHKERRQ(ierr);
+    #endif
 
     /* Save operator state before rotation */
     #ifdef __CHECK_ROTATION
@@ -1342,6 +1360,11 @@ PetscErrorCode iDMRG::TruncateOperators()
         ierr = MatWrite(BlockRight_.Sp(), filename); CHKERRQ(ierr);
     #endif // __CHECK_ROTATION
     #undef __CHECK_ROTATION
+
+    #ifdef __BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%4sEnd of TruncateOperators\n",""); CHKERRQ(ierr);
+    #endif
 
     DMRG_SUB_TIMINGS_END(__FUNCT__)
     DMRG_TIMINGS_END(__FUNCT__);
