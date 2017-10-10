@@ -4112,6 +4112,11 @@ PetscErrorCode MatKronProdSum(
     // ierr = MatKronProdSum_1(a,A,B,C,prealloc); CHKERRQ(ierr);
     ierr = MatKronProdSum_2(a,A,B,C,prealloc); CHKERRQ(ierr);
 
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== End of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
+
     return ierr;
 }
 
@@ -4137,6 +4142,11 @@ PetscErrorCode MatKronProdSumIdx(
     ierr = MatKronProdSumIdx_copy_3(a, A, B, C, idx); CHKERRQ(ierr);
 
     if (!C) SETERRQ(PETSC_COMM_WORLD, 1, "Matrix was not generated.");
+
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== End of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
 
     return ierr;
 }
