@@ -1283,6 +1283,7 @@ PetscErrorCode iDMRG::TruncateOperators()
         SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
 
     ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(U_hc);
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
@@ -1300,6 +1301,7 @@ PetscErrorCode iDMRG::TruncateOperators()
         SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
 
     ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(U_hc);
 
     ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);

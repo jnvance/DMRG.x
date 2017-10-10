@@ -75,6 +75,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_L);
     ierr = MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L); CHKERRQ(ierr);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_L);
     /*
         Update the block Hamiltonian
     */
@@ -156,6 +157,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_R);
     ierr = MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);CHKERRQ(ierr);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_R);
     /*
         Update the block Hamiltonian
     */
@@ -307,9 +309,11 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(BlockLeft_.Sp());
     MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_L);
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(BlockRight_.Sp());
     MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_R);
     /*
         Decide whether to preallocate
         Conditions to reallocate the Hamiltonian matrix:
