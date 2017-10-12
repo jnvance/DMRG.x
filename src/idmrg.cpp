@@ -705,7 +705,6 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     PetscErrorCode ierr = 0;
 
     /* Get information on MPI */
-
     PetscMPIInt     nprocs, rank;
     MPI_Comm comm = PETSC_COMM_WORLD;
     MPI_Comm_size(comm, &nprocs);
@@ -804,19 +803,17 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
         /* Sort all possible eigenstates in descending order of eigenvalues */
         std::stable_sort(possible_eigenstates.begin(),possible_eigenstates.end(),compare_descending_eigenstates);
 
-        /* Build the transformation matrix from the `m` overall most significant eigenvectors */
-
+        /* Build the rotation matrix from the `m` overall most significant eigenvectors */
         my_m = std::min((PetscInt) possible_eigenstates.size(), (PetscInt) mstates);
 
-    } // if (rank == 0)
+    }
 
     /* Broadcast my_m to all processes */
     ierr = MPI_Bcast(&my_m, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
 
-    /* Create the global transformation matrix */
+    /* Create the global rotation matrix */
     PetscInt nrows = block.basis_size();
     PetscInt ncols = my_m;
-    PetscReal sum_sigma = 0.0;
 
     ierr = MatCreate(PETSC_COMM_WORLD, &mat); CHKERRQ(ierr);
     ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, nrows, ncols); CHKERRQ(ierr);
@@ -829,210 +826,282 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     #endif
     /**************************************************/
 
-    /* Preallocate w/ optimization options */
+    /*
+        On rank 0: dump resulting sparse matrix object's column indices and
+        values to vectors and scatter values to owning processes.
 
-    /* Calculate sendcounts and displs for all processes */
-    PetscMPIInt *sendcounts = nullptr;
-    PetscMPIInt *displs = nullptr;
-    PetscMPIInt recvcount = 0;
+        Note: Take into account the fact that some rows may be empty and some
+        processors may not receive any rows at all.
+     */
 
-    /* Calculate the preallocation data at root */
-    PetscInt *Dnnz = nullptr, *Onnz = nullptr;
+    /* Calculate number of locally owned rows in resulting matrix */
+
+    const PetscInt remrows = nrows % nprocs;
+    const PetscInt locrows = nrows / nprocs + ((rank < remrows) ?  1 : 0 );
+    const PetscInt Istart  = nrows / nprocs * rank + ((rank < remrows) ?  rank : remrows);
+    const PetscInt Iend = Istart + locrows;
+
+    /* Prepare buffers for scatter and broadcast */
+    PetscMPIInt *sendcounts = nullptr;  /* The number of rows to scatter to each process */
+    PetscMPIInt *displs = nullptr;      /* The starting row for each process */
+    PetscMPIInt recvcount = 0;          /* Number of entries to receive from scatter */
+    std::vector<PetscScalar> new_sector_array(my_m); /* Updates the sector array */
+
+    /* Matrix buffers for MatSetValues */
+    PetscInt    *mat_cols;
+    PetscScalar *mat_vals;
+
+    /* Temporary matrix buffer to be filled up by root */
+    std::vector< std::vector< PetscInt >> mat_cols_list;
+    std::vector< std::vector< PetscScalar >> mat_vals_list;
+
+    /* Counters for nonzeros in the sparse matrix */
+    PetscInt *Dnnz = nullptr, *Onnz = nullptr, *Tnnz = nullptr; /* Number of nonzeros in each row */
+    PetscInt *Rdisp = nullptr; /* The displacement for each row */
+
     if(!rank)
     {
-        ierr = PetscCalloc2(nrows, &Dnnz, nrows, &Onnz); CHKERRQ(ierr);
-        ierr = PetscCalloc2(nprocs,&sendcounts,nprocs,&displs); CHKERRQ(ierr);
-        /* Determine the resulting row and column layout for each process */
+        ierr = PetscCalloc2(nprocs, &sendcounts, nprocs, &displs); CHKERRQ(ierr);
 
-        std::vector<PetscMPIInt> row_to_rank(nrows);
-        std::vector<PetscInt> Crange(nprocs+1);
-        Crange[nprocs] = ncols;
+        /* Calculate row and column layout for all processes */
+        std::vector<PetscMPIInt> row_to_rank(nrows); /* Maps a row to its owner rank */
+        std::vector<PetscInt> Rrange(nprocs+1); /* The range of row ownership in each rank */
+        std::vector<PetscInt> Crange(nprocs+1); /* The range of the diagonal columns in each rank */
 
-        PetscInt Cend_prev = 0;
-        PetscInt Iend      = 0;
-
+        PetscInt Iend = 0, Cend=0;
         for (PetscMPIInt Irank = 0; Irank < nprocs; ++Irank)
         {
-            /* Guess the local ownership ranges */
-            PetscInt locrows = nrows / nprocs;
+            /* Guess the local ownership ranges at the receiving process */
             PetscInt remrows = nrows % nprocs;
-            PetscInt Istart  = locrows * Irank;
+            PetscInt locrows = nrows / nprocs + ((Irank < remrows) ?  1 : 0 );
+            PetscInt Istart  = nrows / nprocs * Irank + ((Irank < remrows) ?  Irank : remrows);
 
-            if (Irank < remrows){
-                locrows += 1;
-                Istart += Irank;
-            } else {
-                Istart += remrows;
-            }
+            /* Self-consistency check */
             if(Istart!=Iend) SETERRQ2(PETSC_COMM_SELF,1,"Error in row layout guess. "
                 "Expected %d. Got %d.", Iend, Istart);
             Iend = Istart + locrows;
+            Rrange[Irank] = Istart;
 
-            /* Map all included rows to this process */
             for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
-            {
                 row_to_rank[Irow] = Irank;
-            }
-
-            /* Guess the local diagonal/off-diagonal column layout */
-            PetscInt locdiag = ncols / nprocs;
-            PetscInt remcols = ncols % nprocs;
-            Crange[Irank] = locdiag * Irank;
-
-            if (Irank < remcols){
-                locdiag += 1;
-                Crange[Irank] += Irank;
-            } else {
-                Crange[Irank] += remcols;
-            }
-            if(Crange[Irank]!=Cend_prev) SETERRQ2(PETSC_COMM_SELF,1,"Error in column layout guess. "
-                "Expected %d. Got %d.", Cend_prev, Crange[Irank]);
-            Cend_prev = Crange[Irank] + locdiag;
 
             sendcounts[Irank] = (PetscMPIInt) locrows;
-            displs[Irank] = (PetscMPIInt) Istart;
+            displs[Irank]     = (PetscMPIInt) Istart;
 
-            if(!Irank) recvcount = (PetscMPIInt) locrows;
+            /* Guess the local diagonal column layout at the receiving process */
+            PetscInt remcols = ncols % nprocs;
+            PetscInt locdiag = ncols / nprocs + ((Irank < remcols) ? 1 : 0 );
+            PetscInt Cstart  = ncols / nprocs * Irank + ((Irank < remcols) ?  Irank : remcols);
+
+            /* Self-consistency check */
+            if(Cstart!=Cend) SETERRQ2(PETSC_COMM_SELF,1,"Error in column layout guess. "
+                "Expected %d. Got %d.", Cend, Cstart);
+            Cend = Cstart + locdiag;
+
+            Crange[Irank] = Cstart;
         }
+        /* Also define for the right-most and bottom boundary */
+        Crange[nprocs] = ncols;
+        Rrange[nprocs] = nrows;
 
+        /* 
+            Store the sparse matrix nonzeros as resizable vectors since we do not know
+                how many elements go into a row.
+            Calculate the preallocation data at root as well.
+            Possibly, dump the contents of these vector to individual buffers later on
+                or use them directly as MPI send buffers
+         */
+        mat_cols_list.resize(nrows);
+        mat_vals_list.resize(nrows);
+
+        ierr = PetscCalloc4(nrows, &Dnnz, nrows, &Onnz, nrows, &Tnnz, nrows, &Rdisp); CHKERRQ(ierr);
+
+        /* Extraction of values */
+
+        truncation_error = 1.0;
         for (PetscInt Ieig = 0; Ieig < my_m; ++Ieig)
         {
+            /* Unpack selected eigenstate tuple */
             eigenstate_t tuple = possible_eigenstates[Ieig];
-            std::vector<PetscInt>& current_sector_basis = std::get<4>(tuple);
-
-            for (size_t Jsec = 0; Jsec < current_sector_basis.size(); ++Jsec)
-            {
-                PetscInt j_idx = current_sector_basis[Jsec];
-                PetscMPIInt Irank = row_to_rank[j_idx];
-
-                if ( Crange[Irank] <= Ieig && Ieig < Crange[Irank+1] ){
-                    Dnnz[j_idx] += 1;
-                } else {
-                    Onnz[j_idx] += 1;
-                }
-            }
-        }
-
-        ierr = MPI_Scatterv(Dnnz, sendcounts, displs, MPIU_INT,
-            MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
-        ierr = MPI_Scatterv(Onnz, sendcounts, displs, MPIU_INT,
-            MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
-
-    }
-    else
-    {
-        /* Guess the local ownership ranges */
-        PetscInt remrows = nrows % nprocs;
-        PetscInt locrows = nrows / nprocs;
-        PetscInt Istart  = locrows * rank;
-
-        if (rank < remrows){
-            locrows += 1;
-            Istart += rank;
-        } else {
-            Istart += remrows;
-        }
-        recvcount = locrows;
-
-        ierr = PetscCalloc2(locrows, &Dnnz, locrows, &Onnz); CHKERRQ(ierr);
-        ierr = PetscCalloc2(1,&sendcounts,1,&displs); CHKERRQ(ierr);
-
-        ierr = MPI_Scatterv(NULL, sendcounts, displs, MPIU_INT,
-            Dnnz, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
-        ierr = MPI_Scatterv(NULL, sendcounts, displs, MPIU_INT,
-            Onnz, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
-    }
-
-    /* Preallocate */
-    ierr = MatMPIAIJSetPreallocation(mat, -1, Dnnz, -1, Onnz); CHKERRQ(ierr);
-    ierr = MatSeqAIJSetPreallocation(mat, -1, Dnnz); CHKERRQ(ierr);
-    /*
-        Set matrix properties
-        Relax off-processor setting of values but restrict to preallocated entries
-    */
-    ierr = MatSetOption(mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_FALSE); CHKERRQ(ierr);
-    ierr = MatSetOption(mat, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_FALSE); CHKERRQ(ierr);
-    ierr = MatSetOption(mat, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
-
-    /* Destroy buffers */
-    ierr = PetscFree2(Dnnz,Onnz); CHKERRQ(ierr);
-    ierr = PetscFree2(sendcounts,displs); CHKERRQ(ierr);
-
-    /*********************TIMINGS**********************/
-    #ifdef __DMRG_SUB_TIMINGS
-        ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
-        rot_mat_time = rot_mat_time - rot_mat_time0;
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","RotMat Preallocation:", rot_mat_time);
-        ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
-    #endif
-    /**************************************************/
-
-    /* Prepare buffers */
-    PetscInt*       mat_rows;
-    PetscScalar*    mat_vals;
-    std::vector<PetscScalar> new_sector_array(my_m);
-
-    if(!rank)
-    {
-        ierr = PetscMalloc1(nrows,&mat_rows); CHKERRQ(ierr);
-        ierr = PetscMalloc1(nrows,&mat_vals); CHKERRQ(ierr);
-
-        /* Loop through eigenstates and build the rotation matrix */
-        for (PetscInt Ieig = 0; Ieig < my_m; ++Ieig)
-        {
-            /* Unpack tuple */
-
-            eigenstate_t tuple = possible_eigenstates[Ieig];
-
             PetscReal   sigma     = std::get<0>(tuple);
             PetscInt    block_id  = std::get<1>(tuple);
             PetscInt    svd_id    = std::get<2>(tuple);
             PetscScalar Sz_sector = std::get<3>(tuple);
             std::vector<PetscInt>&  current_sector_basis = std::get<4>(tuple);
 
-            // PetscPrintf(comm, "Sigma: %f\n",sigma);
-
-            sum_sigma += sigma;
-
             /* Get a copy of the vector's array associated to this process */
-
             SVD_OBJECT& svd = svd_list[block_id];
             Vec&        Vr  = vec_list[block_id];
 
+            /* Inspect sigma and deduct from truncation error */
             PetscReal sigma_svd;
             ierr = SVDGetSingularTriplet(svd, svd_id, &sigma_svd, Vr, nullptr); CHKERRQ(ierr);
             if(sigma_svd!=sigma)
-                SETERRQ2(PETSC_COMM_SELF,1,"Eigenvalue mismatch. Expected %f. Got %f.", sigma, sigma_svd);
+                SETERRQ2(comm,1,"Eigenvalue mismatch. Expected %f. Got %f.", sigma, sigma_svd);
+            truncation_error = truncation_error - sigma;
 
-            /* Get ownership and check sizes */
-
-            PetscInt vec_size, Vstart, Vend;
-            ierr = VecGetOwnershipRange(Vr, &Vstart, &Vend);
+            /* Get vector size and inspect */
+            PetscInt vec_size;
             ierr = VecGetSize(Vr,&vec_size); CHKERRQ(ierr);
             if((size_t)vec_size!=current_sector_basis.size())
-                SETERRQ2(PETSC_COMM_SELF,1,"Vector size mismatch. Expected %d. Got %d.",current_sector_basis.size(),vec_size);
+                SETERRQ2(comm,1,"Vector size mismatch. Expected %d. Got %d.",current_sector_basis.size(),vec_size);
 
+            /* Read elements of the vector */
             const PetscScalar *vec_vals;
-            ierr = VecGetArrayRead(Vr, &vec_vals);
+            ierr = VecGetArrayRead(Vr, &vec_vals); CHKERRQ(ierr);
 
-            PetscInt nrows_write = 0;
-            for (PetscInt Jsec = Vstart; Jsec < Vend; ++Jsec)
+            /* Loop through current_sector_basis and eigenvectors */
+            for (size_t Jsec = 0; Jsec < current_sector_basis.size(); ++Jsec)
             {
-                PetscInt j_idx = current_sector_basis[Jsec];
+                PetscInt j_idx = current_sector_basis[Jsec];    /* the row index */
+                PetscMPIInt Irank = row_to_rank[j_idx];         /* the rank corresponding to this row */
 
-                mat_rows[nrows_write] = j_idx;
-                mat_vals[nrows_write] = vec_vals[Jsec-Vstart];
-                ++nrows_write;
+                /* Determine the preallocation where Ieig is the column index */
+                if ( Crange[Irank] <= Ieig && Ieig < Crange[Irank+1] ){
+                    Dnnz[j_idx] += 1;
+                } else {
+                    Onnz[j_idx] += 1;
+                }
+
+                /* Dump values and columns to respective buffer */
+                mat_cols_list[j_idx].push_back(Ieig);
+                mat_vals_list[j_idx].push_back(vec_vals[Jsec]);
+
             }
             new_sector_array[Ieig] = Sz_sector;
-
-            /* Set values over one non-local column */
-            ierr = MatSetValues(mat, nrows_write, mat_rows, 1, &Ieig, mat_vals, INSERT_VALUES);
             ierr = VecRestoreArrayRead(Vr, &vec_vals);
         }
 
+        /* Dump data to scatterv send buffer */
+        PetscInt tot_nnz = 0;
+        for (PetscInt Irow = 0; Irow < nrows; ++Irow)
+        {
+            Rdisp[Irow] = tot_nnz;
+            Tnnz[Irow] = Dnnz[Irow] + Onnz[Irow];
+            tot_nnz += Tnnz[Irow];
+        }
+
+        /* Checkpoint: Compare preallocation data (Xnnz) with the lengths of the matrix buffer */
+        for (size_t Irow = 0; Irow < nrows; ++Irow)
+        {
+            if((size_t)(Tnnz[Irow]) != mat_cols_list[Irow].size())
+                SETERRQ3(PETSC_COMM_SELF, 1, "Error in matrix buffer size in row %d. "
+                    "Expected %d from preallocation. Got %d on cols buffer.",
+                    Irow, Tnnz[Irow], mat_cols_list[Irow].size());
+
+            if((size_t)(Tnnz[Irow]) != mat_vals_list[Irow].size())
+                SETERRQ3(PETSC_COMM_SELF, 1, "Error in matrix buffer size in row %d. "
+                    "Expected %d from preallocation. Got %d on vals buffer.",
+                    Irow, Tnnz[Irow], mat_cols_list[Irow].size());
+        }
+
+        /* Send preallocation initial info */
+        ierr = MPI_Scatterv(Dnnz, sendcounts, displs, MPIU_INT, MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
+        ierr = MPI_Scatterv(Onnz, sendcounts, displs, MPIU_INT, MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
+
+        ierr = PetscCalloc2(tot_nnz, &mat_cols, tot_nnz, &mat_vals); CHKERRQ(ierr);
+
+        for (PetscInt Irow = 0; Irow < nrows; ++Irow)
+        {
+            std::memcpy(&mat_cols[Rdisp[Irow]], mat_cols_list[Irow].data(), Tnnz[Irow] * sizeof(PetscInt));
+            /* Uncomment only if memory is an issue: */
+            // mat_cols_list[Irow].clear();
+            // mat_cols_list[Irow].shrink_to_fit();
+        }
+
+        for (PetscInt Irow = 0; Irow < nrows; ++Irow)
+        {
+            std::memcpy(&mat_vals[Rdisp[Irow]], mat_vals_list[Irow].data(), Tnnz[Irow] * sizeof(PetscScalar));
+            /* Uncomment only if memory is an issue: */
+            // mat_cols_list[Irow].clear();
+            // mat_cols_list[Irow].shrink_to_fit();
+        }
+
+        /* Prepare scatterv info */
+
+        /* Number of entries per process */
+        ierr = PetscMemzero(sendcounts, nprocs*sizeof(PetscMPIInt)); CHKERRQ(ierr);
+        /* Starting entry of each process */
+        ierr = PetscMemzero(displs, nprocs*sizeof(PetscMPIInt)); CHKERRQ(ierr);
+
+        tot_nnz = 0;
+        for (PetscInt Irank = 0; Irank < nprocs; ++Irank)
+        {
+            displs[Irank] = (PetscMPIInt)tot_nnz;
+            sendcounts[Irank] = 0;
+            for (PetscInt Irow = Rrange[Irank]; Irow < Rrange[Irank+1]; ++Irow)
+                sendcounts[Irank] += Tnnz[Irow];
+            tot_nnz += sendcounts[Irank];
+        }
+
+        /* Scatter matrix data */
+        ierr = MPI_Scatterv(mat_cols, sendcounts, displs, MPIU_INT, MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
+        ierr = MPI_Scatterv(mat_vals, sendcounts, displs, MPIU_SCALAR, MPI_IN_PLACE, recvcount, MPIU_SCALAR, 0, comm); CHKERRQ(ierr);
+
     }
+    else
+    {
+        /* Receive initial preallocation info */
+
+        recvcount = locrows;
+        ierr = PetscCalloc4(locrows, &Dnnz, locrows, &Onnz, locrows, &Tnnz, locrows, &Rdisp); CHKERRQ(ierr);
+        ierr = PetscCalloc2(1, &sendcounts, 1, &displs); CHKERRQ(ierr); /* Just allocate but will be ignored */
+
+        ierr = MPI_Scatterv(NULL, sendcounts, displs, MPIU_INT, Dnnz, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
+        ierr = MPI_Scatterv(NULL, sendcounts, displs, MPIU_INT, Onnz, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
+
+        /* Prepare to receive matrix by scatterv */
+
+        for (PetscInt lrow = 0; lrow < locrows; ++lrow){
+            Tnnz[lrow] = Dnnz[lrow] + Onnz[lrow];
+        }
+
+        PetscInt tot_nnz = 0;
+        for (PetscInt lrow = 0; lrow < locrows; ++lrow){
+            Rdisp[lrow] = tot_nnz;
+            tot_nnz += Tnnz[lrow];
+        }
+        recvcount = tot_nnz;
+
+        ierr = PetscCalloc2(tot_nnz, &mat_cols, tot_nnz, &mat_vals); CHKERRQ(ierr);
+
+        /* Receive matrix data */
+
+        ierr = MPI_Scatterv(NULL, sendcounts, displs, MPIU_INT, mat_cols, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
+        ierr = MPI_Scatterv(NULL, sendcounts, displs, MPIU_SCALAR, mat_vals, recvcount, MPIU_SCALAR, 0, comm); CHKERRQ(ierr);
+
+    }
+
+    /* Preallocate */
+    ierr = MatMPIAIJSetPreallocation(mat, -1, Dnnz, -1, Onnz); CHKERRQ(ierr);
+    ierr = MatSeqAIJSetPreallocation(mat, -1, Dnnz); CHKERRQ(ierr);
+
+    /* Set matrix properties */
+    ierr = MatSetOption(mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(mat, MAT_NO_OFF_PROC_ZERO_ROWS, PETSC_TRUE);
+    ierr = MatSetOption(mat, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(mat, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
+        rot_mat_time = rot_mat_time - rot_mat_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","RotMat Prepare:", rot_mat_time);
+        ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
+    /* Construct final matrix */
+    for (PetscInt Irow = Istart; Irow < Iend; ++Irow){
+        ierr = MatSetValues(mat, 1, &Irow, Tnnz[Irow-Istart],
+            mat_cols+Rdisp[Irow-Istart], mat_vals+Rdisp[Irow-Istart], INSERT_VALUES); CHKERRQ(ierr);
+    }
+
+    /* Deallocate buffers */
+    ierr = PetscFree2(mat_cols, mat_vals); CHKERRQ(ierr);
+    ierr = PetscFree2(sendcounts, displs); CHKERRQ(ierr);
+    ierr = PetscFree4(Dnnz, Onnz, Tnnz, Rdisp); CHKERRQ(ierr);
 
     /*********************TIMINGS**********************/
     #ifdef __DMRG_SUB_TIMINGS
@@ -1047,7 +1116,6 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
-
     /******************** TIMINGS *********************/
     #ifdef __DMRG_SUB_TIMINGS
         ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
@@ -1057,28 +1125,16 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     /**************************************************/
 
     /* Broadcast sum_sigma and new_sector_array */
-    ierr = MPI_Bcast(&sum_sigma, 1, MPIU_REAL, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&truncation_error, 1, MPIU_REAL, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
     ierr = MPI_Bcast(&new_sector_array[0], my_m, MPIU_SCALAR, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
-
-    /* Output truncation error */
-    truncation_error = 1.0 - sum_sigma;
 
     /* Replace block's sector_array */
     block.basis_sector_array = new_sector_array;
 
-    if(!rank)
-    {
-        /* Destroy temporary PETSc objects */
-        for (auto svd: svd_list){
-            ierr = SVDDestroy(&svd); CHKERRQ(ierr);
-        }
-        for (auto vec: vec_list){
-            ierr = VecDestroy(&vec); CHKERRQ(ierr);
-        }
-
-        /* Destroy buffers */
-        ierr = PetscFree(mat_rows); CHKERRQ(ierr);
-        ierr = PetscFree(mat_vals); CHKERRQ(ierr);
+    /* Destroy temporary PETSc objects */
+    if(!rank){
+        for (auto svd: svd_list){ ierr = SVDDestroy(&svd); CHKERRQ(ierr); }
+        for (auto vec: vec_list){ ierr = VecDestroy(&vec); CHKERRQ(ierr); }
     }
 
     DMRG_MPI_BARRIER("End of GetRotationMatrices subfunction");
