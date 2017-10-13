@@ -982,7 +982,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
         }
 
         /* Checkpoint: Compare preallocation data (Xnnz) with the lengths of the matrix buffer */
-        for (size_t Irow = 0; Irow < nrows; ++Irow)
+        for (size_t Irow = 0; Irow < (size_t) nrows; ++Irow)
         {
             if((size_t)(Tnnz[Irow]) != mat_cols_list[Irow].size())
                 SETERRQ3(PETSC_COMM_SELF, 1, "Error in matrix buffer size in row %d. "
@@ -1003,7 +1003,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
 
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
         {
-            std::memcpy(&mat_cols[Rdisp[Irow]], mat_cols_list[Irow].data(), Tnnz[Irow] * sizeof(PetscInt));
+            memcpy(&mat_cols[Rdisp[Irow]], mat_cols_list[Irow].data(), Tnnz[Irow] * sizeof(PetscInt));
             /* Uncomment only if memory is an issue: */
             // mat_cols_list[Irow].clear();
             // mat_cols_list[Irow].shrink_to_fit();
@@ -1011,7 +1011,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
 
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
         {
-            std::memcpy(&mat_vals[Rdisp[Irow]], mat_vals_list[Irow].data(), Tnnz[Irow] * sizeof(PetscScalar));
+            memcpy(&mat_vals[Rdisp[Irow]], mat_vals_list[Irow].data(), Tnnz[Irow] * sizeof(PetscScalar));
             /* Uncomment only if memory is an issue: */
             // mat_cols_list[Irow].clear();
             // mat_cols_list[Irow].shrink_to_fit();
