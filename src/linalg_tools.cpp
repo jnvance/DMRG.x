@@ -22,6 +22,9 @@ PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim)
 
     ierr = MatShift(eye, 1.00); CHKERRQ(ierr);
 
+    ierr = MatAssemblyBegin(eye, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(eye, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
     return ierr;
 }
 
