@@ -4109,6 +4109,11 @@ PetscErrorCode MatKronProdSum(
 {
     PetscErrorCode ierr = 0;
 
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== Start of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
+
     // ierr = MatKronProdSum_1(a,A,B,C,prealloc); CHKERRQ(ierr);
     ierr = MatKronProdSum_2(a,A,B,C,prealloc); CHKERRQ(ierr);
 
@@ -4131,6 +4136,11 @@ PetscErrorCode MatKronProdSumIdx(
     PetscErrorCode ierr = 0;
 
     C = nullptr;
+
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== Start of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
 
     // ierr = MatKronProdSumIdx_1(a, A, B, C, idx); CHKERRQ(ierr);
     // ierr = MatKronProdSumIdx_2(a, A, B, C, idx); CHKERRQ(ierr);

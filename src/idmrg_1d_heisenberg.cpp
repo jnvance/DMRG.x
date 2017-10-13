@@ -68,10 +68,13 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     */
     PetscInt M_L, N_L;
     ierr = MatGetSize(H_L, &M_L, &N_L); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatGetSize");
+
     /*
         Fill in auxiliary matrices with values
     */
     ierr = MatEyeCreate(comm_, eye_L, M_L); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatEyeCreate");
 
     LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(Sp_L);
     ierr = MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L); CHKERRQ(ierr);
@@ -152,14 +155,18 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     */
     PetscInt M_R, N_R;
     ierr = MatGetSize(H_R, &M_R, &N_R); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatGetSize");
+
     /*
         Fill in auxiliary matrices with values
     */
     ierr = MatEyeCreate(comm_, eye_R, M_R); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatEyeCreate");
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_R);
     ierr = MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);CHKERRQ(ierr);
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_R);
+    DMRG_MPI_BARRIER("MatHermitianTranspose");
     /*
         Update the block Hamiltonian
     */
