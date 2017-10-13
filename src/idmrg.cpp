@@ -1333,18 +1333,25 @@ PetscErrorCode iDMRG::TruncateOperators()
     if(!(dm_svd && U_left_))
         SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
 
+    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
     ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatHermitianTranspose");
+
     ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatMatMatMult");
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatMatMatMult");
 
     ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatMatMatMult");
 
     ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
 
@@ -1352,18 +1359,25 @@ PetscErrorCode iDMRG::TruncateOperators()
     if(!(dm_svd && U_right_))
         SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
 
+    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
     ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatHermitianTranspose");
+
     ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
 
     ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatMatMatMult");
 
     ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatMatMatMult");
 
     ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatMatMatMult");
 
     ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
 
