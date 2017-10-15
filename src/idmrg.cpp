@@ -846,6 +846,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
     PetscMPIInt *displs = nullptr;      /* The starting row for each process */
     PetscMPIInt recvcount = 0;          /* Number of entries to receive from scatter */
     std::vector<PetscScalar> new_sector_array(my_m); /* Updates the sector array */
+    PetscInt tot_nz = 0; /* Total number of non-zeros to be printed out */
 
     /* Matrix buffers for MatSetValues */
     PetscInt    *mat_cols;
@@ -904,7 +905,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
         Crange[nprocs] = ncols;
         Rrange[nprocs] = nrows;
 
-        /* 
+        /*
             Store the sparse matrix nonzeros as resizable vectors since we do not know
                 how many elements go into a row.
             Calculate the preallocation data at root as well.
@@ -1033,6 +1034,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
                 sendcounts[Irank] += Tnnz[Irow];
             tot_nnz += sendcounts[Irank];
         }
+        tot_nz = tot_nnz;
 
         /* Scatter matrix data */
         ierr = MPI_Scatterv(mat_cols, sendcounts, displs, MPIU_INT, MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
@@ -1088,6 +1090,8 @@ PetscErrorCode GetRotationMatrices_targetSz_root(
         ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
         rot_mat_time = rot_mat_time - rot_mat_time0;
         ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","RotMat Prepare:", rot_mat_time);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s Nonzeros: %d/(%d * %d) = %f%%\n", "", tot_nz, nrows, ncols,
+            100.0*((double)tot_nz)/( (double)nrows * (double)ncols));
         ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
     #endif
     /**************************************************/
