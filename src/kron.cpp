@@ -3743,9 +3743,10 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES          , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ZERO_ROWS        , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES      , PETSC_TRUE);
-    ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN         , PETSC_TRUE);
+    // ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN         , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR     , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR   , PETSC_TRUE);
+    ierr = MatSetOption(C, MAT_IGNORE_ZERO_ENTRIES          , PETSC_TRUE);
 
     /**************************************************/
     KRON_PS_TIMINGS_END(KRON_PREALLOC)
@@ -3992,7 +3993,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     #undef __GETSUBMAT
 
 /* Test this feature */
-#if 1
+#if 0
 
     #define __CONCATENATE      "    Concatenate"
     KRON_PS_TIMINGS_INIT(__CONCATENATE);
@@ -4086,7 +4087,8 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ZERO_ROWS,       PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES,     PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN,        PETSC_TRUE); CHKERRQ(ierr);
+    // ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN,        PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_IGNORE_ZERO_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR,    PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR,  PETSC_TRUE); CHKERRQ(ierr);
 
