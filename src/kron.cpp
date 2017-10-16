@@ -131,7 +131,19 @@ PetscErrorCode GetSubmatrix(
             Construct submatrix_A and get local indices
         */
         submat_A[i] = nullptr;
+
+        #if 1
+        /* New submatrix layout using GetSubmatrices */
+        Mat *p_submat_A; /* reference to submatrix array to be filled by 1 submatrix */
+        ierr = MatGetSubMatrices(A[i], 1, &isrow_A, &iscol_A, MAT_INITIAL_MATRIX, &p_submat_A); CHKERRQ(ierr);
+        submat_A[i] = *p_submat_A;
+
+        #else
+        /* Old submatrix layout */
         ierr = MatGetSubMatrix(A[i], isrow_A, iscol_A, MAT_INITIAL_MATRIX, submat_A.data()+i); CHKERRQ(ierr);
+
+        #endif
+
         ierr = MatGetOwnershipRange(submat_A[i], &A_sub_start, &A_sub_end); CHKERRQ(ierr);
         /*
             Checkpoint row ownership ranges
@@ -731,11 +743,19 @@ PetscErrorCode MatKronProdSum_2(
         Input: the corresponding column index in the locally-owned submatrix A/B
         Output: the column INDEX in the global matrix A/B
     */
+    #if 1
+    /* New submatrix layout */
+    #define COL_MAP_A(INDEX) ((INDEX))
+    #define COL_MAP_B(INDEX) ((INDEX))
+
+    #else
+    /* Old submatrix layout */
     const PetscInt COL_SHIFT_A = - N_A[0] * (nprocs - 1);
     const PetscInt COL_SHIFT_B = - N_B[0] * (nprocs - 1);
 
     #define COL_MAP_A(INDEX) ((INDEX) + COL_SHIFT_A )
     #define COL_MAP_B(INDEX) ((INDEX) + COL_SHIFT_B )
+    #endif
 
     KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
     #undef KRON_SUBMATRIX
@@ -3622,16 +3642,32 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
         Input: the corresponding column index in the locally-owned submatrix A/B
         Output: the column INDEX in the global matrix A/B
     */
+    #if 1
+    /* New submatrix layout */
+    #define COL_MAP_A(INDEX) ((INDEX))
+    #define COL_MAP_B(INDEX) ((INDEX))
+
+    #else
+    /* Old submatrix layout */
     PetscInt A_shift = N_A[0] * (nprocs - 1);
     PetscInt B_shift = N_B[0] * (nprocs - 1);
     #define COL_MAP_A(INDEX) ((INDEX) - A_shift)
     #define COL_MAP_B(INDEX) ((INDEX) - B_shift)
+    #endif
     /*
         Input: the column INDEX in the global matrix A/B
         Output: the corresponding column index in the locally-owned submatrix A/B
     */
+    #if 1
+    /* New submatrix layout */
+    #define COL_INV_A(INDEX) ((INDEX))
+    #define COL_INV_B(INDEX) ((INDEX))
+
+    #else
+    /* Old submatrix layout */
     #define COL_INV_A(INDEX) ((INDEX) + A_shift)
     #define COL_INV_B(INDEX) ((INDEX) + B_shift)
+    #endif
 
     /**************************************************/
     KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
