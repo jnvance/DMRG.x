@@ -4034,23 +4034,19 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     PetscInt ncols;
 
     PetscInt *d_nnz, *o_nnz;
-    ierr = PetscMalloc1(locrows, &d_nnz); CHKERRQ(ierr);
-    ierr = PetscMalloc1(locrows, &o_nnz); CHKERRQ(ierr);
+    ierr = PetscCalloc1(locrows, &d_nnz); CHKERRQ(ierr);
+    ierr = PetscCalloc1(locrows, &o_nnz); CHKERRQ(ierr);
 
     for (PetscInt Irow = 0; Irow < locrows; ++Irow)
     {
         ierr = MatGetRow(C_sub, Irow, &ncols, &cols, nullptr);
 
-        d_nnz[Irow] = 0;
-        o_nnz[Irow] = 0;
-
         for (PetscInt Icol = 0; Icol < ncols; ++Icol){
-            if ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend ){
-                d_nnz[Irow] += 1;
-            } else {
-                o_nnz[Irow] += 1;
-            }
+            if ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend )
+                ++d_nnz[Irow];
         }
+
+        o_nnz[Irow] = ncols - d_nnz[Irow];
 
         ierr = MatRestoreRow(C_sub, Irow, &ncols, &cols, nullptr);
     }
@@ -4070,18 +4066,6 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     ierr = PetscFree(d_nnz); CHKERRQ(ierr);
     ierr = PetscFree(o_nnz); CHKERRQ(ierr);
 
-    /* Check correct ownership ranges */
-
-    PetscInt Istart_C, Iend_C;
-
-    ierr = MatGetOwnershipRange(C, &Istart_C, &Iend_C);
-
-    if(Istart_C != Istart)
-        SETERRQ2(comm, 1, "Incorrect ownership range for Istart. Expected %d. Got %d.", Istart, Istart_C);
-
-    if(Iend_C != Iend)
-        SETERRQ2(comm, 1, "Incorrect ownership range for Iend. Expected %d. Got %d.", Iend, Iend_C);
-
     /* Set some optimization options */
 
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
@@ -4100,6 +4084,18 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     KRON_PS_TIMINGS_INIT(__SETVALS);
     KRON_PS_TIMINGS_START(__SETVALS);
     /**************************************************/
+
+    /* Check correct ownership ranges */
+
+    PetscInt Istart_C, Iend_C;
+
+    ierr = MatGetOwnershipRange(C, &Istart_C, &Iend_C);
+
+    if(Istart_C != Istart)
+        SETERRQ2(comm, 1, "Incorrect ownership range for Istart. Expected %d. Got %d.", Istart, Istart_C);
+
+    if(Iend_C != Iend)
+        SETERRQ2(comm, 1, "Incorrect ownership range for Iend. Expected %d. Got %d.", Iend, Iend_C);
 
     /* Dump values from submatrix to final matrix */
 
