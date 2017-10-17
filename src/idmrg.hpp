@@ -64,8 +64,12 @@
     #define DMRG_MPI_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== %s [ FILE %s ] [ LINE %d ] ========\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+    #define DMRG_SEQ_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
 #else
     #define DMRG_MPI_BARRIER(MESSAGE)
+    #define DMRG_SEQ_BARRIER(MESSAGE)
 #endif
 
 
@@ -140,9 +144,14 @@ protected:
     PetscBool target_Sz_set = PETSC_FALSE;
 
     /**
-        Whether to perform full SVD on a root MPI process
+        Whether to perform full SVD on root MPI process
      */
-    PetscBool do_svd_on_root = PETSC_FALSE;
+    PetscBool do_svd_on_root = PETSC_TRUE;
+
+    /**
+        Whether to perform operator rotation on root MPI process
+     */
+    PetscBool do_truncation_on_root = PETSC_TRUE;
 
     /**
         Completed number of steps.
@@ -298,6 +307,16 @@ protected:
         Internal function to check whether parameters have been set
     */
     PetscErrorCode CheckSetParameters();
+
+    /**
+        Internal function to perform TruncateOperators on root
+     */
+    PetscErrorCode TruncateOperators_seq();
+
+    /**
+        Internal function to perform TruncateOperators on globally
+     */
+    PetscErrorCode TruncateOperators_mpi();
 
 public:
 
