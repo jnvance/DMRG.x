@@ -1345,15 +1345,15 @@ PetscErrorCode iDMRG::TruncateOperators()
     ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatMatMatMult");
 
@@ -1371,15 +1371,15 @@ PetscErrorCode iDMRG::TruncateOperators()
     ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
+    ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
     DMRG_MPI_BARRIER("MatMatMatMult");
 

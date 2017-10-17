@@ -3993,7 +3993,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     #undef __GETSUBMAT
 
 /* Test this feature */
-#if 0
+#if 1
 
     #define __CONCATENATE      "    Concatenate"
     KRON_PS_TIMINGS_INIT(__CONCATENATE);
@@ -4042,8 +4042,9 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         ierr = MatGetRow(C_sub, Irow, &ncols, &cols, nullptr);
 
         for (PetscInt Icol = 0; Icol < ncols; ++Icol){
-            if ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend )
-                ++d_nnz[Irow];
+            // if ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend )
+                // ++d_nnz[Irow];
+            d_nnz[Irow] += ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend ) ? 1 : 0 ;
         }
 
         o_nnz[Irow] = ncols - d_nnz[Irow];
