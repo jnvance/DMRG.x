@@ -867,6 +867,13 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
     PetscInt *Dnnz = nullptr, *Onnz = nullptr, *Tnnz = nullptr; /* Number of nonzeros in each row */
     PetscInt *Rdisp = nullptr; /* The displacement for each row */
 
+    /* Explicitly delete small nonzero values */
+    PetscBool do_rot_ignore_small_values = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_ignore_small_values",&do_rot_ignore_small_values,NULL); CHKERRQ(ierr);
+
+    PetscReal rot_tolerance = 0.0;
+    ierr = PetscOptionsGetReal(NULL,NULL,"-rot_tolerance",&rot_tolerance,NULL); CHKERRQ(ierr);
+
     if(!rank)
     {
         ierr = PetscCalloc2(nprocs, &sendcounts, nprocs, &displs); CHKERRQ(ierr);
@@ -927,6 +934,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
         /* Extraction of values */
 
         truncation_error = 1.0;
+        PetscInt max_tot_nnz = 0;
         for (PetscInt Ieig = 0; Ieig < my_m; ++Ieig)
         {
             /* Unpack selected eigenstate tuple */
@@ -945,14 +953,14 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
             PetscReal sigma_svd;
             ierr = SVDGetSingularTriplet(svd, svd_id, &sigma_svd, Vr, nullptr); CHKERRQ(ierr);
             if(sigma_svd!=sigma)
-                SETERRQ2(comm,1,"Eigenvalue mismatch. Expected %f. Got %f.", sigma, sigma_svd);
+                SETERRQ2(PETSC_COMM_SELF,1,"Eigenvalue mismatch. Expected %f. Got %f.", sigma, sigma_svd);
             truncation_error = truncation_error - sigma;
 
             /* Get vector size and inspect */
             PetscInt vec_size;
             ierr = VecGetSize(Vr,&vec_size); CHKERRQ(ierr);
             if((size_t)vec_size!=current_sector_basis.size())
-                SETERRQ2(comm,1,"Vector size mismatch. Expected %d. Got %d.",current_sector_basis.size(),vec_size);
+                SETERRQ2(PETSC_COMM_SELF,1,"Vector size mismatch. Expected %d. Got %d.",current_sector_basis.size(),vec_size);
 
             /* Read elements of the vector */
             const PetscScalar *vec_vals;
@@ -961,6 +969,9 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
             /* Loop through current_sector_basis and eigenvectors */
             for (size_t Jsec = 0; Jsec < current_sector_basis.size(); ++Jsec)
             {
+                max_tot_nnz += 1;
+                if(do_rot_ignore_small_values && (PetscAbsReal(vec_vals[Jsec]) < (PetscReal)rot_tolerance)) continue;
+
                 PetscInt j_idx = current_sector_basis[Jsec];    /* the row index */
                 PetscMPIInt Irank = row_to_rank[j_idx];         /* the rank corresponding to this row */
 
@@ -974,8 +985,8 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
                 /* Dump values and columns to respective buffer */
                 mat_cols_list[j_idx].push_back(Ieig);
                 mat_vals_list[j_idx].push_back(vec_vals[Jsec]);
-
             }
+
             new_sector_array[Ieig] = Sz_sector;
             ierr = VecRestoreArrayRead(Vr, &vec_vals);
         }
@@ -988,6 +999,14 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
             Tnnz[Irow] = Dnnz[Irow] + Onnz[Irow];
             tot_nnz += Tnnz[Irow];
         }
+
+        /* Print info on nnz's dropped due to do_rot_ignore_small_values */
+        #ifdef __DMRG_SUB_TIMINGS
+        if(do_rot_ignore_small_values){
+            ierr = PetscPrintf(PETSC_COMM_SELF,"\n%12s Tolerance: %-10g Nz's dropped: %d/%d/%d\n\n",
+                "", rot_tolerance, (max_tot_nnz-tot_nnz), max_tot_nnz, nrows*ncols);
+        }
+        #endif
 
         /* Checkpoint: Compare preallocation data (Xnnz) with the lengths of the matrix buffer */
         for (size_t Irow = 0; Irow < (size_t) nrows; ++Irow)
@@ -1271,6 +1290,13 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
     /* Updates the sector array to be received later */
     std::vector<PetscScalar> new_sector_array(my_m);
 
+    /* Explicitly delete small nonzero values */
+    PetscBool do_rot_ignore_small_values = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_ignore_small_values",&do_rot_ignore_small_values,NULL); CHKERRQ(ierr);
+
+    PetscReal rot_tolerance = 0.0;
+    ierr = PetscOptionsGetReal(NULL,NULL,"-rot_tolerance",&rot_tolerance,NULL); CHKERRQ(ierr);
+
     if(!rank)
     {
         /* Temporary matrix buffer to be filled up by root */
@@ -1313,6 +1339,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
         mat_vals_list.resize(nrows);
 
         truncation_error = 1.0;
+        PetscInt max_tot_nnz = 0;
         for (PetscInt Ieig = 0; Ieig < my_m; ++Ieig)
         {
             /* Unpack selected eigenstate tuple */
@@ -1347,6 +1374,9 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
             /* Loop through current_sector_basis and eigenvectors */
             for (size_t Jsec = 0; Jsec < current_sector_basis.size(); ++Jsec)
             {
+                max_tot_nnz += 1;
+                if(do_rot_ignore_small_values && (PetscAbsReal(vec_vals[Jsec]) < (PetscReal)rot_tolerance)) continue;
+
                 PetscInt j_idx = current_sector_basis[Jsec];    /* the row index */
                 Dnnz[j_idx] += 1;
 
@@ -1381,6 +1411,14 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
             tot_nnz += Dnnz[Irow];
         }
         ierr = PetscCalloc2(tot_nnz, &mat_cols, tot_nnz, &mat_vals); CHKERRQ(ierr);
+
+        /* Print info on nnz's dropped due to do_rot_ignore_small_values */
+        #ifdef __DMRG_SUB_TIMINGS
+        if(do_rot_ignore_small_values){
+            ierr = PetscPrintf(PETSC_COMM_SELF,"\n%12s Tolerance: %-10g Nz's dropped: %d/%d/%d\n\n",
+                "", rot_tolerance, (max_tot_nnz-tot_nnz), max_tot_nnz, nrows*ncols);
+        }
+        #endif
 
         /* Dump vector contents to memaligned buffer */
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
@@ -1922,7 +1960,7 @@ PetscErrorCode TruncateOperator_seq(
 
             /* Print info on nnz's dropped due to do_op_ignore_small_values */
             #ifdef __DMRG_SUB_TIMINGS
-                ierr = PetscPrintf(PETSC_COMM_SELF,"%16s Tolerance: %-10g Nz's dropped: %d/%d/%d\n",
+                ierr = PetscPrintf(PETSC_COMM_SELF,"\n%12s Tolerance: %-10g Nz's dropped: %d/%d/%d\n\n",
                     "", op_tolerance, (max_tot_nnz-counter), max_tot_nnz, Mrows*Ncols);
             #endif
 
