@@ -151,7 +151,7 @@ protected:
     /**
         Whether to perform operator rotation on root MPI process
      */
-    PetscBool do_truncation_on_root = PETSC_TRUE;
+    PetscBool do_truncation_on_root = PETSC_FALSE;
 
     /**
         Completed number of steps.
