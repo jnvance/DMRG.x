@@ -34,6 +34,19 @@
         subfunct_time ## SECTION_LABEL = subfunct_time ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
         ierr = PetscPrintf(PETSC_COMM_WORLD, "%8d %-50s %.20g\n\n", iter_, SECTION_LABEL, subfunct_time ## SECTION_LABEL);
 
+    /* Non-overlapping timings*/
+
+    #define DMRG_SUB_SUB_TIMINGS_INIT() \
+        PetscLogDouble subsubfunct_time0, subsubfunct_time;
+
+    #define DMRG_SUB_SUB_TIMINGS_START(SECTION_LABEL) \
+        ierr = PetscTime(&subsubfunct_time0); CHKERRQ(ierr);
+
+    #define DMRG_SUB_SUB_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&subsubfunct_time); CHKERRQ(ierr); \
+        subsubfunct_time = subsubfunct_time - subsubfunct_time0; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%12s %-46s %.20g\n", "", SECTION_LABEL, subsubfunct_time);
+
     /* Inspect accumulated timings for a section of code inside a loop */
 
     #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL) \
@@ -53,6 +66,9 @@
     #define DMRG_SUB_TIMINGS_INIT(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_START(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_END(SECTION_LABEL)
+    #define DMRG_SUB_SUB_TIMINGS_INIT()
+    #define DMRG_SUB_SUB_TIMINGS_START(SECTION_LABEL)
+    #define DMRG_SUB_SUB_TIMINGS_END(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL)
@@ -307,6 +323,11 @@ protected:
         Internal function to check whether parameters have been set
     */
     PetscErrorCode CheckSetParameters();
+
+    /**
+        Internal subfunction to perform single TruncateOperator on root
+     */
+    PetscErrorCode TruncateOperator_seq(const Mat& A, const Mat& B, const Mat& C, const MatReuse scall, const PetscReal fill, Mat& D);
 
     /**
         Internal function to perform TruncateOperators on root

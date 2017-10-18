@@ -1776,13 +1776,22 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
 }
 
 
-PetscErrorCode TruncateOperator_seq(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::TruncateOperator_seq"
+PetscErrorCode iDMRG::TruncateOperator_seq(
     const Mat& A, const Mat& B, const Mat& C,
     const MatReuse scall, const PetscReal fill, Mat& D)
 {
     PetscErrorCode ierr = 0;
     PetscBool flg;
     MatType type;
+
+    /*********************TIMINGS**********************/
+    DMRG_SUB_TIMINGS_START(__FUNCT__)
+    DMRG_SUB_SUB_TIMINGS_INIT()
+    #define TIMINGS__INITIALIZE "    Initialize"
+    DMRG_SUB_SUB_TIMINGS_START(TIMINGS__INITIALIZE)
+    /**************************************************/
 
     /* Get information on MPI */
     PetscMPIInt     nprocs, rank;
@@ -1831,13 +1840,38 @@ PetscErrorCode TruncateOperator_seq(
     ierr = MatGetSubMatrices(B, 1, &irow, &icol, scall, &p_submat); CHKERRQ(ierr);
     Mat& B_local = *p_submat;
 
+    /*********************TIMINGS**********************/
+    DMRG_SUB_SUB_TIMINGS_END(TIMINGS__INITIALIZE)
+    #undef TIMINGS__INITIALIZE
+    /**************************************************/
+
     /* Perform the rotation */
     Mat D_local;
     PetscInt matsize[2];
     if(!rank){
+        /*********************TIMINGS**********************/
+        #ifdef __DMRG_SUB_TIMINGS
+            PetscLogDouble rot_mat_time0, rot_mat_time;
+            ierr = PetscTime(&rot_mat_time0); CHKERRQ(ierr);
+        #endif
+        /**************************************************/
+
         ierr = MatMatMatMult(A, B_local, C, scall, fill, &D_local); CHKERRQ(ierr);
         ierr = MatGetSize(D_local, matsize+0, matsize+1); CHKERRQ(ierr);
+
+        /*********************TIMINGS**********************/
+        #ifdef __DMRG_SUB_TIMINGS
+            ierr = PetscTime(&rot_mat_time); CHKERRQ(ierr);
+            rot_mat_time = rot_mat_time - rot_mat_time0;
+            ierr = PetscPrintf(PETSC_COMM_SELF, "%12s %-46s %.20f\n", "","MatMatMatMult_seq", rot_mat_time);
+        #endif
+        /**************************************************/
     }
+
+    /*********************TIMINGS**********************/
+    #define TIMINGS__PREPARE "    Prepare Matrix"
+    DMRG_SUB_SUB_TIMINGS_START(TIMINGS__PREPARE)
+    /**************************************************/
 
     ierr = MPI_Bcast(matsize, 2, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
     PetscInt Mrows = matsize[0];
@@ -1960,7 +1994,7 @@ PetscErrorCode TruncateOperator_seq(
 
             /* Print info on nnz's dropped due to do_op_ignore_small_values */
             #ifdef __DMRG_SUB_TIMINGS
-                ierr = PetscPrintf(PETSC_COMM_SELF,"\n%12s Tolerance: %-10g Nz's dropped: %d/%d/%d\n\n",
+                ierr = PetscPrintf(PETSC_COMM_SELF,"%12s Tolerance: %-10g Nz's dropped: %d/%d/%d\n",
                     "", op_tolerance, (max_tot_nnz-counter), max_tot_nnz, Mrows*Ncols);
             #endif
 
@@ -2049,6 +2083,13 @@ PetscErrorCode TruncateOperator_seq(
 
     }
 
+    /*********************TIMINGS**********************/
+    DMRG_SUB_SUB_TIMINGS_END(TIMINGS__PREPARE)
+    #undef TIMINGS__PREPARE
+    #define TIMINGS__CONSTRUCT "    Construct Matrix"
+    DMRG_SUB_SUB_TIMINGS_START(TIMINGS__CONSTRUCT)
+    /**************************************************/
+
     /* Create */
     ierr = MatCreate(PETSC_COMM_WORLD, &D); CHKERRQ(ierr);
     ierr = MatSetSizes(D, PETSC_DECIDE, PETSC_DECIDE, Mrows, Ncols); CHKERRQ(ierr);
@@ -2084,6 +2125,12 @@ PetscErrorCode TruncateOperator_seq(
     ierr = ISDestroy(&irow); CHKERRQ(ierr);
     ierr = ISDestroy(&icol); CHKERRQ(ierr);
 
+
+    /*********************TIMINGS**********************/
+    DMRG_SUB_SUB_TIMINGS_END(TIMINGS__CONSTRUCT)
+    #undef TIMINGS__CONSTRUCT
+    DMRG_SUB_TIMINGS_END(__FUNCT__)
+    /**************************************************/
     return ierr;
 }
 
