@@ -22,6 +22,9 @@ PetscErrorCode MatEyeCreate(const MPI_Comm& comm, Mat& eye, PetscInt dim)
 
     ierr = MatShift(eye, 1.00); CHKERRQ(ierr);
 
+    ierr = MatAssemblyBegin(eye, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(eye, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
     return ierr;
 }
 
@@ -337,7 +340,7 @@ PetscErrorCode LocalVecReshapeToLocalMat(
     ierr = PetscObjectTypeCompare((PetscObject)vec_seq,VECSEQ,&flg);CHKERRQ(ierr);
     if(!flg) SETERRQ(PETSC_COMM_SELF,1,"Argument 1 vec_seq must be a sequential vector (VECSEQ) object.");
 
-    if(idx.size()>0 && idx.size() != M*N)
+    if(idx.size()>0 && idx.size() != (size_t)(M*N))
         SETERRQ2(PETSC_COMM_SELF,1,"Index size and M*N mismatch. Expected M*N size %d. Got %d.",M*N, idx.size());
 
     PetscScalar *vec_vals;
@@ -489,14 +492,13 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i, Mat& mat,
 
 
 #undef __FUNCT__
-#define __FUNCT__ "MatMultSelfHC"
-PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_right)
+#define __FUNCT__ "MatMultSelfHC_AIJ"
+PetscErrorCode MatMultSelfHC_AIJ(const MPI_Comm comm, const Mat& mat_in, Mat& mat, const PetscBool hc_right)
 {
     PetscErrorCode  ierr = 0;
     /*
-        The resulting matrix will be created in PETSC_COMM_WORLD
+        The resulting matrix will be created in comm
     */
-    MPI_Comm comm = PETSC_COMM_WORLD;
     #ifndef PETSC_USE_COMPLEX
         // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
@@ -517,7 +519,19 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
     else {
         mat_dim = N;
     }
-    ierr = MatCreateDense(comm, PETSC_DECIDE, PETSC_DECIDE, mat_dim, mat_dim, NULL, &mat); CHKERRQ(ierr);
+    ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
+    ierr = MatSetType(mat, MATAIJ);
+    ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_dim, mat_dim); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
+
+    PetscMPIInt nprocs, rank;
+    MPI_Comm_size(comm, &nprocs);
+    MPI_Comm_rank(comm, &rank);
+    PetscInt remrows = mat_dim % nprocs;
+    PetscInt locrows = mat_dim / nprocs + (rank < remrows ? 1 : 0 );
+
+    ierr = MatMPIAIJSetPreallocation(mat, locrows, NULL, mat_dim - locrows, NULL); CHKERRQ(ierr);
+    ierr = MatSeqAIJSetPreallocation(mat, mat_dim, NULL); CHKERRQ(ierr);
     /*
         Get ownership info
     */
@@ -525,10 +539,14 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
     ierr = MatGetOwnershipRange(mat, &Istart, &Iend); CHKERRQ(ierr);
     nrows = Iend - Istart;
 
+    if(nrows != locrows)
+        SETERRQ(comm, 1, "Matrix layout different from expected.");
+
     Mat mat_in_loc = nullptr;
     Mat mat_out_loc = nullptr;
     Mat mat_in_hc  = nullptr;
-    PetscScalar *vals_mat_in, *vals_mat_in_loc;
+    PetscScalar *vals, *vals_loc;
+
     /*
         Some processes may not have been assigned any rows.
         Otherwise, "Intel MKL ERROR: Parameter 8 was incorrect on entry to ZGEMM ." is produced
@@ -538,7 +556,8 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
         /*
             Create a matrix object that handles the local portion of mat
         */
-        ierr = MatDenseGetLocalMatrix(mat, &mat_out_loc); CHKERRQ(ierr);
+        // ierr = MatDenseGetLocalMatrix(mat_dense, &mat_out_loc); CHKERRQ(ierr);
+        ierr = MatCreateSeqDense(PETSC_COMM_SELF, nrows, mat_dim, NULL, &mat_out_loc); CHKERRQ(ierr);
         /*
             Create a copy of the portion of mat_in that mimics the local row partition of mat
         */
@@ -550,36 +569,52 @@ PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_rig
         /*
             Fill mat_in_loc with column slices of mat_in that belong to the local row partition of mat_in/mat_in_hc
         */
-        ierr = MatDenseGetArray(mat_in_loc, &vals_mat_in_loc); CHKERRQ(ierr);
+        ierr = MatDenseGetArray(mat_in_loc, &vals_loc); CHKERRQ(ierr);
 
         if (hc_right == PETSC_TRUE){
-            ierr = MatDenseGetArray(mat_in, &vals_mat_in); CHKERRQ(ierr);
+            ierr = MatDenseGetArray(mat_in, &vals); CHKERRQ(ierr);
             for (PetscInt Icol = 0; Icol < N; ++Icol)
             {
-                ierr = PetscMemcpy(&vals_mat_in_loc[Icol*nrows],&vals_mat_in[Istart+Icol*M], nrows*sizeof(PetscScalar));
+                ierr = PetscMemcpy(&vals_loc[Icol*nrows],&vals[Istart+Icol*M], nrows*sizeof(PetscScalar));
                 CHKERRQ(ierr);
             }
-            ierr = MatDenseRestoreArray(mat_in, &vals_mat_in); CHKERRQ(ierr);
+            ierr = MatDenseRestoreArray(mat_in, &vals); CHKERRQ(ierr);
             ierr = MatMatMult(mat_in_loc,mat_in_hc,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_out_loc); CHKERRQ(ierr);
         } else
         {
-            ierr = MatDenseGetArray(mat_in_hc, &vals_mat_in); CHKERRQ(ierr);
+            ierr = MatDenseGetArray(mat_in_hc, &vals); CHKERRQ(ierr);
             for (PetscInt Icol = 0; Icol < M; ++Icol)
             {
-                ierr = PetscMemcpy(&vals_mat_in_loc[Icol*nrows],&vals_mat_in[Istart+Icol*N], nrows*sizeof(PetscScalar));
+                ierr = PetscMemcpy(&vals_loc[Icol*nrows],&vals[Istart+Icol*N], nrows*sizeof(PetscScalar));
                 CHKERRQ(ierr);
             }
-            ierr = MatDenseRestoreArray(mat_in, &vals_mat_in); CHKERRQ(ierr);
+            ierr = MatDenseRestoreArray(mat_in, &vals); CHKERRQ(ierr);
             ierr = MatMatMult(mat_in_loc,mat_in,MAT_REUSE_MATRIX,PETSC_DEFAULT,&mat_out_loc); CHKERRQ(ierr);
         }
-        ierr = MatDenseRestoreArray(mat_in_loc, &vals_mat_in_loc); CHKERRQ(ierr);
+        ierr = MatDenseRestoreArray(mat_in_loc, &vals_loc); CHKERRQ(ierr);
+        ierr = MatDenseGetArray(mat_out_loc, &vals_loc); CHKERRQ(ierr);
+
+        /* Prepare row indices and follow matrix layout */
+        PetscInt idxm[nrows];
+        for (PetscInt Irow = Istart; Irow < Iend; ++Irow)
+            idxm[Irow - Istart] = Irow;
+
+        /* Copy values from dense matrix to output sparse matrix */
+        for (PetscInt Icol = 0; Icol < mat_dim; ++Icol)
+        {
+            ierr = MatSetValues(mat, nrows, idxm, 1, &Icol, vals_loc+(Icol*nrows), INSERT_VALUES); CHKERRQ(ierr);
+        }
+
+        ierr = MatDenseRestoreArray(mat_out_loc, &vals_loc); CHKERRQ(ierr);
     }
 
     ierr = MatAssemblyBegin(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
-    if(mat_in_loc) {ierr = MatDestroy(&mat_in_loc); CHKERRQ(ierr);}
-    if(mat_in_hc ) {ierr = MatDestroy(&mat_in_hc ); CHKERRQ(ierr);}
+    if(mat_in_loc ) {ierr = MatDestroy(&mat_in_loc ); CHKERRQ(ierr);}
+    if(mat_in_hc  ) {ierr = MatDestroy(&mat_in_hc  ); CHKERRQ(ierr);}
+    if(mat_out_loc) {ierr = MatDestroy(&mat_out_loc); CHKERRQ(ierr);}
+    // SETERRQ(PETSC_COMM_WORLD,1,"stahp");
 
     return ierr;
 }
@@ -591,11 +626,18 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
 {
     PetscErrorCode  ierr = 0;
 
-    MPI_Comm comm = PetscObjectComm((PetscObject)mat_in);
+    MPI_Comm comm = PETSC_COMM_WORLD;
 
     #ifndef PETSC_USE_COMPLEX
         // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscLogDouble svd_total_time0, svd_total_time;
+        ierr = PetscTime(&svd_total_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
 
     PetscBool assembled;
     ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
@@ -615,7 +657,9 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
         SETERRQ(comm, 1, errormsg);
     }
 
-    // PetscInt mstates = mat_in_nrows < mstates_in ? mat_in_nrows : mstates_in;
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscPrintf(comm,"%16s SVD size: %lu\n","",(unsigned long int)(mat_in_nrows));
+    #endif
 
     PetscInt mstates = mstates_in;
 
@@ -633,11 +677,22 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
     ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
     ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
-    // ierr = SVDSetType(svd, SVDLAPACK); CHKERRQ(ierr);
     // ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = SVDSetDimensions(svd, mstates, mat_in_ncols, PETSC_DEFAULT); CHKERRQ(ierr);
     // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
     ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
+
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD prep:", svd_total_time);
+
+        PetscLogDouble svd_solve_time0, svd_solve_time;
+        ierr = PetscTime(&svd_solve_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
 
     #define __SVD_SOLVE "        SVDSolve"
     LINALG_TOOLS_TIMINGS_START(__SVD_SOLVE)
@@ -646,6 +701,17 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
 
     LINALG_TOOLS_TIMINGS_END(__SVD_SOLVE)
     #undef __SVD_SOLVE
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_solve_time); CHKERRQ(ierr);
+        svd_solve_time = svd_solve_time - svd_solve_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD solve:", svd_solve_time);
+
+        PetscLogDouble svd_post_time0, svd_post_time;
+        ierr = PetscTime(&svd_post_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
 
     #define __SVD_LOAD  "        SVDLoad"
     LINALG_TOOLS_TIMINGS_START(__SVD_LOAD)
@@ -740,13 +806,26 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     LINALG_TOOLS_TIMINGS_END(__SVD_LOAD)
 
     ierr = SVDDestroy(&svd);
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_post_time); CHKERRQ(ierr);
+        svd_post_time = svd_post_time - svd_post_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD post:", svd_post_time);
+
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n\n", "","SVD TOTAL:", svd_total_time);
+    #endif
+    /**************************************************/
+
     return ierr;
 }
 
 
 #undef __FUNCT__
-#define __FUNCT__ "EPSLargestEigenpairs"
-PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp)
+#define __FUNCT__ "SVDLargestStates_split"
+PetscErrorCode SVDLargestStates_split(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp)
 {
     PetscErrorCode  ierr = 0;
 
@@ -755,6 +834,13 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
     #ifndef PETSC_USE_COMPLEX
         // SETERRQ(comm, 1, "Not implemented for real scalars.");
     #endif
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscLogDouble svd_total_time0, svd_total_time;
+        ierr = PetscTime(&svd_total_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
 
     PetscBool assembled;
     ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
@@ -774,7 +860,9 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
         SETERRQ(comm, 1, errormsg);
     }
 
-    // PetscInt mstates = mat_in_nrows < mstates_in ? mat_in_nrows : mstates_in;
+    #ifdef __DMRG_SUB_TIMINGS
+        PetscPrintf(comm,"%16s SVD size: %lu\n","",(unsigned long int)(mat_in_nrows));
+    #endif
 
     PetscInt mstates = mstates_in;
 
@@ -787,65 +875,100 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
         SETERRQ(comm, 1, errormsg);
     }
 
-    EPS eps = nullptr;
-    ierr = EPSCreate(comm, &eps); CHKERRQ(ierr);
-    ierr = EPSSetOperators(eps, mat_in, nullptr); CHKERRQ(ierr);
-    ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
-    ierr = EPSSetType(eps,EPSKRYLOVSCHUR); /* May be removed/changed */
-    // ierr = EPSSetType(eps,EPSLANCZOS); /* May be removed/changed */
-    // ierr = EPSSetTolerances(eps,1.0e-20,100); /* May be removed/changed */
-    ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
-    ierr = EPSSetDimensions(eps, mat_in_nrows, PETSC_DECIDE, PETSC_DECIDE); CHKERRQ(ierr);
+    SVD svd = nullptr;
+    ierr = SVDCreate(comm, &svd); CHKERRQ(ierr);
+    ierr = SVDSetOperator(svd, mat_in); CHKERRQ(ierr);
+    ierr = SVDSetWhichSingularTriplets(svd,SVD_LARGEST); CHKERRQ(ierr);
+    ierr = SVDSetType(svd, SVDTRLANCZOS); CHKERRQ(ierr);
+    // ierr = SVDSetDimensions(svd, mstates, PETSC_DEFAULT, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = SVDSetDimensions(svd, mstates, mat_in_ncols, PETSC_DEFAULT); CHKERRQ(ierr);
+    // ierr = SVDSetTolerances(svd, 1e-20, 200); CHKERRQ(ierr);
+    ierr = SVDSetFromOptions(svd); CHKERRQ(ierr);
 
 
-    // ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
-    ierr = EPSSolve(eps); CHKERRQ(ierr);
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD prep:", svd_total_time);
+
+        PetscLogDouble svd_solve_time0, svd_solve_time;
+        ierr = PetscTime(&svd_solve_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
+    #define __SVD_SOLVE "        SVDSolve"
+    LINALG_TOOLS_TIMINGS_START(__SVD_SOLVE)
+
+    ierr = SVDSolve(svd);CHKERRQ(ierr);
+
+    LINALG_TOOLS_TIMINGS_END(__SVD_SOLVE)
+    #undef __SVD_SOLVE
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_solve_time); CHKERRQ(ierr);
+        svd_solve_time = svd_solve_time - svd_solve_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD solve:", svd_solve_time);
+
+        PetscLogDouble svd_post_time0, svd_post_time;
+        ierr = PetscTime(&svd_post_time0); CHKERRQ(ierr);
+    #endif
+    /**************************************************/
+
+    #define __SVD_LOAD  "        SVDLoad"
+    LINALG_TOOLS_TIMINGS_START(__SVD_LOAD)
+
 
     PetscInt nconv;
-    ierr = EPSGetConverged(eps, &nconv);
-
-    #ifdef __PRINT_EPS_CONVERGENCE
-        PetscPrintf(comm, "%12sEPS requested mstates: %d\n","",mstates);
-        PetscPrintf(comm, "%12sEPS no of conv states: %d\n","",nconv);
-    #endif
-
-    if(nconv < mstates)
+    ierr = SVDGetConverged(svd, &nconv); CHKERRQ(ierr);
+    if (nconv < mstates)
     {
         char errormsg[80];
-        sprintf(errormsg,"Number of converged eigenpairs (%d) less than requested mstates (%d)", nconv, mstates);
+        sprintf(errormsg,"Number of converged singular values (%d) is less than mstates (%d).", nconv, mstates);
         SETERRQ(comm, 1, errormsg);
     }
+
+    #ifdef __PRINT_SVD_CONVERGENCE
+        PetscPrintf(comm, "%12sSVD requested mstates: %d\n","",mstates);
+        PetscPrintf(comm, "%12sSVD no of conv states: %d\n","",nconv);
+    #endif
 
     /**
         The output matrix is a dense matrix but stored as SPARSE.
      */
     Vec Vr;
-    PetscInt    Istart, Iend, Istart_mat, Iend_mat;
+    ierr = MatCreateVecs(mat_in, &Vr, nullptr); CHKERRQ(ierr);
+
+    PetscInt Istart_vec, Iend_vec;
+    ierr = VecGetOwnershipRange(Vr,  &Istart_vec, &Iend_vec); CHKERRQ(ierr);
+
     ierr = MatCreate(comm, &mat); CHKERRQ(ierr);
     ierr = MatSetSizes(mat, PETSC_DECIDE, PETSC_DECIDE, mat_in_nrows, mstates); CHKERRQ(ierr);
-    ierr = MatCreateVecs(mat_in, &Vr, nullptr); CHKERRQ(ierr);
     ierr = MatSetFromOptions(mat); CHKERRQ(ierr);
     ierr = MatSetUp(mat); CHKERRQ(ierr);
-    ierr = VecGetOwnershipRange(Vr,  &Istart, &Iend); CHKERRQ(ierr);
+
+    PetscInt Istart_mat, Iend_mat;
     ierr = MatGetOwnershipRange(mat, &Istart_mat, &Iend_mat); CHKERRQ(ierr);
 
-    if (!(Istart == Istart_mat && Iend == Iend_mat))
+    if (!(Istart_vec == Istart_mat && Iend_vec == Iend_mat))
         SETERRQ(comm, 1, "Matrix and vector layout do not match.");
 
     /* Prepare row indices */
-    PetscInt mrows = Iend - Istart;
+    PetscInt mrows = Iend_vec - Istart_vec;
     PetscInt idxm[mrows];
-    for (PetscInt Irow = Istart; Irow < Iend; ++Irow) idxm[Irow - Istart] = Irow;
+    for (PetscInt Irow = Istart_vec; Irow < Iend_vec; ++Irow)
+        idxm[Irow - Istart_vec] = Irow;
 
-    PetscScalar sum_first_mstates = 0;
-    PetscScalar eigr;
     const PetscScalar *vals;
+    PetscReal sum_first_mstates = 0;
+    PetscReal eigr;
     for (PetscInt Istate = 0; Istate < mstates; ++Istate)
     {
-        ierr = EPSGetEigenpair(eps, Istate, &eigr, nullptr, Vr, nullptr); CHKERRQ(ierr);
+        ierr = SVDGetSingularTriplet(svd, Istate, &eigr, Vr, nullptr); CHKERRQ(ierr);
         sum_first_mstates += eigr;
         #ifdef __TESTING
-            ierr = PetscFPrintf(comm, fp, "%.20g%+.20gj\n",PetscRealPart(eigr),PetscImaginaryPart(eigr));
+            ierr = PetscFPrintf(comm, fp, "%.20g+0.0j\n",eigr);
         #endif
         ierr = VecGetArrayRead(Vr, &vals); CHKERRQ(ierr);
         ierr = MatSetValues(mat, mrows, idxm, 1, &Istate, vals, INSERT_VALUES); CHKERRQ(ierr);
@@ -859,23 +982,50 @@ PetscErrorCode EPSLargestEigenpairs(const Mat& mat_in, const PetscInt mstates_in
         ierr = MatAssemblyEnd(mat, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     }
 
-    #ifdef __PRINT_EPS_LARGEST
-        PetscBool terse;
-        PetscOptionsHasName(NULL,NULL,"-terse",&terse);
-        if (terse)
-        {
-            EPSErrorView(eps,EPS_ERROR_RELATIVE,NULL);
-        }
-        else
-        {
-            PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);
-            EPSReasonView(eps,PETSC_VIEWER_STDOUT_WORLD);
-            EPSErrorView(eps,EPS_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);
-            PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);
-        }
-    #endif // __PRINTOUT_EPS_LARGEST
+    #ifdef __PRINT_SVD_LARGEST
+        SVDType        type;
+        PetscReal      tol;
+        PetscInt       maxit,its,nsv;
+        PetscBool      terse;
 
-    ierr = EPSDestroy(&eps); CHKERRQ(ierr);
+        ierr = SVDGetIterationNumber(svd,&its);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of iterations of the method: %D\n",its);CHKERRQ(ierr);
+
+        ierr = SVDGetType(svd,&type);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Solution method: %s\n\n",type);CHKERRQ(ierr);
+        ierr = SVDGetDimensions(svd,&nsv,NULL,NULL);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Number of requested singular values: %D\n",nsv);CHKERRQ(ierr);
+        ierr = SVDGetTolerances(svd,&tol,&maxit);CHKERRQ(ierr);
+        ierr = PetscPrintf(comm," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);CHKERRQ(ierr);
+        /*
+            Show detailed info unless -terse option is given by user
+         */
+        ierr = PetscOptionsHasName(NULL,NULL,"-terse",&terse);CHKERRQ(ierr);
+        if (terse) {
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,NULL);CHKERRQ(ierr);
+        } else {
+            ierr = PetscViewerPushFormat(PETSC_VIEWER_STDOUT_WORLD,PETSC_VIEWER_ASCII_INFO_DETAIL);CHKERRQ(ierr);
+            ierr = SVDReasonView(svd,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = SVDErrorView(svd,SVD_ERROR_RELATIVE,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+            ierr = PetscViewerPopFormat(PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+        }
+    #endif
+
+    LINALG_TOOLS_TIMINGS_END(__SVD_LOAD)
+
+    ierr = SVDDestroy(&svd);
+
+    /*********************TIMINGS**********************/
+    #ifdef __DMRG_SUB_TIMINGS
+        ierr = PetscTime(&svd_post_time); CHKERRQ(ierr);
+        svd_post_time = svd_post_time - svd_post_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n", "","SVD post:", svd_post_time);
+
+        ierr = PetscTime(&svd_total_time); CHKERRQ(ierr);
+        svd_total_time = svd_total_time - svd_total_time0;
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%16s %-42s %.20f\n\n", "","SVD TOTAL:", svd_total_time);
+    #endif
+    /**************************************************/
 
     return ierr;
 }
@@ -910,7 +1060,7 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
 {
     PetscErrorCode  ierr = 0;
 
-    MPI_Comm comm = PETSC_COMM_WORLD;
+    const MPI_Comm comm = PetscObjectComm((PetscObject) mat_in);
     PetscBool assembled;
     ierr = MatAssembled(mat_in, &assembled); CHKERRQ(ierr);
     if (assembled == PETSC_FALSE){

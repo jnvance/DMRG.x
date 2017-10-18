@@ -67,7 +67,7 @@ public:
         Returns a reference to the block Hamiltonian matrix.
         Set to `nullptr` when not in use.
      */
-    Mat H()
+    Mat& H()
     {
         return H_;
     }
@@ -76,7 +76,7 @@ public:
         Returns a reference to the \f$S_z\f$ matrix.
         Set to `nullptr` when not in use.
      */
-    Mat Sz()
+    Mat& Sz()
     {
         return Sz_;
     }
@@ -85,7 +85,7 @@ public:
         Returns a reference to the \f$S_+\f$ matrix.
         Set to `nullptr` when not in use.
      */
-    Mat Sp()
+    Mat& Sp()
     {
         return Sp_;
     }

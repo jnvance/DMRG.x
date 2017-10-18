@@ -50,10 +50,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+    DMRG_MPI_BARRIER("Start of BuildBlockLeft");
 
     ierr = CheckSetParameters(); CHKERRQ(ierr);
 
-    PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
     */
@@ -68,13 +68,20 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     */
     PetscInt M_L, N_L;
     ierr = MatGetSize(H_L, &M_L, &N_L); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatGetSize");
+
     /*
         Fill in auxiliary matrices with values
     */
     ierr = MatEyeCreate(comm_, eye_L, M_L); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatEyeCreate");
 
-    LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_L);
+    LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(Sp_L);
+    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
     ierr = MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatHermitianTranspose");
+    LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(Sm_L);
+
     /*
         Update the block Hamiltonian
     */
@@ -118,6 +125,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockLeft()
     ierr = MatDestroy(&Sm_L); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_L); CHKERRQ(ierr);
 
+    DMRG_MPI_BARRIER("End of BuildBlockLeft");
     DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
@@ -131,10 +139,10 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     PetscErrorCode  ierr = 0;
     DMRG_TIMINGS_START(__FUNCT__);
     DMRG_SUB_TIMINGS_START(__FUNCT__);
+    DMRG_MPI_BARRIER("Start of BuildBlockRight");
 
     ierr = CheckSetParameters(); CHKERRQ(ierr);
 
-    PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
     */
@@ -149,13 +157,20 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     */
     PetscInt M_R, N_R;
     ierr = MatGetSize(H_R, &M_R, &N_R); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatGetSize");
+
     /*
         Fill in auxiliary matrices with values
     */
     ierr = MatEyeCreate(comm_, eye_R, M_R); CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatEyeCreate");
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_R);
+    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
     ierr = MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);CHKERRQ(ierr);
+    DMRG_MPI_BARRIER("MatHermitianTranspose");
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_R);
+
     /*
         Update the block Hamiltonian
     */
@@ -199,6 +214,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildBlockRight()
     ierr = MatDestroy(&Sm_R); CHKERRQ(ierr);
     ierr = MatDestroy(&eye_R); CHKERRQ(ierr);
 
+    DMRG_MPI_BARRIER("End of BuildBlockRight");
     DMRG_SUB_TIMINGS_END(__FUNCT__);
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
@@ -217,7 +233,6 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     ierr = CheckSetParameters(); CHKERRQ(ierr);
 
-    PetscBool assembled;
     /*
         Declare aliases and auxiliary matrices
     */
@@ -307,9 +322,11 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(BlockLeft_.Sp());
     MatHermitianTranspose(Sp_L, MAT_INITIAL_MATRIX, &Sm_L);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_L);
 
     LINALG_TOOLS__MATASSEMBLY_FINAL(BlockRight_.Sp());
     MatHermitianTranspose(Sp_R, MAT_INITIAL_MATRIX, &Sm_R);
+    LINALG_TOOLS__MATASSEMBLY_FINAL(Sm_R);
     /*
         Decide whether to preallocate
         Conditions to reallocate the Hamiltonian matrix:
@@ -335,7 +352,9 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
         ierr = MatDestroy(&superblock_H_); CHKERRQ(ierr);
         superblock_H_ = nullptr;
         superblock_set_=PETSC_FALSE;
-        PetscPrintf(comm_, "Prealloc H\n");
+        #ifdef __DMRG_SUB_TIMINGS
+            PetscPrintf(comm_, "  %6d   Prealloc H\n",iter());
+        #endif
     }
 
     DMRG_SUB_TIMINGS_END(BUILD_BASIS)
@@ -377,7 +396,7 @@ PetscErrorCode iDMRG_Heisenberg::BuildSuperBlock()
     if(!do_target_Sz && M_superblock != TotalBasisSize())
         SETERRQ2(comm_, 1, "Basis size mismatch. Expected %d. Got %d.\n",TotalBasisSize(),M_superblock);
 
-    if( do_target_Sz && M_superblock != restricted_basis_indices.size())
+    if( do_target_Sz && M_superblock != (PetscInt) restricted_basis_indices.size())
         SETERRQ2(comm_, 1, "Sector size mismatch. Expected %d. Got %d\n",restricted_basis_indices.size(),M_superblock);
     /*
         Final Assembly

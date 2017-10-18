@@ -17,7 +17,7 @@ PetscErrorCode InitialChecks(
     PetscInt& M_C,
     PetscInt& N_C)
 {
-    PetscErrorCode ierr;
+    PetscErrorCode ierr = 0;
 
     /*
         INITIAL CHECKPOINTS
@@ -46,8 +46,8 @@ PetscErrorCode InitialChecks(
 
     for (PetscInt i = 0; i < nterms; ++i)
     {
-        ierr = MatGetSize(A[i], M_A.data()+i, N_A.data()+i);
-        ierr = MatGetSize(B[i], M_B.data()+i, N_B.data()+i);
+        ierr = MatGetSize(A[i], M_A.data()+i, N_A.data()+i); CHKERRQ(ierr);
+        ierr = MatGetSize(B[i], M_B.data()+i, N_B.data()+i); CHKERRQ(ierr);
     }
     /*
         Check whether the resulting sizes of the tensor products are equal
@@ -106,7 +106,6 @@ PetscErrorCode GetSubmatrix(
     PetscInt&               A_sub_end)
 {
     PetscErrorCode ierr = 0;
-    PetscBool      assembled;
     MPI_Comm comm = PETSC_COMM_WORLD;
 
     PetscInt *id_cols_A;
@@ -115,7 +114,7 @@ PetscErrorCode GetSubmatrix(
         id_cols_A[Icol] = Icol;
 
     IS isrow_A = nullptr, iscol_A = nullptr;
-    PetscInt A_sub_start_temp, A_sub_end_temp;
+    PetscInt A_sub_start_temp = 0, A_sub_end_temp = 0;
 
     for (PetscInt i = 0; i < nterms; ++i)
     {
@@ -132,7 +131,19 @@ PetscErrorCode GetSubmatrix(
             Construct submatrix_A and get local indices
         */
         submat_A[i] = nullptr;
+
+        #if 1
+        /* New submatrix layout using GetSubmatrices */
+        Mat *p_submat_A; /* reference to submatrix array to be filled by 1 submatrix */
+        ierr = MatGetSubMatrices(A[i], 1, &isrow_A, &iscol_A, MAT_INITIAL_MATRIX, &p_submat_A); CHKERRQ(ierr);
+        submat_A[i] = *p_submat_A;
+
+        #else
+        /* Old submatrix layout */
         ierr = MatGetSubMatrix(A[i], isrow_A, iscol_A, MAT_INITIAL_MATRIX, submat_A.data()+i); CHKERRQ(ierr);
+
+        #endif
+
         ierr = MatGetOwnershipRange(submat_A[i], &A_sub_start, &A_sub_end); CHKERRQ(ierr);
         /*
             Checkpoint row ownership ranges
@@ -156,7 +167,7 @@ PetscErrorCode GetSubmatrix(
 }
 
 
-
+#if 0
 #undef __FUNCT__
 #define __FUNCT__ "MatKronProdSum_1"
 PetscErrorCode MatKronProdSum_1(
@@ -574,6 +585,7 @@ PetscErrorCode MatKronProdSum_1(
     KRON_TIMINGS_END(__FUNCT__);
     return ierr;
 }
+#endif
 
 
 #undef __FUNCT__
@@ -699,7 +711,7 @@ PetscErrorCode MatKronProdSum_2(
         ierr = GetSubmatrix(B,N_B,nterms,M_req_B,id_rows_B,submat_B,B_sub_start,B_sub_end); CHKERRQ(ierr);
 
         std::vector<PetscInt> map_B(M_B[0]);
-        for (PetscInt i = 0; i < set_Brows.size(); ++i){
+        for (size_t i = 0; i < set_Brows.size(); ++i){
             map_B[ id_rows_B[i] ] = i + B_sub_start;
         }
 
@@ -731,11 +743,19 @@ PetscErrorCode MatKronProdSum_2(
         Input: the corresponding column index in the locally-owned submatrix A/B
         Output: the column INDEX in the global matrix A/B
     */
+    #if 1
+    /* New submatrix layout */
+    #define COL_MAP_A(INDEX) ((INDEX))
+    #define COL_MAP_B(INDEX) ((INDEX))
+
+    #else
+    /* Old submatrix layout */
     const PetscInt COL_SHIFT_A = - N_A[0] * (nprocs - 1);
     const PetscInt COL_SHIFT_B = - N_B[0] * (nprocs - 1);
 
     #define COL_MAP_A(INDEX) ((INDEX) + COL_SHIFT_A )
     #define COL_MAP_B(INDEX) ((INDEX) + COL_SHIFT_B )
+    #endif
 
     KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
     #undef KRON_SUBMATRIX
@@ -810,7 +830,7 @@ PetscErrorCode MatKronProdSum_2(
 
         #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
             unsigned long int tot_entries=0, tot_entries_reduced=0, M_C_final=M_C;
-            for (size_t i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
+            for (PetscInt i = 0; i < locrows; ++i) tot_entries += d_nnz[i] + o_nnz[i];
             MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
             PetscPrintf(comm, "%24s Nonzeros: %lu/(%-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final,
                 100.0*(double)tot_entries_reduced/((double)(M_C_final) * (double)(M_C_final)));
@@ -1077,6 +1097,7 @@ PetscErrorCode MatKronProd(const PetscScalar& a, const Mat& A, const Mat& B, Mat
 }
 
 
+#if 0
 #undef __FUNCT__
 #define __FUNCT__ "MatKronProdSum_selectiverows"
 PetscErrorCode MatKronProdSum_selectiverows(
@@ -3451,7 +3472,7 @@ PetscErrorCode MatKronProdSumIdx_3(
     KRON_TIMINGS_END(__FUNCT__);
     return ierr;
 }
-
+#endif
 
 /* Dump values to sequential matrices */
 #undef __FUNCT__
@@ -3597,10 +3618,10 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
 
         std::vector<PetscInt> map_A(M_A[0]);
         std::vector<PetscInt> map_B(M_B[0]);
-        for (PetscInt i = 0; i < set_Arows.size(); ++i){
+        for (size_t i = 0; i < set_Arows.size(); ++i){
             map_A[ id_rows_A[i] ] = i + A_sub_start;
         }
-        for (PetscInt i = 0; i < set_Brows.size(); ++i){
+        for (size_t i = 0; i < set_Brows.size(); ++i){
             map_B[ id_rows_B[i] ] = i + B_sub_start;
         }
 
@@ -3621,16 +3642,32 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
         Input: the corresponding column index in the locally-owned submatrix A/B
         Output: the column INDEX in the global matrix A/B
     */
+    #if 1
+    /* New submatrix layout */
+    #define COL_MAP_A(INDEX) ((INDEX))
+    #define COL_MAP_B(INDEX) ((INDEX))
+
+    #else
+    /* Old submatrix layout */
     PetscInt A_shift = N_A[0] * (nprocs - 1);
     PetscInt B_shift = N_B[0] * (nprocs - 1);
     #define COL_MAP_A(INDEX) ((INDEX) - A_shift)
     #define COL_MAP_B(INDEX) ((INDEX) - B_shift)
+    #endif
     /*
         Input: the column INDEX in the global matrix A/B
         Output: the corresponding column index in the locally-owned submatrix A/B
     */
+    #if 1
+    /* New submatrix layout */
+    #define COL_INV_A(INDEX) ((INDEX))
+    #define COL_INV_B(INDEX) ((INDEX))
+
+    #else
+    /* Old submatrix layout */
     #define COL_INV_A(INDEX) ((INDEX) + A_shift)
     #define COL_INV_B(INDEX) ((INDEX) + B_shift)
+    #endif
 
     /**************************************************/
     KRON_PS_TIMINGS_END(KRON_SUBMATRIX)
@@ -3694,7 +3731,7 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
 
     #ifdef __KRON_PS_TIMINGS // print info on expected sparsity
         unsigned long int tot_entries=0, tot_entries_reduced=0;
-        for (size_t i = 0; i < locrows; ++i) tot_entries += nnz[i];
+        for (PetscInt i = 0; i < locrows; ++i) tot_entries += nnz[i];
         MPI_Reduce( &tot_entries, &tot_entries_reduced, 1, MPI_UNSIGNED_LONG, MPI_SUM, 0, comm);
         PetscPrintf(comm, "%24s Nonzeros: %lu/(%-d x %-d)^2 = %f%%\n", " ",tot_entries_reduced, M_C_final, N_C_final,
             100.0*(double)tot_entries_reduced/( (double)(M_C_final) * (double)(N_C_final)) );
@@ -3706,9 +3743,10 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES          , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ZERO_ROWS        , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES      , PETSC_TRUE);
-    ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN         , PETSC_TRUE);
+    // ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN         , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR     , PETSC_TRUE);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR   , PETSC_TRUE);
+    ierr = MatSetOption(C, MAT_IGNORE_ZERO_ENTRIES          , PETSC_TRUE);
 
     /**************************************************/
     KRON_PS_TIMINGS_END(KRON_PREALLOC)
@@ -3818,7 +3856,6 @@ PetscErrorCode MatKronProdSum_selectiverows_3(
     KRON_PS_TIMINGS_START(__FINALASSEMBLY);
     /**************************************************/
 
-    PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(C);
 
     /**************************************************/
@@ -3843,7 +3880,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     PetscErrorCode ierr = 0;
 
     PetscMPIInt     nprocs, rank;
-    MPI_Comm comm = PETSC_COMM_WORLD;
+    MPI_Comm comm = PetscObjectComm((PetscObject) A[0]);
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &rank);
 
@@ -3868,7 +3905,6 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     Mat C_temp = nullptr;
     ierr = MatKronProdSum_selectiverows_3(a, A, B, C_temp, idx); CHKERRQ(ierr);
 
-    PetscBool assembled;
     LINALG_TOOLS__MATASSEMBLY_FINAL(C_temp);
 
     /* Verify that matrix is of sequential type */
@@ -3879,6 +3915,8 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         ierr = MatGetType(C_temp,&type); CHKERRQ(ierr);
         SETERRQ2(comm,1,"Wrong matrix type. Expected %s. Got %s.",MATSEQAIJ,type);
     }
+
+    MPI_Comm comm_temp = PetscObjectComm((PetscObject) C_temp);
 
     /**************************************************/
     KRON_TIMINGS_INIT(__FUNCT__);
@@ -3892,7 +3930,6 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     /* Guess final row ownership ranges */
 
     PetscInt M_C_final = idx.size();
-    PetscInt N_C_final = idx.size();
     PetscInt remrows = M_C_final % nprocs;
     PetscInt locrows = M_C_final / nprocs;
     PetscInt Istart = locrows * rank;
@@ -3904,16 +3941,14 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         Istart += remrows;
     }
 
-    PetscInt Iend = Istart + locrows;
-
     /* Check the size of C_temp */
 
     PetscInt M_C_temp, N_C_temp;
     ierr = MatGetSize(C_temp, &M_C_temp, &N_C_temp); CHKERRQ(ierr);
     if(M_C_temp != locrows)
-        SETERRQ2(comm,1,"Incorrect number of rows in C_temp. Expected %d. Got %d.",locrows,M_C_temp);
+        SETERRQ2(comm_temp,1,"Incorrect number of rows in C_temp. Expected %d. Got %d.",locrows,M_C_temp);
     if(N_C_temp != M_C)
-        SETERRQ2(comm,1,"Incorrect number of columns in C_temp. Expected %d. Got %d.",M_C,N_C_temp);
+        SETERRQ2(comm_temp,1,"Incorrect number of columns in C_temp. Expected %d. Got %d.",M_C,N_C_temp);
 
     /* Construct row indices */
 
@@ -3923,17 +3958,17 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
         id_rows[Irow] = Irow;
 
     IS is_rows = nullptr;
-    ierr = ISCreateGeneral(comm, locrows, id_rows, PETSC_USE_POINTER, &is_rows); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(comm_temp, locrows, id_rows, PETSC_USE_POINTER, &is_rows); CHKERRQ(ierr);
 
     /* Construct column indices */
 
     PetscInt *id_cols;
     ierr = PetscMalloc1(idx.size(), &id_cols); CHKERRQ(ierr);
-    for (PetscInt Icol = 0; Icol < idx.size(); ++Icol)
+    for (size_t Icol = 0; Icol < idx.size(); ++Icol)
         id_cols[Icol] = idx[Icol];
 
     IS is_cols = nullptr;
-    ierr = ISCreateGeneral(comm, idx.size(), id_cols, PETSC_USE_POINTER, &is_cols); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(comm_temp, idx.size(), id_cols, PETSC_USE_POINTER, &is_cols); CHKERRQ(ierr);
 
     /* Get submatrix based on desired indices */
 
@@ -3957,6 +3992,26 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     KRON_PS_TIMINGS_END(__GETSUBMAT);
     #undef __GETSUBMAT
 
+/* Test this feature */
+#if 1
+
+    #define __CONCATENATE      "    Concatenate"
+    KRON_PS_TIMINGS_INIT(__CONCATENATE);
+    KRON_PS_TIMINGS_START(__CONCATENATE);
+    /**************************************************/
+
+    MatCreateMPIMatConcatenateSeqMat(comm, C_sub, PETSC_DECIDE, MAT_INITIAL_MATRIX, &C);
+
+    /**************************************************/
+    KRON_PS_TIMINGS_END(__CONCATENATE);
+    #undef __CONCATENATE
+    /**************************************************/
+
+#else
+
+    PetscInt N_C_final = idx.size();
+    PetscInt Iend = Istart + locrows;
+
     #define __PREALLOC      "    Preallocation"
     KRON_PS_TIMINGS_INIT(__PREALLOC);
     KRON_PS_TIMINGS_START(__PREALLOC);
@@ -3979,23 +4034,20 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     PetscInt ncols;
 
     PetscInt *d_nnz, *o_nnz;
-    ierr = PetscMalloc1(locrows, &d_nnz); CHKERRQ(ierr);
-    ierr = PetscMalloc1(locrows, &o_nnz); CHKERRQ(ierr);
+    ierr = PetscCalloc1(locrows, &d_nnz); CHKERRQ(ierr);
+    ierr = PetscCalloc1(locrows, &o_nnz); CHKERRQ(ierr);
 
     for (PetscInt Irow = 0; Irow < locrows; ++Irow)
     {
         ierr = MatGetRow(C_sub, Irow, &ncols, &cols, nullptr);
 
-        d_nnz[Irow] = 0;
-        o_nnz[Irow] = 0;
-
         for (PetscInt Icol = 0; Icol < ncols; ++Icol){
-            if ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend ){
-                d_nnz[Irow] += 1;
-            } else {
-                o_nnz[Irow] += 1;
-            }
+            // if ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend )
+                // ++d_nnz[Irow];
+            d_nnz[Irow] += ( Istart <= COL_MAP(cols[Icol]) && COL_MAP(cols[Icol]) < Iend ) ? 1 : 0 ;
         }
+
+        o_nnz[Irow] = ncols - d_nnz[Irow];
 
         ierr = MatRestoreRow(C_sub, Irow, &ncols, &cols, nullptr);
     }
@@ -4015,24 +4067,13 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     ierr = PetscFree(d_nnz); CHKERRQ(ierr);
     ierr = PetscFree(o_nnz); CHKERRQ(ierr);
 
-    /* Check correct ownership ranges */
-
-    PetscInt Istart_C, Iend_C;
-
-    ierr = MatGetOwnershipRange(C, &Istart_C, &Iend_C);
-
-    if(Istart_C != Istart)
-        SETERRQ2(comm, 1, "Incorrect ownership range for Istart. Expected %d. Got %d.", Istart, Istart_C);
-
-    if(Iend_C != Iend)
-        SETERRQ2(comm, 1, "Incorrect ownership range for Iend. Expected %d. Got %d.", Iend, Iend_C);
-
     /* Set some optimization options */
 
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_NO_OFF_PROC_ZERO_ROWS,       PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_IGNORE_OFF_PROC_ENTRIES,     PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN,        PETSC_TRUE); CHKERRQ(ierr);
+    // ierr = MatSetOption(C, MAT_KEEP_NONZERO_PATTERN,        PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(C, MAT_IGNORE_ZERO_ENTRIES,         PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_LOCATION_ERR,    PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(C, MAT_NEW_NONZERO_ALLOCATION_ERR,  PETSC_TRUE); CHKERRQ(ierr);
 
@@ -4044,6 +4085,18 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     KRON_PS_TIMINGS_INIT(__SETVALS);
     KRON_PS_TIMINGS_START(__SETVALS);
     /**************************************************/
+
+    /* Check correct ownership ranges */
+
+    PetscInt Istart_C, Iend_C;
+
+    ierr = MatGetOwnershipRange(C, &Istart_C, &Iend_C);
+
+    if(Istart_C != Istart)
+        SETERRQ2(comm, 1, "Incorrect ownership range for Istart. Expected %d. Got %d.", Istart, Istart_C);
+
+    if(Iend_C != Iend)
+        SETERRQ2(comm, 1, "Incorrect ownership range for Iend. Expected %d. Got %d.", Iend, Iend_C);
 
     /* Dump values from submatrix to final matrix */
 
@@ -4060,6 +4113,8 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
     #undef __SETVALS
     /**************************************************/
 
+#endif
+
     /* Free/destroy temporary data structures */
 
     if(C_sub)   ierr = MatDestroy(&C_sub); CHKERRQ(ierr);
@@ -4068,6 +4123,7 @@ PetscErrorCode MatKronProdSumIdx_copy_3(
 
     ierr = PetscFree(id_cols); CHKERRQ(ierr);
     ierr = PetscFree(id_rows); CHKERRQ(ierr);
+
 
     /**************************************************/
     KRON_TIMINGS_END(__FUNCT__);
@@ -4088,8 +4144,18 @@ PetscErrorCode MatKronProdSum(
 {
     PetscErrorCode ierr = 0;
 
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== Start of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
+
     // ierr = MatKronProdSum_1(a,A,B,C,prealloc); CHKERRQ(ierr);
     ierr = MatKronProdSum_2(a,A,B,C,prealloc); CHKERRQ(ierr);
+
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== End of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
 
     return ierr;
 }
@@ -4106,6 +4172,11 @@ PetscErrorCode MatKronProdSumIdx(
 
     C = nullptr;
 
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== Start of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
+
     // ierr = MatKronProdSumIdx_1(a, A, B, C, idx); CHKERRQ(ierr);
     // ierr = MatKronProdSumIdx_2(a, A, B, C, idx); CHKERRQ(ierr);
     // ierr = MatKronProdSumIdx_3(a, A, B, C, idx); CHKERRQ(ierr);
@@ -4116,6 +4187,11 @@ PetscErrorCode MatKronProdSumIdx(
     ierr = MatKronProdSumIdx_copy_3(a, A, B, C, idx); CHKERRQ(ierr);
 
     if (!C) SETERRQ(PETSC_COMM_WORLD, 1, "Matrix was not generated.");
+
+    #ifdef __DMRG_MPI_BARRIERS
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== End of %s ========\n\n",__FUNCT__); CHKERRQ(ierr);
+    #endif
 
     return ierr;
 }

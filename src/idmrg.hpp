@@ -32,7 +32,20 @@
     #define DMRG_SUB_TIMINGS_END(SECTION_LABEL) \
         ierr = PetscTime(&subfunct_time ## SECTION_LABEL); CHKERRQ(ierr); \
         subfunct_time ## SECTION_LABEL = subfunct_time ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8d %-50s %.20g\n\n", iter_, SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+
+    /* Non-overlapping timings*/
+
+    #define DMRG_SUB_SUB_TIMINGS_INIT() \
+        PetscLogDouble subsubfunct_time0, subsubfunct_time;
+
+    #define DMRG_SUB_SUB_TIMINGS_START(SECTION_LABEL) \
+        ierr = PetscTime(&subsubfunct_time0); CHKERRQ(ierr);
+
+    #define DMRG_SUB_SUB_TIMINGS_END(SECTION_LABEL) \
+        ierr = PetscTime(&subsubfunct_time); CHKERRQ(ierr); \
+        subsubfunct_time = subsubfunct_time - subsubfunct_time0; \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%12s %-46s %.20g\n", "", SECTION_LABEL, subsubfunct_time);
 
     /* Inspect accumulated timings for a section of code inside a loop */
 
@@ -47,16 +60,32 @@
         subfunct_time ## SECTION_LABEL += subfunct_time1 ## SECTION_LABEL - subfunct_time0 ## SECTION_LABEL; \
 
     #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL) \
-        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8s %-50s %.20g\n\n", "", SECTION_LABEL, subfunct_time ## SECTION_LABEL);
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "%8d %-50s %.20g\n\n", iter_, SECTION_LABEL, subfunct_time ## SECTION_LABEL);
 
 #else
     #define DMRG_SUB_TIMINGS_INIT(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_START(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_END(SECTION_LABEL)
+    #define DMRG_SUB_SUB_TIMINGS_INIT()
+    #define DMRG_SUB_SUB_TIMINGS_START(SECTION_LABEL)
+    #define DMRG_SUB_SUB_TIMINGS_END(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_INIT(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_START(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_END(SECTION_LABEL)
     #define DMRG_SUB_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
+#endif
+
+
+#ifdef __DMRG_MPI_BARRIERS
+    #define DMRG_MPI_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== %s [ FILE %s ] [ LINE %d ] ========\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+    #define DMRG_SEQ_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+#else
+    #define DMRG_MPI_BARRIER(MESSAGE)
+    #define DMRG_SEQ_BARRIER(MESSAGE)
 #endif
 
 
@@ -129,6 +158,16 @@ protected:
         Target magnetization has been set
      */
     PetscBool target_Sz_set = PETSC_FALSE;
+
+    /**
+        Whether to perform full SVD on root MPI process
+     */
+    PetscBool do_svd_on_root = PETSC_TRUE;
+
+    /**
+        Whether to perform operator rotation on root MPI process
+     */
+    PetscBool do_truncation_on_root = PETSC_FALSE;
 
     /**
         Completed number of steps.
@@ -244,6 +283,26 @@ protected:
     MPI_Comm    comm_ = PETSC_COMM_WORLD;
 
     /**
+        MPI process rank on comm_
+    */
+    PetscMPIInt rank_;
+
+    /**
+        MPI number of processes on comm_
+    */
+    PetscMPIInt nprocs_;
+
+    /**
+        Indicates how many slave subcommunicators will perform the SVD
+     */
+    PetscInt svd_nsubcomm = 0;
+
+    /**
+        Indicates whether to do subcommunicator splitting to perform SVD
+     */
+    PetscBool do_svd_commsplit = PETSC_FALSE;
+
+    /**
         2x2 identity matrix
     */
     Mat eye1_;
@@ -264,6 +323,21 @@ protected:
         Internal function to check whether parameters have been set
     */
     PetscErrorCode CheckSetParameters();
+
+    /**
+        Internal subfunction to perform single TruncateOperator on root
+     */
+    PetscErrorCode TruncateOperator_seq(const Mat& A, const Mat& B, const Mat& C, const MatReuse scall, const PetscReal fill, Mat& D);
+
+    /**
+        Internal function to perform TruncateOperators on root
+     */
+    PetscErrorCode TruncateOperators_seq();
+
+    /**
+        Internal function to perform TruncateOperators on globally
+     */
+    PetscErrorCode TruncateOperators_mpi();
 
 public:
 

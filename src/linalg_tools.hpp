@@ -6,7 +6,7 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
-
+#include <petsctime.h>
 /**
     @defgroup   linalg_tools    Linear Algebra Tools
 
@@ -185,12 +185,15 @@ PetscErrorCode VecToMatMultHC(const Vec& vec_r, const Vec& vec_i,
     Note: This function is implemented only for complex scalars so that vec_i is ignored.
 
  */
-PetscErrorCode MatMultSelfHC(const Mat& mat_in, Mat& mat, const PetscBool hc_right);
+PetscErrorCode MatMultSelfHC_AIJ(const MPI_Comm comm, const Mat& mat_in, Mat& mat, const PetscBool hc_right);
+
 
 /**
 
  */
 PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
+
+PetscErrorCode SVDLargestStates_split(const Mat& mat_in, const PetscInt mstates_in, PetscScalar& error, Mat& mat, FILE *fp);
 
 /**
 
@@ -231,11 +234,18 @@ std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<Petsc
     PetscBool assembled;
 
 #define LINALG_TOOLS__MATASSEMBLY_FINAL(MATRIX) \
-    ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
-    if (assembled == PETSC_FALSE){\
-        ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
-        ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    {\
+        PetscBool assembled;\
+        ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
+        if (assembled == PETSC_FALSE){\
+            ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+            ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+        }\
     }
+
+#define LINALG_TOOLS__MATASSEMBLY_FINAL_FORCED(MATRIX) \
+    ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);\
+    ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
 #define LINALG_TOOLS__MATASSEMBLY_FLUSH(MATRIX) \
     ierr = MatAssembled(MATRIX, &assembled); CHKERRQ(ierr);\
@@ -245,11 +255,11 @@ std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<Petsc
     }
 
 #define LINALG_TOOLS__MATDESTROY(MATRIX) \
-    if(&MATRIX){ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); MATRIX = nullptr;}
+    if(MATRIX){ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); MATRIX = nullptr;}
     /* Requires ierr to be defined */
 
 #define LINALG_TOOLS__VECDESTROY(VECTOR) \
-    if(&VECTOR){ierr = VecDestroy(&VECTOR); CHKERRQ(ierr); VECTOR = nullptr;}
+    if(VECTOR){ierr = VecDestroy(&VECTOR); CHKERRQ(ierr); VECTOR = nullptr;}
     /* Requires ierr to be defined */
 
 #ifdef __LINALG_TOOLS_TIMINGS
