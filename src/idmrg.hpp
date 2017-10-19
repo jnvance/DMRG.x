@@ -76,16 +76,24 @@
 #endif
 
 
-#ifdef __DMRG_MPI_BARRIERS
+#if defined(__DMRG_MPI_BARRIERS)
     #define DMRG_MPI_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== %s [ FILE %s ] [ LINE %d ] ========\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
     #define DMRG_SEQ_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+
+#elif defined(__DMRG_MPI_BARRIERS_MESSAGE)
+    #define DMRG_MPI_BARRIER(MESSAGE) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n>>> %s [ FILE %s ] [ LINE %d ]\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+    #define DMRG_SEQ_BARRIER(MESSAGE) \
+        ierr = PetscPrintf(PETSC_COMM_SELF, "\n>>> %s [ FILE %s ] [ LINE %d ]\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+
 #else
     #define DMRG_MPI_BARRIER(MESSAGE)
     #define DMRG_SEQ_BARRIER(MESSAGE)
+
 #endif
 
 
