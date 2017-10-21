@@ -77,6 +77,11 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_svd_on_root",&do_svd_on_root,NULL); CHKERRQ(ierr);
 
     /*
+        Check whether to perform transpose of rotation matrix on root process
+    */
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_hc_on_root", &do_rot_hc_on_root, NULL); CHKERRQ(ierr);
+
+    /*
         Check whether to perform operator rotation on root process
     */
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_truncation_on_root",&do_truncation_on_root,NULL); CHKERRQ(ierr);
@@ -414,6 +419,10 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     return ierr;
 }
 
+/**************************************************************************************************/
+/* Obtaining the rotation matrices                                                                */
+/**************************************************************************************************/
+
 /**
     Define the tuple type representing a possible eigenstate
     0 - PetscReal - eigenvalue
@@ -707,6 +716,7 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
+    Mat *p_mat_hc,
     PetscReal& truncation_error)
 {
     PetscErrorCode ierr = 0;
@@ -1031,17 +1041,11 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
         {
             memcpy(&mat_cols[Rdisp[Irow]], mat_cols_list[Irow].data(), Tnnz[Irow] * sizeof(PetscInt));
-            /* Uncomment only if memory is an issue: */
-            // mat_cols_list[Irow].clear();
-            // mat_cols_list[Irow].shrink_to_fit();
         }
 
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
         {
             memcpy(&mat_vals[Rdisp[Irow]], mat_vals_list[Irow].data(), Tnnz[Irow] * sizeof(PetscScalar));
-            /* Uncomment only if memory is an issue: */
-            // mat_cols_list[Irow].clear();
-            // mat_cols_list[Irow].shrink_to_fit();
         }
 
         /* Prepare scatterv info */
@@ -1165,6 +1169,50 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
     if(!rank){
         for (auto svd: svd_list){ ierr = SVDDestroy(&svd); CHKERRQ(ierr); }
         for (auto vec: vec_list){ ierr = VecDestroy(&vec); CHKERRQ(ierr); }
+    }
+
+    /*************************************************************/
+    /* Perform the transpose also on root process                */
+    /*************************************************************/
+
+    PetscBool do_rot_hc_on_root = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_hc_on_root", &do_rot_hc_on_root, NULL); CHKERRQ(ierr);
+    if(do_rot_hc_on_root)
+    {
+        /* Temporary matrix buffer to be filled up by root */
+        std::vector< std::vector< PetscInt >> mat_hc_cols_list;
+        std::vector< std::vector< PetscScalar >> mat_hc_vals_list;
+
+        /* Initialize transpose container here */
+        if(!rank)
+        {
+            mat_hc_cols_list.resize(ncols);
+            mat_hc_vals_list.resize(ncols);
+
+            /* checkpoint for sizes */
+            if(mat_cols_list.size()!=mat_vals_list.size())
+                SETERRQ2(PETSC_COMM_SELF, 1, "Size mismatch between cols (%d) and vals (%d).",mat_cols_list.size(), mat_vals_list.size());
+
+            /* dump the values to their transpose and get the conjugate */
+            for (size_t row = 0; row < mat_cols_list.size(); ++row)
+            {
+                /* checkpoint for sizes */
+                if(mat_cols_list[row].size()!=mat_vals_list[row].size())
+                    SETERRQ3(PETSC_COMM_SELF, 1, "Size mismatch between cols (%d) and vals (%d) for row %d.",mat_cols_list[row].size(), mat_vals_list[row].size(), row);
+
+                for (size_t icol = 0; icol < mat_cols_list[row].size(); ++icol)
+                {
+                    PetscInt col = mat_cols_list[row][icol];
+                    mat_hc_cols_list[col].push_back((PetscInt) row);
+                    #if defined(PETSC_USE_COMPLEX)
+                        mat_hc_vals_list[col].push_back((PetscScalar) PetscConjComplex(mat_vals_list[row][icol]));
+                    #else
+                        mat_hc_vals_list[col].push_back((PetscScalar) mat_vals_list[row][icol]);
+                    #endif
+                }
+            }
+        }
+        ierr = MatCreateAIJ_FromSeqList(PETSC_COMM_WORLD, mat_hc_cols_list, mat_hc_vals_list, ncols, nrows, p_mat_hc); CHKERRQ(ierr);
     }
 
     DMRG_MPI_BARRIER("End of GetRotationMatrices subfunction");
@@ -1532,8 +1580,14 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
                 ierr = GetRotationMatrices_targetSz_root_to_seq(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
                 ierr = GetRotationMatrices_targetSz_root_to_seq(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
             } else {
-                ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
-                ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
+                if(do_rot_hc_on_root)
+                {
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockLeft_, U_left_, &U_left_hc, truncerr_left); CHKERRQ(ierr);
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockRight_, U_right_, &U_right_hc, truncerr_right); CHKERRQ(ierr);
+                } else {
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockLeft_, U_left_, NULL, truncerr_left); CHKERRQ(ierr);
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockRight_, U_right_, NULL, truncerr_right); CHKERRQ(ierr);
+                }
             }
         }
         else
@@ -1652,6 +1706,9 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
     return ierr;
 }
 
+/**************************************************************************************************/
+/* Rotation of block operators to a truncated basis                                               */
+/**************************************************************************************************/
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG::TruncateOperators_mpi"
@@ -1685,65 +1742,102 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
 
     #endif // __CHECK_ROTATION
 
-
     /* Rotation */
     Mat mat_temp = nullptr;
-    Mat U_hc = nullptr;
 
-    if(!(dm_svd && U_left_))
-        SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
+    if(do_rot_hc_on_root)
+    {
+        if(!(dm_svd && U_left_ && U_left_hc))
+            SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
 
-    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
-    ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose");
+        ierr = MatMatMatMult(U_left_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+        ierr = MatMatMatMult(U_left_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
-    ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
+        ierr = MatMatMatMult(U_left_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
-    ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
+        if(!(dm_svd && U_right_ && U_right_hc))
+            SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
-    ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
+        ierr = MatMatMatMult(U_right_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
+        ierr = MatMatMatMult(U_right_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
+        ierr = MatMatMatMult(U_right_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    if(!(dm_svd && U_right_))
-        SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
+        ierr = MatDestroy(&U_left_hc); CHKERRQ(ierr); U_left_hc = nullptr;
+        ierr = MatDestroy(&U_right_hc); CHKERRQ(ierr); U_right_hc = nullptr;
 
-    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
-    ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose");
+    }
+    else
+    {
 
-    ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+        if(!(dm_svd && U_left_))
+            SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
-    ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
+        DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
+        ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_left_hc); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
-    ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
+        ierr = MatAssemblyBegin(U_left_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(U_left_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
-    ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
+        ierr = MatMatMatMult(U_left_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
+        ierr = MatMatMatMult(U_left_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
 
-    if(mat_temp)    {ierr = MatDestroy(&mat_temp); CHKERRQ(ierr);}
-    if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
-    if(U_right_)    {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
+        ierr = MatMatMatMult(U_left_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
+
+        ierr = MatDestroy(&U_left_hc); CHKERRQ(ierr); U_left_hc = nullptr;
+
+        if(!(dm_svd && U_right_))
+            SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
+
+        DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
+        ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_right_hc); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose");
+
+        ierr = MatAssemblyBegin(U_right_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(U_right_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+
+        ierr = MatMatMatMult(U_right_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
+
+        ierr = MatMatMatMult(U_right_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
+
+        ierr = MatMatMatMult(U_right_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+        ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
+
+        ierr = MatDestroy(&U_right_hc); CHKERRQ(ierr); U_right_hc = nullptr;
+    }
+
+    if(mat_temp)    {ierr = MatDestroy(&mat_temp); CHKERRQ(ierr); mat_temp = nullptr;}
+    if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr); U_left_ = nullptr;}
+    if(U_right_)    {ierr = MatDestroy(&U_right_); CHKERRQ(ierr); U_right_ = nullptr;}
 
     ntruncations_ += 1;
 

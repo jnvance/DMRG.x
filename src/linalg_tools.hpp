@@ -227,8 +227,16 @@ std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector
 std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array);
 
 
-
-
+/**
+    Creates an MPI matrix from nested vectors corresponding to the column indices and values of the resulting matrix object
+ */
+PetscErrorCode MatCreateAIJ_FromSeqList(
+    const MPI_Comm comm,
+    const std::vector<std::vector<PetscInt>>& cols_list,
+    const std::vector<std::vector<PetscScalar>>& vals_list,
+    const PetscInt M,
+    const PetscInt N,
+    Mat*& p_mat_out);
 
 #define LINALG_TOOLS__MATASSEMBLY_INIT() \
     PetscBool assembled;

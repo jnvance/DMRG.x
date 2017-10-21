@@ -173,6 +173,11 @@ protected:
     PetscBool do_svd_on_root = PETSC_TRUE;
 
     /**
+        Whether to perform full SVD on root MPI process
+     */
+    PetscBool do_rot_hc_on_root = PETSC_FALSE;
+
+    /**
         Whether to perform operator rotation on root MPI process
      */
     PetscBool do_truncation_on_root = PETSC_FALSE;
@@ -284,6 +289,16 @@ protected:
         singular values of dm_right
      */
     Mat         U_right_ = nullptr;
+
+    /**
+        Hermitian conjugate of U_left_
+     */
+    Mat         U_left_hc = nullptr;
+
+    /**
+        Hermitian conjugate of U_right_
+     */
+    Mat         U_right_hc = nullptr;
 
     /**
         MPI communicator for distributed arrays
