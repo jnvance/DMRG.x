@@ -1729,6 +1729,9 @@ PetscErrorCode iDMRG::MatRotation_mpi(
     PetscErrorCode ierr = 0;
     MPI_Comm comm = PetscObjectComm((PetscObject)Op);
 
+    PetscBool do_rot_matmatmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_matmatmult", &do_rot_matmatmult, NULL); CHKERRQ(ierr);
+
     PetscBool do_rot_matmatmatmult = PETSC_FALSE;
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_matmatmatmult", &do_rot_matmatmatmult, NULL); CHKERRQ(ierr);
 
@@ -1738,21 +1741,46 @@ PetscErrorCode iDMRG::MatRotation_mpi(
     PetscBool do_rot_mattransposematmult = PETSC_FALSE;
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_mattransposematmult", &do_rot_mattransposematmult, NULL); CHKERRQ(ierr);
 
-    if (do_rot_mattransposematmult){
+    if (do_rot_mattransposematmult)
+    {
         if (U_hc) SETERRQ(comm, 1,"With do_rot_mattransposematmult, Hermitian transpose must not be set.");
+
+#if 0
         Mat U_hc_Op;
         ierr = MatTransposeMatMult(U, Op, scall, fill, &U_hc_Op); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatTransposeMatMult");
         ierr = MatMatMult(U_hc_Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatMatMult");
         ierr = MatDestroy(&U_hc_Op); CHKERRQ(ierr);
+#else
+        Mat Op_U;
+
+        ierr = MatMatMult(Op, U, scall, fill, &Op_U); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+        ierr = MatTransposeMatMult(U, Op_U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatTransposeMatMult");
+        ierr = MatDestroy(&Op_U); CHKERRQ(ierr);
+#endif
+
     }
-    else if (do_rot_ptap){
+    else if (do_rot_ptap)
+    {
         if (U_hc) SETERRQ(comm, 1,"With do_rot_ptap, Hermitian transpose must not be set.");
         ierr = MatPtAP(Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatPtAP");
     }
-    else{
+    else if (do_rot_matmatmult)
+    {
+        if (!U_hc) SETERRQ(comm, 1,"U_hc not set.");
+        Mat Op_U;
+        ierr = MatMatMult(Op, U, scall, fill, &Op_U); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+        ierr = MatMatMult(U_hc, Op_U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+    }
+    else
+    {
+        if (!U_hc) SETERRQ(comm, 1,"U_hc not set.");
         ierr = MatMatMatMult(U_hc, Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatMatMatMult");
     }
@@ -1802,8 +1830,8 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
     PetscBool do_rot_mattransposematmult = PETSC_FALSE;
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_mattransposematmult", &do_rot_mattransposematmult, NULL); CHKERRQ(ierr);
 
-    if (do_rot_ptap && do_rot_hc_on_root)
-        SETERRQ(comm_, 1, "Incompatible options: do_rot_ptap and do_rot_hc_on_root.");
+    if ((do_rot_mattransposematmult || do_rot_ptap) && do_rot_hc_on_root)
+        SETERRQ(comm_, 1, "Incompatible options: (do_rot_ptap,do_rot_mattransposematmult) and do_rot_hc_on_root.");
 
     if (do_rot_hc_on_root)
     {
@@ -1847,28 +1875,27 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
 
     }
 
-    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
 
-    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
 
-    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
 
     if(U_left_hc)  {ierr = MatDestroy(&U_left_hc);  CHKERRQ(ierr); U_left_hc  = nullptr;}
 
-    ierr = MatRotation_mpi(U_right_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_right_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
 
-    ierr = MatRotation_mpi(U_right_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_right_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
 
-    ierr = MatRotation_mpi(U_right_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_right_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
 
     if(U_right_hc) {ierr = MatDestroy(&U_right_hc); CHKERRQ(ierr); U_right_hc = nullptr;}
-
 
     if(mat_temp)    {ierr = MatDestroy(&mat_temp); CHKERRQ(ierr); mat_temp = nullptr;}
     if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr); U_left_ = nullptr;}
