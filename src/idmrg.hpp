@@ -85,6 +85,9 @@
         ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
 
 #elif defined(__DMRG_MPI_HARD_BARRIERS)
+
+    PETSC_EXTERN PetscErrorCode PetscAllreduceBarrierCheck(MPI_Comm,PetscMPIInt,int,const char*,const char *);
+
     #define DMRG_MPI_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
         ierr = PetscAllreduceBarrierCheck(PETSC_COMM_WORLD,1,__LINE__,__FUNCT__,__FILE__); CHKERRQ(ierr);\
