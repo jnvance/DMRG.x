@@ -86,11 +86,11 @@
 
 #elif defined(__DMRG_MPI_HARD_BARRIERS)
 
-    PETSC_EXTERN PetscErrorCode PetscAllreduceBarrierCheck(MPI_Comm,PetscMPIInt,int,const char*,const char *);
+    PetscErrorCode DMRG_MPI_BARRIER_Check(MPI_Comm comm,PetscMPIInt ctn,int line,const char *func,const char *file);
 
     #define DMRG_MPI_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
-        ierr = PetscAllreduceBarrierCheck(PETSC_COMM_WORLD,1,__LINE__,__FUNCT__,__FILE__); CHKERRQ(ierr);\
+        ierr = DMRG_MPI_BARRIER_Check(PETSC_COMM_WORLD,1,__LINE__,__FUNCT__,__FILE__); CHKERRQ(ierr);\
         ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_WORLD, "\n=x=x=x=x %s [ FILE %s ] [ LINE %d ] =x=x=x=x\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
     #define DMRG_SEQ_BARRIER(MESSAGE) \
