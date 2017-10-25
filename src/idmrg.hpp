@@ -84,6 +84,16 @@
         ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
 
+#elif defined(__DMRG_MPI_HARD_BARRIERS)
+    #define DMRG_MPI_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
+        ierr = PetscAllreduceBarrierCheck(PETSC_COMM_WORLD,1,__LINE__,__FUNCT__,__FILE__); CHKERRQ(ierr);\
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n=x=x=x=x %s [ FILE %s ] [ LINE %d ] =x=x=x=x\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+    #define DMRG_SEQ_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+
 #elif defined(__DMRG_MPI_BARRIERS_MESSAGE)
     #define DMRG_MPI_BARRIER(MESSAGE) \
         ierr = PetscPrintf(PETSC_COMM_WORLD, "\n>>> %s [ FILE %s ] [ LINE %d ]\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
@@ -124,6 +134,34 @@
  */
 class iDMRG
 {
+private:
+
+    PetscErrorCode GetRotationMatrices_targetSz(
+        const PetscInt mstates,
+        DMRGBlock& block,
+        Mat& mat,
+        PetscReal& truncation_error);
+
+    PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
+        const PetscInt mstates,
+        DMRGBlock& block,
+        Mat& mat,
+        Mat *p_mat_hc,
+        PetscReal& truncation_error);
+
+    PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
+        const PetscInt mstates,
+        DMRGBlock& block,
+        Mat& mat,
+        PetscReal& truncation_error);
+
+    PetscErrorCode MatRotation_mpi(
+        const Mat& U_hc,
+        const Mat& Op,
+        const Mat& U,
+        const MatReuse& scall,
+        const PetscReal& fill,
+        Mat *p_Op_rot);
 
 protected:
 
