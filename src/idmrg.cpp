@@ -435,13 +435,17 @@ typedef std::tuple<PetscReal, PetscInt, PetscInt, PetscScalar, std::vector<Petsc
 
 
 /** Comparison function for eigenstates in descending order */
+#undef __FUNCT__
+#define __FUNCT__ "compare_descending_eigenstates"
 bool compare_descending_eigenstates(eigenstate_t a, eigenstate_t b)
 {
     return (std::get<0>(a)) > (std::get<0>(b));
 }
 
 
-PetscErrorCode GetRotationMatrices_targetSz(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices_targetSz"
+PetscErrorCode iDMRG::GetRotationMatrices_targetSz(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
@@ -712,7 +716,9 @@ PetscErrorCode GetRotationMatrices_targetSz(
 }
 
 
-PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices_targetSz_root_to_mpi"
+PetscErrorCode iDMRG::GetRotationMatrices_targetSz_root_to_mpi(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
@@ -1220,7 +1226,9 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
 }
 
 
-PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices_targetSz_root_to_seq"
+PetscErrorCode iDMRG::GetRotationMatrices_targetSz_root_to_seq(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
@@ -1710,7 +1718,7 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
 /* Rotation of block operators to a truncated basis                                               */
 /**************************************************************************************************/
 
-PetscErrorCode MatRotation_mpi(
+PetscErrorCode iDMRG::MatRotation_mpi(
     const Mat& U_hc,
     const Mat& Op,
     const Mat& U,
@@ -1727,7 +1735,19 @@ PetscErrorCode MatRotation_mpi(
     PetscBool do_rot_ptap = PETSC_FALSE;
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_ptap", &do_rot_ptap, NULL); CHKERRQ(ierr);
 
-    if (do_rot_ptap){
+    PetscBool do_rot_mattransposematmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_mattransposematmult", &do_rot_mattransposematmult, NULL); CHKERRQ(ierr);
+
+    if (do_rot_mattransposematmult){
+        if (U_hc) SETERRQ(comm, 1,"With do_rot_mattransposematmult, Hermitian transpose must not be set.");
+        Mat U_hc_Op;
+        ierr = MatTransposeMatMult(U, Op, scall, fill, &U_hc_Op); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatTransposeMatMult");
+        ierr = MatMatMult(U_hc_Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+        ierr = MatDestroy(&U_hc_Op); CHKERRQ(ierr);
+    }
+    else if (do_rot_ptap){
         if (U_hc) SETERRQ(comm, 1,"With do_rot_ptap, Hermitian transpose must not be set.");
         ierr = MatPtAP(Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatPtAP");
@@ -1779,6 +1799,9 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
     PetscBool do_rot_ptap = PETSC_FALSE;
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_ptap", &do_rot_ptap, NULL); CHKERRQ(ierr);
 
+    PetscBool do_rot_mattransposematmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_mattransposematmult", &do_rot_mattransposematmult, NULL); CHKERRQ(ierr);
+
     if (do_rot_ptap && do_rot_hc_on_root)
         SETERRQ(comm_, 1, "Incompatible options: do_rot_ptap and do_rot_hc_on_root.");
 
@@ -1790,15 +1813,14 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
         if(!(dm_svd && U_right_ && U_right_hc))
             SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
     }
-    else if(do_rot_ptap)
+    else if(do_rot_ptap || do_rot_mattransposematmult)
     {
-        DMRG_MPI_BARRIER("do_rot_ptap = true");
         #ifdef PETSC_USE_COMPLEX
-            SETERRQ(comm_, 1, "Option do_rot_ptap incompatible with complex scalars.");
+            SETERRQ(comm_, 1, "Options do_rot_ptap and do_rot_mattransposematmult incompatible with complex scalars.");
         #endif
 
         if(U_left_hc || U_right_hc)
-            SETERRQ(comm_,1,"With do_rot_ptap, Hermitian transpose must not be set.");
+            SETERRQ(comm_,1,"With do_rot_ptap or do_rot_mattransposematmult, Hermitian transpose must not be set.");
     } else
     {
         if(!(dm_svd && U_left_))
@@ -1806,6 +1828,23 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
 
         if(!(dm_svd && U_right_))
             SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
+
+        DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
+        ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_left_hc); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose");
+
+        ierr = MatAssemblyBegin(U_left_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(U_left_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+
+        DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
+        ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_right_hc); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose");
+
+        ierr = MatAssemblyBegin(U_right_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(U_right_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+
     }
 
     ierr = MatRotation_mpi(U_left_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
