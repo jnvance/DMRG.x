@@ -31,12 +31,17 @@ CXXFLAGS += -D__DMRG_MPI_BARRIERS_MESSAGE
 # CXXFLAGS += -D__PRINT_EPS_LARGEST
 
 TEST_DMRG_DEPS = test_dmrg.o idmrg_1d_heisenberg.o dmrgblock.o kron.o idmrg.o linalg_tools.o
+TEST_REBUILD_H_DEPS = test_rebuild_H.o DMRG_Block.o DMRG_Site.o linalg_tools.o kron.o
 
 all: ${TARGETS}
 
 test_dmrg.x: ${TEST_DMRG_DEPS} chkopts
 	-${CLINKER} -o test_dmrg.x ${TEST_DMRG_DEPS} ${SLEPC_EPS_LIB}
 	${RM} test_dmrg.o
+
+test_rebuild_H.x: ${TEST_REBUILD_H_DEPS} DMRG_Block.cpp chkopts
+	-${CLINKER} -o test_rebuild_H.x ${TEST_REBUILD_H_DEPS} ${SLEPC_EPS_LIB}
+	${RM} test_rebuild_H.o
 
 test_kron.x: test_kron.o linalg_tools.o kron.o chkopts
 	-${CLINKER} -o test_kron.x test_kron.o linalg_tools.o kron.o ${SLEPC_EPS_LIB}

@@ -77,7 +77,7 @@ PetscErrorCode MatSpCreate(const MPI_Comm& comm, Mat& Sp)
 
 #undef __FUNCT__
 #define __FUNCT__ "MatPeek"
-PetscErrorCode MatPeek(const Mat mat, const char* label)
+PetscErrorCode MatPeek(const Mat& mat, const char* label)
 {
     PetscErrorCode  ierr = 0;
     const MPI_Comm comm = PetscObjectComm((PetscObject) mat);
