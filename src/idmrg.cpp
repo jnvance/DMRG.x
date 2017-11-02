@@ -1745,14 +1745,6 @@ PetscErrorCode iDMRG::MatRotation_mpi(
     {
         if (U_hc) SETERRQ(comm, 1,"With do_rot_mattransposematmult, Hermitian transpose must not be set.");
 
-#if 0
-        Mat U_hc_Op;
-        ierr = MatTransposeMatMult(U, Op, scall, fill, &U_hc_Op); CHKERRQ(ierr);
-        DMRG_MPI_BARRIER("MatTransposeMatMult");
-        ierr = MatMatMult(U_hc_Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
-        DMRG_MPI_BARRIER("MatMatMult");
-        ierr = MatDestroy(&U_hc_Op); CHKERRQ(ierr);
-#else
         Mat Op_U;
 
         ierr = MatMatMult(Op, U, scall, fill, &Op_U); CHKERRQ(ierr);
@@ -1760,7 +1752,6 @@ PetscErrorCode iDMRG::MatRotation_mpi(
         ierr = MatTransposeMatMult(U, Op_U, scall, fill, p_Op_rot); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatTransposeMatMult");
         ierr = MatDestroy(&Op_U); CHKERRQ(ierr);
-#endif
 
     }
     else if (do_rot_ptap)
@@ -1783,6 +1774,23 @@ PetscErrorCode iDMRG::MatRotation_mpi(
         if (!U_hc) SETERRQ(comm, 1,"U_hc not set.");
         ierr = MatMatMatMult(U_hc, Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
         DMRG_MPI_BARRIER("MatMatMatMult");
+    }
+
+    /* Optionally, print the density of nonzeros after rotation */
+    PetscBool do_print_rot_info = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_print_rot_info", &do_print_rot_info, NULL); CHKERRQ(ierr);
+    if(do_print_rot_info)
+    {
+        MatInfo info;
+        PetscInt M, N;
+        ierr = MatGetSize(*p_Op_rot, &M, &N); CHKERRQ(ierr);
+        ierr = MatGetInfo(*p_Op_rot, MAT_GLOBAL_SUM, &info); CHKERRQ(ierr);
+
+        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_allocated", info.nz_allocated); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_allocated/(M*N)", info.nz_allocated/((double)M*(double)N)); CHKERRQ(ierr);
+
+        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_used", info.nz_used); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_used/(M*N)", info.nz_used/((double)M*(double)N)); CHKERRQ(ierr);
     }
 
     return ierr;
