@@ -1153,7 +1153,7 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
 
 
 #undef __FUNCT__
-#define __FUNCT__ "MatGetSVD"
+#define __FUNCT__ "MatCreateAIJ_FromSeqList"
 PetscErrorCode MatCreateAIJ_FromSeqList(
     const MPI_Comm comm,
     const std::vector<std::vector<PetscInt>>& mat_cols_list,
