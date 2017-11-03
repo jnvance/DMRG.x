@@ -1786,11 +1786,11 @@ PetscErrorCode iDMRG::MatRotation_mpi(
         ierr = MatGetSize(*p_Op_rot, &M, &N); CHKERRQ(ierr);
         ierr = MatGetInfo(*p_Op_rot, MAT_GLOBAL_SUM, &info); CHKERRQ(ierr);
 
-        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_allocated", info.nz_allocated); CHKERRQ(ierr);
-        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_allocated/(M*N)", info.nz_allocated/((double)M*(double)N)); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_allocated", info.nz_allocated); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_allocated/(M*N)", info.nz_allocated/((double)M*(double)N)); CHKERRQ(ierr);
 
-        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_used", info.nz_used); CHKERRQ(ierr);
-        ierr = PetscPrintf(comm, "%8s %-50s %f\n", "MatInfo:", "nz_used/(M*N)", info.nz_used/((double)M*(double)N)); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_used", info.nz_used); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_used/(M*N)", info.nz_used/((double)M*(double)N)); CHKERRQ(ierr);
     }
 
     return ierr;
