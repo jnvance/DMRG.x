@@ -3,7 +3,7 @@
 
 #undef __FUNCT__
 #define __FUNCT__ "InitialChecks"
-PetscErrorCode InitialChecks(
+PETSC_EXTERN PetscErrorCode InitialChecks(
     const std::vector<PetscScalar>& a,
     const std::vector<Mat>& A,
     const std::vector<Mat>& B,
@@ -95,7 +95,7 @@ PetscErrorCode InitialChecks(
 
 #undef __FUNCT__
 #define __FUNCT__ "GetSubmatrix"
-PetscErrorCode GetSubmatrix(
+PETSC_EXTERN PetscErrorCode GetSubmatrix(
     const std::vector<Mat>&       A,
     const std::vector<PetscInt>&  N_A,
     const PetscInt&               nterms,
