@@ -1425,10 +1425,12 @@ typedef struct {
 
 } CTX_KRON;
 
+
 #define ROW_MAP_A(INDEX) ((INDEX) + ctx->row_shift_A)
 #define ROW_MAP_B(INDEX) (ctx->map_B[(INDEX)])
 #define COL_MAP_A(INDEX) ((INDEX))
 #define COL_MAP_B(INDEX) ((INDEX))
+
 
 PetscErrorCode MatMult_KronProdSum_MATSHELL(Mat A, Vec x, Vec y)
 {
@@ -1566,13 +1568,12 @@ PetscErrorCode MatMult_KronProdSum_MATSHELL(Mat A, Vec x, Vec y)
 }
 
 
-
-PetscErrorCode MatDestroy_KronProdSum_MATSHELL(Mat *p_mat)
+PetscErrorCode MatDestroy_KronProdSum_MATSHELL(Mat mat)
 {
     PetscErrorCode ierr = 0;
 
     CTX_KRON *ctx;
-    ierr = MatShellGetContext(*p_mat,(void**)&ctx); CHKERRQ(ierr);
+    ierr = MatShellGetContext(mat,(void**)&ctx); CHKERRQ(ierr);
 
     /* Destroy objects in context */
     for (PetscInt i = 0; i < ctx->nterms; ++i){
@@ -1588,7 +1589,7 @@ PetscErrorCode MatDestroy_KronProdSum_MATSHELL(Mat *p_mat)
     ierr = PetscFree(ctx); CHKERRQ(ierr);
 
     /* Destroy matrix */
-    ierr = MatDestroy(p_mat); CHKERRQ(ierr);
+    // ierr = MatDestroymat); CHKERRQ(ierr);
 
     return ierr;
 }
@@ -1738,6 +1739,7 @@ PetscErrorCode MatKronProdSum_MATSHELL(
     /* Create the matrix */
     ierr = MatCreateShell(comm, ctx->locrows, ctx->locrows, M_C, N_C, (void*)ctx, &C); CHKERRQ(ierr);
     ierr = MatShellSetOperation(C, MATOP_MULT, (void(*)())MatMult_KronProdSum_MATSHELL); CHKERRQ(ierr);
+    ierr = MatShellSetOperation(C, MATOP_DESTROY, (void(*)())MatDestroy_KronProdSum_MATSHELL); CHKERRQ(ierr);
 
     /******************* TIMINGS *******************/
     KRON_PS_TIMINGS_END(KRON_MAT)
