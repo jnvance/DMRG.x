@@ -76,16 +76,37 @@
 #endif
 
 
-#ifdef __DMRG_MPI_BARRIERS
+#if defined(__DMRG_MPI_BARRIERS)
     #define DMRG_MPI_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_WORLD, "\n======== %s [ FILE %s ] [ LINE %d ] ========\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
     #define DMRG_SEQ_BARRIER(MESSAGE) \
         ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
         ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+
+#elif defined(__DMRG_MPI_HARD_BARRIERS)
+
+    PetscErrorCode DMRG_MPI_BARRIER_Check(MPI_Comm comm,PetscMPIInt ctn,int line,const char *func,const char *file);
+
+    #define DMRG_MPI_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
+        ierr = DMRG_MPI_BARRIER_Check(PETSC_COMM_WORLD,1,__LINE__,__FUNCT__,__FILE__); CHKERRQ(ierr);\
+        ierr = MPI_Barrier(PETSC_COMM_WORLD); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n=x=x=x=x %s [ FILE %s ] [ LINE %d ] =x=x=x=x\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+    #define DMRG_SEQ_BARRIER(MESSAGE) \
+        ierr = MPI_Barrier(PETSC_COMM_SELF); CHKERRQ(ierr); \
+        ierr = PetscPrintf(PETSC_COMM_SELF, "\n-------- %s [ FILE %s ] [ LINE %d ] --------\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+
+#elif defined(__DMRG_MPI_BARRIERS_MESSAGE)
+    #define DMRG_MPI_BARRIER(MESSAGE) \
+        ierr = PetscPrintf(PETSC_COMM_WORLD, "\n>>> %s [ FILE %s ] [ LINE %d ]\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+    #define DMRG_SEQ_BARRIER(MESSAGE) \
+        ierr = PetscPrintf(PETSC_COMM_SELF, "\n>>> %s [ FILE %s ] [ LINE %d ]\n\n",MESSAGE,__FILE__,__LINE__); CHKERRQ(ierr);
+
 #else
     #define DMRG_MPI_BARRIER(MESSAGE)
     #define DMRG_SEQ_BARRIER(MESSAGE)
+
 #endif
 
 
@@ -116,6 +137,34 @@
  */
 class iDMRG
 {
+private:
+
+    PetscErrorCode GetRotationMatrices_targetSz(
+        const PetscInt mstates,
+        DMRGBlock& block,
+        Mat& mat,
+        PetscReal& truncation_error);
+
+    PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
+        const PetscInt mstates,
+        DMRGBlock& block,
+        Mat& mat,
+        Mat *p_mat_hc,
+        PetscReal& truncation_error);
+
+    PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
+        const PetscInt mstates,
+        DMRGBlock& block,
+        Mat& mat,
+        PetscReal& truncation_error);
+
+    PetscErrorCode MatRotation_mpi(
+        const Mat& U_hc,
+        const Mat& Op,
+        const Mat& U,
+        const MatReuse& scall,
+        const PetscReal& fill,
+        Mat *p_Op_rot);
 
 protected:
 
@@ -163,6 +212,11 @@ protected:
         Whether to perform full SVD on root MPI process
      */
     PetscBool do_svd_on_root = PETSC_TRUE;
+
+    /**
+        Whether to perform full SVD on root MPI process
+     */
+    PetscBool do_rot_hc_on_root = PETSC_FALSE;
 
     /**
         Whether to perform operator rotation on root MPI process
@@ -276,6 +330,16 @@ protected:
         singular values of dm_right
      */
     Mat         U_right_ = nullptr;
+
+    /**
+        Hermitian conjugate of U_left_
+     */
+    Mat         U_left_hc = nullptr;
+
+    /**
+        Hermitian conjugate of U_right_
+     */
+    Mat         U_right_hc = nullptr;
 
     /**
         MPI communicator for distributed arrays

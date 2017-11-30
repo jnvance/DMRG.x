@@ -101,8 +101,8 @@ int main(int argc, char **argv)
             As long as the basis size is less than
             the number of kept states, continue adding sites
         */
-        if (heis.TotalBasisSize() <= heis.mstates()*heis.mstates())
-            continue;
+        // if (heis.TotalBasisSize() <= heis.mstates()*heis.mstates())
+        //     continue;
 
         ierr = heis.BuildSuperBlock(); CHKERRQ(ierr);
         if (do_save_operators){

@@ -79,7 +79,7 @@ PetscErrorCode MatSpCreate(const MPI_Comm& comm, Mat& Sp);
     @param[in]   mat    Input matrix
     @param[in]   label  Label or title of the matrix
  */
-PetscErrorCode MatPeek(Mat mat, const char* label);
+PetscErrorCode MatPeek(const Mat& mat, const char* label);
 
 
 /**
@@ -227,8 +227,16 @@ std::vector<PetscScalar> OuterSumFlatten(std::vector<PetscScalar> A, std::vector
 std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<PetscScalar> array);
 
 
-
-
+/**
+    Creates an MPI matrix from nested vectors corresponding to the column indices and values of the resulting matrix object
+ */
+PetscErrorCode MatCreateAIJ_FromSeqList(
+    const MPI_Comm comm,
+    const std::vector<std::vector<PetscInt>>& cols_list,
+    const std::vector<std::vector<PetscScalar>>& vals_list,
+    const PetscInt M,
+    const PetscInt N,
+    Mat*& p_mat_out);
 
 #define LINALG_TOOLS__MATASSEMBLY_INIT() \
     PetscBool assembled;
@@ -300,6 +308,20 @@ std::unordered_map<PetscScalar,std::vector<PetscInt>> IndexMap(std::vector<Petsc
     #define LINALG_TOOLS_TIMINGS_ACCUM_PRINT(SECTION_LABEL)
 #endif
 
+
+/* TODO: Transfer to tools.hpp */
+#define CPP_CHKERRQ(err) \
+    do { \
+        if (PetscUnlikely(err)){\
+            PetscError(PETSC_COMM_SELF, __LINE__, PETSC_FUNCTION_NAME, __FILE__, err, PETSC_ERROR_IN_CXX, 0);\
+            throw std::runtime_error("Error.");}}\
+    while(0)
+
+
+#define CPP_CHKERRQ_MSG(err, msg) \
+  if (err) { \
+    PetscError(PETSC_COMM_SELF, __LINE__, PETSC_FUNCTION_NAME, __FILE__, err, PETSC_ERROR_IN_CXX, 0, msg); \
+    throw std::runtime_error(msg); }
 
 
 /** @} */

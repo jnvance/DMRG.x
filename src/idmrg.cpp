@@ -77,6 +77,11 @@ PetscErrorCode iDMRG::init(MPI_Comm comm, PetscInt nsites, PetscInt mstates)
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_svd_on_root",&do_svd_on_root,NULL); CHKERRQ(ierr);
 
     /*
+        Check whether to perform transpose of rotation matrix on root process
+    */
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_hc_on_root", &do_rot_hc_on_root, NULL); CHKERRQ(ierr);
+
+    /*
         Check whether to perform operator rotation on root process
     */
     ierr = PetscOptionsGetBool(NULL,NULL,"-do_truncation_on_root",&do_truncation_on_root,NULL); CHKERRQ(ierr);
@@ -414,6 +419,10 @@ PetscErrorCode iDMRG::BuildReducedDensityMatrices()
     return ierr;
 }
 
+/**************************************************************************************************/
+/* Obtaining the rotation matrices                                                                */
+/**************************************************************************************************/
+
 /**
     Define the tuple type representing a possible eigenstate
     0 - PetscReal - eigenvalue
@@ -426,13 +435,17 @@ typedef std::tuple<PetscReal, PetscInt, PetscInt, PetscScalar, std::vector<Petsc
 
 
 /** Comparison function for eigenstates in descending order */
+#undef __FUNCT__
+#define __FUNCT__ "compare_descending_eigenstates"
 bool compare_descending_eigenstates(eigenstate_t a, eigenstate_t b)
 {
     return (std::get<0>(a)) > (std::get<0>(b));
 }
 
 
-PetscErrorCode GetRotationMatrices_targetSz(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices_targetSz"
+PetscErrorCode iDMRG::GetRotationMatrices_targetSz(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
@@ -703,10 +716,13 @@ PetscErrorCode GetRotationMatrices_targetSz(
 }
 
 
-PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices_targetSz_root_to_mpi"
+PetscErrorCode iDMRG::GetRotationMatrices_targetSz_root_to_mpi(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
+    Mat *p_mat_hc,
     PetscReal& truncation_error)
 {
     PetscErrorCode ierr = 0;
@@ -1031,17 +1047,11 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
         {
             memcpy(&mat_cols[Rdisp[Irow]], mat_cols_list[Irow].data(), Tnnz[Irow] * sizeof(PetscInt));
-            /* Uncomment only if memory is an issue: */
-            // mat_cols_list[Irow].clear();
-            // mat_cols_list[Irow].shrink_to_fit();
         }
 
         for (PetscInt Irow = 0; Irow < nrows; ++Irow)
         {
             memcpy(&mat_vals[Rdisp[Irow]], mat_vals_list[Irow].data(), Tnnz[Irow] * sizeof(PetscScalar));
-            /* Uncomment only if memory is an issue: */
-            // mat_cols_list[Irow].clear();
-            // mat_cols_list[Irow].shrink_to_fit();
         }
 
         /* Prepare scatterv info */
@@ -1167,12 +1177,58 @@ PetscErrorCode GetRotationMatrices_targetSz_root_to_mpi(
         for (auto vec: vec_list){ ierr = VecDestroy(&vec); CHKERRQ(ierr); }
     }
 
+    /*************************************************************/
+    /* Perform the transpose also on root process                */
+    /*************************************************************/
+
+    PetscBool do_rot_hc_on_root = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_hc_on_root", &do_rot_hc_on_root, NULL); CHKERRQ(ierr);
+    if(do_rot_hc_on_root)
+    {
+        /* Temporary matrix buffer to be filled up by root */
+        std::vector< std::vector< PetscInt >> mat_hc_cols_list;
+        std::vector< std::vector< PetscScalar >> mat_hc_vals_list;
+
+        /* Initialize transpose container here */
+        if(!rank)
+        {
+            mat_hc_cols_list.resize(ncols);
+            mat_hc_vals_list.resize(ncols);
+
+            /* checkpoint for sizes */
+            if(mat_cols_list.size()!=mat_vals_list.size())
+                SETERRQ2(PETSC_COMM_SELF, 1, "Size mismatch between cols (%d) and vals (%d).",mat_cols_list.size(), mat_vals_list.size());
+
+            /* dump the values to their transpose and get the conjugate */
+            for (size_t row = 0; row < mat_cols_list.size(); ++row)
+            {
+                /* checkpoint for sizes */
+                if(mat_cols_list[row].size()!=mat_vals_list[row].size())
+                    SETERRQ3(PETSC_COMM_SELF, 1, "Size mismatch between cols (%d) and vals (%d) for row %d.",mat_cols_list[row].size(), mat_vals_list[row].size(), row);
+
+                for (size_t icol = 0; icol < mat_cols_list[row].size(); ++icol)
+                {
+                    PetscInt col = mat_cols_list[row][icol];
+                    mat_hc_cols_list[col].push_back((PetscInt) row);
+                    #if defined(PETSC_USE_COMPLEX)
+                        mat_hc_vals_list[col].push_back((PetscScalar) PetscConjComplex(mat_vals_list[row][icol]));
+                    #else
+                        mat_hc_vals_list[col].push_back((PetscScalar) mat_vals_list[row][icol]);
+                    #endif
+                }
+            }
+        }
+        ierr = MatCreateAIJ_FromSeqList(PETSC_COMM_WORLD, mat_hc_cols_list, mat_hc_vals_list, ncols, nrows, p_mat_hc); CHKERRQ(ierr);
+    }
+
     DMRG_MPI_BARRIER("End of GetRotationMatrices subfunction");
     return ierr;
 }
 
 
-PetscErrorCode GetRotationMatrices_targetSz_root_to_seq(
+#undef __FUNCT__
+#define __FUNCT__ "iDMRG::GetRotationMatrices_targetSz_root_to_seq"
+PetscErrorCode iDMRG::GetRotationMatrices_targetSz_root_to_seq(
     const PetscInt mstates,
     DMRGBlock& block,
     Mat& mat,
@@ -1532,8 +1588,14 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
                 ierr = GetRotationMatrices_targetSz_root_to_seq(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
                 ierr = GetRotationMatrices_targetSz_root_to_seq(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
             } else {
-                ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockLeft_, U_left_, truncerr_left); CHKERRQ(ierr);
-                ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockRight_, U_right_, truncerr_right); CHKERRQ(ierr);
+                if(do_rot_hc_on_root)
+                {
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockLeft_, U_left_, &U_left_hc, truncerr_left); CHKERRQ(ierr);
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockRight_, U_right_, &U_right_hc, truncerr_right); CHKERRQ(ierr);
+                } else {
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockLeft_, U_left_, NULL, truncerr_left); CHKERRQ(ierr);
+                    ierr = GetRotationMatrices_targetSz_root_to_mpi(mstates_, BlockRight_, U_right_, NULL, truncerr_right); CHKERRQ(ierr);
+                }
             }
         }
         else
@@ -1652,6 +1714,88 @@ PetscErrorCode iDMRG::GetRotationMatrices(PetscReal& truncerr_left, PetscReal& t
     return ierr;
 }
 
+/**************************************************************************************************/
+/* Rotation of block operators to a truncated basis                                               */
+/**************************************************************************************************/
+
+PetscErrorCode iDMRG::MatRotation_mpi(
+    const Mat& U_hc,
+    const Mat& Op,
+    const Mat& U,
+    const MatReuse& scall,
+    const PetscReal& fill,
+    Mat *p_Op_rot)
+{
+    PetscErrorCode ierr = 0;
+    MPI_Comm comm = PetscObjectComm((PetscObject)Op);
+
+    PetscBool do_rot_matmatmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_matmatmult", &do_rot_matmatmult, NULL); CHKERRQ(ierr);
+
+    PetscBool do_rot_matmatmatmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_matmatmatmult", &do_rot_matmatmatmult, NULL); CHKERRQ(ierr);
+
+    PetscBool do_rot_ptap = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_ptap", &do_rot_ptap, NULL); CHKERRQ(ierr);
+
+    PetscBool do_rot_mattransposematmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_mattransposematmult", &do_rot_mattransposematmult, NULL); CHKERRQ(ierr);
+
+    if (do_rot_mattransposematmult)
+    {
+        if (U_hc) SETERRQ(comm, 1,"With do_rot_mattransposematmult, Hermitian transpose must not be set.");
+
+        Mat Op_U;
+
+        ierr = MatMatMult(Op, U, scall, fill, &Op_U); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+        ierr = MatTransposeMatMult(U, Op_U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatTransposeMatMult");
+        ierr = MatDestroy(&Op_U); CHKERRQ(ierr);
+
+    }
+    else if (do_rot_ptap)
+    {
+        if (U_hc) SETERRQ(comm, 1,"With do_rot_ptap, Hermitian transpose must not be set.");
+        ierr = MatPtAP(Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatPtAP");
+    }
+    else if (do_rot_matmatmult)
+    {
+        if (!U_hc) SETERRQ(comm, 1,"U_hc not set.");
+        Mat Op_U;
+        ierr = MatMatMult(Op, U, scall, fill, &Op_U); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+        ierr = MatMatMult(U_hc, Op_U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMult");
+    }
+    else
+    {
+        if (!U_hc) SETERRQ(comm, 1,"U_hc not set.");
+        ierr = MatMatMatMult(U_hc, Op, U, scall, fill, p_Op_rot); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatMatMatMult");
+    }
+
+    /* Optionally, print the density of nonzeros after rotation */
+    PetscBool do_print_rot_info = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_print_rot_info", &do_print_rot_info, NULL); CHKERRQ(ierr);
+    if(do_print_rot_info)
+    {
+        MatInfo info;
+        PetscInt M, N;
+        ierr = MatGetSize(*p_Op_rot, &M, &N); CHKERRQ(ierr);
+        ierr = MatGetInfo(*p_Op_rot, MAT_GLOBAL_SUM, &info); CHKERRQ(ierr);
+
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_allocated", info.nz_allocated); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_allocated/(M*N)", info.nz_allocated/((double)M*(double)N)); CHKERRQ(ierr);
+
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_used", info.nz_used); CHKERRQ(ierr);
+        ierr = PetscPrintf(comm, "%4d %8s %-30s %f\n", iter(), "MatInfo:", "nz_used/(M*N)", info.nz_used/((double)M*(double)N)); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
 
 #undef __FUNCT__
 #define __FUNCT__ "iDMRG::TruncateOperators_mpi"
@@ -1685,65 +1829,85 @@ PetscErrorCode iDMRG::TruncateOperators_mpi()
 
     #endif // __CHECK_ROTATION
 
-
     /* Rotation */
     Mat mat_temp = nullptr;
-    Mat U_hc = nullptr;
 
-    if(!(dm_svd && U_left_))
-        SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
+    PetscBool do_rot_ptap = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_ptap", &do_rot_ptap, NULL); CHKERRQ(ierr);
 
-    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
-    ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose");
+    PetscBool do_rot_mattransposematmult = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-do_rot_mattransposematmult", &do_rot_mattransposematmult, NULL); CHKERRQ(ierr);
 
-    ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+    if ((do_rot_mattransposematmult || do_rot_ptap) && do_rot_hc_on_root)
+        SETERRQ(comm_, 1, "Incompatible options: (do_rot_ptap,do_rot_mattransposematmult) and do_rot_hc_on_root.");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    if (do_rot_hc_on_root)
+    {
+        if(!(dm_svd && U_left_ && U_left_hc))
+            SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
+
+        if(!(dm_svd && U_right_ && U_right_hc))
+            SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
+    }
+    else if(do_rot_ptap || do_rot_mattransposematmult)
+    {
+        #ifdef PETSC_USE_COMPLEX
+            SETERRQ(comm_, 1, "Options do_rot_ptap and do_rot_mattransposematmult incompatible with complex scalars.");
+        #endif
+
+        if(U_left_hc || U_right_hc)
+            SETERRQ(comm_,1,"With do_rot_ptap or do_rot_mattransposematmult, Hermitian transpose must not be set.");
+    } else
+    {
+        if(!(dm_svd && U_left_))
+            SETERRQ(comm_, 1, "SVD of (LEFT) reduced density matrices not yet solved.");
+
+        if(!(dm_svd && U_right_))
+            SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
+
+        DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
+        ierr = MatHermitianTranspose(U_left_, MAT_INITIAL_MATRIX, &U_left_hc); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose");
+
+        ierr = MatAssemblyBegin(U_left_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(U_left_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+
+        DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
+        ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_right_hc); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose");
+
+        ierr = MatAssemblyBegin(U_right_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(U_right_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
+
+    }
+
+    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.H(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_H(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.Sz(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sz(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_left_hc, BlockLeft_.Sp(), U_left_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockLeft_.update_Sp(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
+    if(U_left_hc)  {ierr = MatDestroy(&U_left_hc);  CHKERRQ(ierr); U_left_hc  = nullptr;}
 
-
-    if(!(dm_svd && U_right_))
-        SETERRQ(comm_, 1, "SVD of (RIGHT) reduced density matrices not yet solved.");
-
-    DMRG_MPI_BARRIER("Start of MatHermitianTranspose");
-    ierr = MatHermitianTranspose(U_right_, MAT_INITIAL_MATRIX, &U_hc); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose");
-
-    ierr = MatAssemblyBegin(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(U_hc, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatHermitianTranspose Assembly");
-
-    ierr = MatMatMatMult(U_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_right_hc, BlockRight_.H(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_H(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_right_hc, BlockRight_.Sz(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sz(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatMatMatMult(U_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, 1, &mat_temp); CHKERRQ(ierr);
+    ierr = MatRotation_mpi(U_right_hc, BlockRight_.Sp(), U_right_, MAT_INITIAL_MATRIX, PETSC_DECIDE, &mat_temp); CHKERRQ(ierr);
     ierr = BlockRight_.update_Sp(mat_temp); CHKERRQ(ierr);
-    DMRG_MPI_BARRIER("MatMatMatMult");
 
-    ierr = MatDestroy(&U_hc); CHKERRQ(ierr);
+    if(U_right_hc) {ierr = MatDestroy(&U_right_hc); CHKERRQ(ierr); U_right_hc = nullptr;}
 
-    if(mat_temp)    {ierr = MatDestroy(&mat_temp); CHKERRQ(ierr);}
-    if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr);}
-    if(U_right_)    {ierr = MatDestroy(&U_right_); CHKERRQ(ierr);}
+    if(mat_temp)    {ierr = MatDestroy(&mat_temp); CHKERRQ(ierr); mat_temp = nullptr;}
+    if(U_left_)     {ierr = MatDestroy(&U_left_); CHKERRQ(ierr); U_left_ = nullptr;}
+    if(U_right_)    {ierr = MatDestroy(&U_right_); CHKERRQ(ierr); U_right_ = nullptr;}
 
     ntruncations_ += 1;
 
@@ -2355,3 +2519,38 @@ PetscErrorCode iDMRG::MatSaveOperators()
     DMRG_TIMINGS_END(__FUNCT__);
     return ierr;
 }
+
+
+#if defined(__DMRG_MPI_HARD_BARRIERS)
+
+    /*
+        Function definitions adapted from
+        http://www.mcs.anl.gov/petsc/petsc-current/src/sys/utils/pbarrier.c
+     */
+
+    static int hash(const char *str)
+    {
+      int c,hash = 5381;
+
+      while ((c = *str++)) hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+      return hash;
+    }
+
+
+    PetscErrorCode DMRG_MPI_BARRIER_Check(MPI_Comm comm,PetscMPIInt ctn,int line,const char *func,const char *file)
+    {
+      PetscMPIInt err;
+      PetscMPIInt b1[6],b2[6];
+
+      b1[0] = -(PetscMPIInt)line;       b1[1] = -b1[0];
+      b1[2] = -(PetscMPIInt)hash(func); b1[3] = -b1[2];
+      b1[4] = -(PetscMPIInt)ctn;        b1[5] = -b1[4];
+      err = MPI_Allreduce(b1,b2,6,MPI_INT,MPI_MAX,comm);
+      if (err) return PetscError(PETSC_COMM_SELF,line,func,file,PETSC_ERR_LIB,PETSC_ERROR_INITIAL,"DMRG_MPI_BARRIER() failed with error code %d",err);
+      if (-b2[0] != b2[1]) return PetscError(PETSC_COMM_SELF,line,func,file,PETSC_ERR_PLIB,PETSC_ERROR_INITIAL,"DMRG_MPI_BARRIER() called in different locations (code lines) on different processors");
+      if (-b2[2] != b2[3]) return PetscError(PETSC_COMM_SELF,line,func,file,PETSC_ERR_PLIB,PETSC_ERROR_INITIAL,"DMRG_MPI_BARRIER() called in different locations (functions) on different processors");
+      if (-b2[4] != b2[5]) return PetscError(PETSC_COMM_SELF,line,func,file,PETSC_ERR_PLIB,PETSC_ERROR_INITIAL,"DMRG_MPI_BARRIER() called with different counts %d on different processors",ctn);
+      return 0;
+    }
+
+#endif
