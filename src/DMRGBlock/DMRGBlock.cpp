@@ -1,6 +1,8 @@
 #include "DMRGBlock.hpp"
 
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
+PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz);
+PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 
 PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in)
 {
@@ -25,9 +27,15 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
     /* Initialize array of operator matrices */
     ierr = PetscCalloc3(num_sites, &Sz, num_sites, &Sp, num_sites, &Sm); CHKERRQ(ierr);
 
+    /* Initialize single-site operators */
+    if (num_sites == 1)
+    {
+        ierr = MatSpinOneHalfSzCreate(mpi_comm, Sz[0]); CHKERRQ(ierr);
+        ierr = MatSpinOneHalfSpCreate(mpi_comm, Sp[0]); CHKERRQ(ierr);
+    }
+
     /* Initialize switch */
     init = PETSC_TRUE;
-    if(verbose && !mpi_rank) printf(">>> site::%s\n",__FUNCTION__);
 
     return ierr;
 }
@@ -96,7 +104,9 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
 
     if(!init_Sm) SETERRQ(mpi_comm, 1, "Sm not initialized. Nothing to destroy.");
 
-    ierr = MatDestroyMatrices(num_sites, &Sm); CHKERRQ(ierr);
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = MatDestroy(&Sm[isite]); CHKERRQ(ierr);
+    }
     init_Sm = PETSC_FALSE;
 
     return ierr;
@@ -107,11 +117,14 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
 {
     PetscErrorCode ierr = 0;
 
-    ierr = CheckOperators(); CHKERRQ(ierr);
+    if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
 
     /* Destroy operator matrices */
-    ierr = MatDestroyMatrices(num_sites, &Sz); CHKERRQ(ierr);
-    ierr = MatDestroyMatrices(num_sites, &Sp); CHKERRQ(ierr);
+    for(PetscInt isite = 0; isite < num_sites; ++isite)
+    {
+        ierr = MatDestroy(&Sz[isite]); CHKERRQ(ierr);
+        ierr = MatDestroy(&Sp[isite]); CHKERRQ(ierr);
+    }
 
     if (init_Sm){
         ierr = DestroySm(); CHKERRQ(ierr);
@@ -119,8 +132,6 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
 
     ierr = PetscFree3(Sz, Sp, Sm); CHKERRQ(ierr);
     init = PETSC_FALSE;
-
-    if(verbose && !mpi_rank) printf(">>> site::%s\n",__FUNCTION__);
 
     return ierr;
 }

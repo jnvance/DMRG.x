@@ -30,7 +30,7 @@ private:
     /** Tells whether the block was initialized */
     PetscBool init = PETSC_FALSE;
 
-    /** Tells whether to printout info during function certain function calls */
+    /** Tells whether to printout info during certain function calls */
     PetscBool verbose = PETSC_FALSE;
 
     /** Number of sites in the block */
@@ -82,6 +82,9 @@ public:
 
     /** Checks whether all operators have been initialized and have correct dimensions */
     PetscErrorCode CheckOperators();
+
+    /** Checks whether sector indexing was done properly */
+    // PetscErrorCode CheckSectors();
 
     /** Creates the Sm matrices on the fly */
     PetscErrorCode CreateSm();

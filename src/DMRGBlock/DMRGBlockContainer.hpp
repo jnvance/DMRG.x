@@ -9,6 +9,84 @@
 #include "DMRGBlock.hpp"
 #include "linalg_tools.hpp"
 
+
+class HeisenbergSpinOneHalfLadder
+{
+
+private:
+
+    /*------ Backend ------*/
+
+    /** MPI Communicator */
+    MPI_Comm    mpi_comm = PETSC_COMM_WORLD;
+
+    /** MPI rank in mpi_comm */
+    PetscMPIInt mpi_rank;
+
+    /** MPI size of mpi_comm */
+    PetscMPIInt mpi_size;
+
+    /** Tells whether to printout info during certain function calls */
+    PetscBool   verbose = PETSC_FALSE;
+
+    /*------ Coupling Constants ------*/
+
+    /** Coupling strength for nearest-neighbor interactions */
+    PetscScalar J1 = 1.0;
+
+    /** Coupling strength for next-nearest-neighbor interactions */
+    PetscScalar J2 = 1.0;
+
+    /*------ Geometry ------*/
+
+    /** Length along (growing) longitudinal direction */
+    PetscInt    Lx = 4;
+
+    /** Length along (fixed) transverse direction */
+    PetscInt    Ly = 3;
+
+    /** Total number of sites */
+    PetscInt    num_sites;
+
+    /*------ Blocks ------*/
+
+    /** Number of system blocks to store, usually Lx*Ly-1 */
+    PetscInt    num_blocks;
+
+    /** Array of blocks */
+    Block_SpinOneHalf *SysBlocks;
+
+    /** Number of initialized blocks in SysBlocks */
+    PetscInt    SysBlocks_num_init = 0;
+
+    /** Environment block to be used only during warmup */
+    Block_SpinOneHalf EnvBlock;
+
+public:
+
+    /** Static block containing single site operators for reference */
+    Block_SpinOneHalf SingleSite;
+
+
+
+    PetscErrorCode Initialize();
+
+    PetscErrorCode Destroy();
+
+};
+
+
+
+
+
+
+
+
+
+
+
+#define false 0
+#if false
 typedef enum
 {
     BlockSide_Left=0,
@@ -245,5 +323,6 @@ PetscErrorCode DMRGBlockContainer<SiteType>::CheckOperators()
 
     return ierr;
 }
+#endif
 
 #endif // __DMRG_BLOCK_HPP__
