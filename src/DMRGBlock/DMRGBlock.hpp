@@ -5,74 +5,92 @@
 #include "kron.hpp"
 #include "linalg_tools.hpp"
 
-
 class Block_SpinOneHalf
 {
 
 private:
 
-    MPI_Comm comm;
-    PetscMPIInt rank;
+    /*------ Basic attributes ------*/
 
-    static const PetscInt loc_dim = 2;
-    PetscInt mat_op_dim;
-    PetscBool init_ = PETSC_FALSE;
+    /** MPI Communicator */
+    MPI_Comm        mpi_comm;
+
+    /** MPI rank in mpi_comm */
+    PetscMPIInt     mpi_rank;
+
+    /** MPI size of mpi_comm */
+    PetscMPIInt     mpi_size;
+
+    /** Local dimension of a single site */
+    const PetscInt loc_dim = 2;
+
+    /** Sz sectors of a single site */
+    const std::vector<PetscScalar> loc_qn_list = {+0.5, -0.5};
+
+    /** Tells whether the block was initialized */
+    PetscBool init = PETSC_FALSE;
+
+    /** Tells whether to printout info during function certain function calls */
     PetscBool verbose = PETSC_FALSE;
 
-    /* FIXME: Optimize matrices for MKL, specify type or use one global matrix type */
-    // MatType
+    /** Number of sites in the block */
+    PetscInt num_sites;
 
-    Mat H_  = nullptr;
-    Mat Sz_ = nullptr;
-    Mat Sp_ = nullptr;
-    Mat Sm_ = nullptr;
+    /** Number of basis states in the Hilbert space */
+    PetscInt num_states;
 
-    /* Will be useful in fDMRG
-       represents the matrix rotated only once
-     */
-    #if 0
-    Mat Sz_conn = nullptr;
-    Mat Sp_conn = nullptr;
-    Mat Sm_conn = nullptr;
-    #endif
+    /** Tells whether the Sm matrices have been initialized */
+    PetscBool init_Sm = PETSC_FALSE;
 
-    PetscErrorCode InitH();
-    PetscErrorCode InitSz();
-    PetscErrorCode InitSp();
+
+    /*------ Magnetization Sectors ------*/
+
+    /** Number of Sz sectors in the Hilbert space */
+    PetscInt num_sectors;
+
+    /** List of Sz quantum numbers */
+    std::vector<PetscReal> qn_list;
+
+    /** Offset for each quantum number block */
+    std::vector<PetscInt> qn_offset;
+
+    /** Number of states in each quantum number block */
+    std::vector<PetscInt> qn_size;
+
+
+    /*------ Misc Functions ------*/
+
+    /** Determines whether the operator arrays have been successfully filled with matrices */
+    PetscErrorCode CheckOperatorArray(Mat *Op, const char* label);
 
 public:
 
-    PetscErrorCode Initialize(const MPI_Comm& comm_in);
-    PetscErrorCode Destroy();
+    /** Matrix representation of the Hamiltonian operator */
+    Mat     H = nullptr;
 
-    PetscErrorCode UpdateH(Mat& H_in);
+    /** List of $S^z$ operators */
+    Mat*    Sz = nullptr;
 
-    PetscErrorCode CreateSm();
-    PetscErrorCode DestroySm();
+    /** List of $S^+$ operators */
+    Mat*    Sp = nullptr;
 
-    PetscErrorCode OpKronEye(PetscInt eye_dim = loc_dim);
-    PetscErrorCode EyeKronOp(PetscInt eye_dim = loc_dim);
+    /** List of $S^-$ operators */
+    Mat*    Sm = nullptr;
 
+    /** Initialize block object with input attributes and array of matrix operators */
+    PetscErrorCode Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in);
+
+    /** Checks whether all operators have been initialized and have correct dimensions */
     PetscErrorCode CheckOperators();
 
-    const Mat& H(){ return H_; }
-    const Mat& Sz(){ return Sz_; }
-    const Mat& Sp(){ return Sp_; }
-    const Mat& Sm(){
-        // if(!Sm_) CPP_CHKERRQ_MSG(1, "Sm not yet created.");
-        return Sm_;
-    }
-    PetscInt LocDim() const { return loc_dim; }
-    PetscInt MatOpDim() const {
-        // PetscErrorCode ierr = 0;
-        // ierr = CheckOperators(); CPP_CHKERRQ_MSG(ierr,"Site::CheckOperators error.");
-        return mat_op_dim; }
-    PetscBool Initialized() const { return init_; }
-    MPI_Comm Comm() const { return comm; }
-    /**
-        Container for the magnetization sectors of a single site
-     */
-    const std::vector<PetscScalar> single_site_sectors = {0.5, -0.5};
+    /** Creates the Sm matrices on the fly */
+    PetscErrorCode CreateSm();
+
+    /** Destroys the Sm matrices on the fly */
+    PetscErrorCode DestroySm();
+
+    /** Destroys all operator matrices and frees memory */
+    PetscErrorCode Destroy();
 
 };
 

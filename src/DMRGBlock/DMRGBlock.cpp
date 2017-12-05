@@ -1,76 +1,7 @@
 #include "DMRGBlock.hpp"
 
 
-
-/* TODO: Merge into one function differentiated by setting of values */
-/* FIXME: Optimize matrices for MKL, specify type or use one global matrix type */
-
-PetscErrorCode Block_SpinOneHalf::InitH()
-{
-    PetscErrorCode ierr = 0;
-
-    if (H_) SETERRQ(comm, 1, "Sz was previously initialized.");
-
-    ierr = MatCreate(comm, &H_); CHKERRQ(ierr);
-    ierr = MatSetSizes(H_, PETSC_DECIDE, PETSC_DECIDE, loc_dim, loc_dim); CHKERRQ(ierr);
-    ierr = MatSetFromOptions(H_); CHKERRQ(ierr);
-    ierr = MatSetUp(H_); CHKERRQ(ierr);
-
-    ierr = MatAssemblyBegin(H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(H_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-    if(verbose && !rank) printf(">>> site::%s\n",__FUNCTION__);
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::InitSz()
-{
-    PetscErrorCode ierr = 0;
-
-    if (Sz_) SETERRQ(comm, 1, "Sz was previously initialized.");
-
-    ierr = MatCreate(comm, &Sz_); CHKERRQ(ierr);
-    ierr = MatSetSizes(Sz_, PETSC_DECIDE, PETSC_DECIDE, loc_dim, loc_dim); CHKERRQ(ierr);
-    ierr = MatSetFromOptions(Sz_); CHKERRQ(ierr);
-    ierr = MatSetUp(Sz_); CHKERRQ(ierr);
-
-    ierr = MatSetValue(Sz_, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
-    ierr = MatSetValue(Sz_, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
-
-    ierr = MatAssemblyBegin(Sz_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(Sz_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-    if(verbose && !rank) printf(">>> site::%s\n",__FUNCTION__);
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::InitSp()
-{
-    PetscErrorCode ierr = 0;
-
-    if (Sp_) SETERRQ(comm, 1, "Sz was previously initialized.");
-
-    ierr = MatCreate(comm, &Sp_); CHKERRQ(ierr);
-    ierr = MatSetSizes(Sp_, PETSC_DECIDE, PETSC_DECIDE, loc_dim, loc_dim); CHKERRQ(ierr);
-    ierr = MatSetFromOptions(Sp_); CHKERRQ(ierr);
-    ierr = MatSetUp(Sp_); CHKERRQ(ierr);
-
-    ierr = MatSetValue(Sp_, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-
-    ierr = MatAssemblyBegin(Sp_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(Sp_, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-    if(verbose && !rank) printf(">>> site::%s\n",__FUNCTION__);
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in)
+PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in)
 {
     PetscErrorCode ierr = 0;
 
@@ -78,17 +9,89 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in)
     ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
 
     /* Initialize attributes*/
-    comm = comm_in;
-    ierr = MPI_Comm_rank(comm, &rank); CPP_CHKERRQ(ierr);
+    mpi_comm = comm_in;
+    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CPP_CHKERRQ(ierr);
+    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CPP_CHKERRQ(ierr);
 
-    /* Initialize matrices */
-    ierr = InitH(); CHKERRQ(ierr);
-    ierr = InitSz(); CHKERRQ(ierr);
-    ierr = InitSp(); CHKERRQ(ierr);
-    init_ = PETSC_TRUE;
-    ierr = CheckOperators(); CHKERRQ(ierr);
+    /* Initial number of sites and number of states */
+    num_sites = num_sites_in;
+    num_states = num_states_in;
 
-    if(verbose && !rank) printf(">>> site::%s\n",__FUNCTION__);
+    /* Initialize array of operator matrices */
+    ierr = PetscCalloc3(num_sites, &Sz, num_sites, &Sp, num_sites, &Sm); CHKERRQ(ierr);
+
+    /* Initialize switch */
+    init = PETSC_TRUE;
+    if(verbose && !mpi_rank) printf(">>> site::%s\n",__FUNCTION__);
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label)
+{
+    PetscErrorCode ierr = 0;
+
+    /* Check the size of each matrix and make sure that it
+     * matches the number of basis states */
+
+    PetscInt M, N;
+    for(PetscInt isite = 0; isite < num_sites; ++isite)
+    {
+        if(!Op[isite])
+            SETERRQ2(mpi_comm, 1, "%s[%d] matrix not yet created.", label, isite);
+        ierr = MatGetSize(Op[isite], &M, &N); CHKERRQ(ierr);
+        if (M != N)
+            SETERRQ2(mpi_comm, 1, "%s[%d] matrix not square.", label, isite);
+        if (M != num_states)
+            SETERRQ4(mpi_comm, 1, "%s[%d] matrix dimension does not match "
+                "the number of states. Expected %d. Got %d.", label, isite, num_states, M);
+    }
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::CheckOperators()
+{
+    PetscErrorCode ierr = 0;
+
+    if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
+
+    ierr = CheckOperatorArray(Sz, "Sz"); CHKERRQ(ierr);
+    ierr = CheckOperatorArray(Sp, "Sp"); CHKERRQ(ierr);
+
+    if (init_Sm){
+        ierr = CheckOperatorArray(Sm, "Sm"); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::CreateSm()
+{
+    PetscErrorCode ierr = 0;
+
+    if(init_Sm) SETERRQ(mpi_comm, 1, "Sm was previously initialized. Call DestroySm() first.");
+
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = MatHermitianTranspose(Sp[isite], MAT_INITIAL_MATRIX, &Sm[isite]); CHKERRQ(ierr);
+    }
+    init_Sm = PETSC_TRUE;
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::DestroySm()
+{
+    PetscErrorCode ierr = 0;
+
+    if(!init_Sm) SETERRQ(mpi_comm, 1, "Sm not initialized. Nothing to destroy.");
+
+    ierr = MatDestroyMatrices(num_sites, &Sm); CHKERRQ(ierr);
+    init_Sm = PETSC_FALSE;
 
     return ierr;
 }
@@ -99,138 +102,19 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
     PetscErrorCode ierr = 0;
 
     ierr = CheckOperators(); CHKERRQ(ierr);
-    ierr = MatDestroy(&H_); CPP_CHKERRQ(ierr);
-    ierr = MatDestroy(&Sz_); CPP_CHKERRQ(ierr);
-    ierr = MatDestroy(&Sp_); CPP_CHKERRQ(ierr);
-    ierr = MatDestroy(&Sm_); CPP_CHKERRQ(ierr);
 
-    init_ = PETSC_FALSE;
+    /* Destroy operator matrices */
+    ierr = MatDestroyMatrices(num_sites, &Sz); CHKERRQ(ierr);
+    ierr = MatDestroyMatrices(num_sites, &Sp); CHKERRQ(ierr);
 
-    if(verbose && !rank) printf(">>> site::%s\n",__FUNCTION__);
+    if (init_Sm){
+        ierr = DestroySm(); CHKERRQ(ierr);
+    }
 
-    return ierr;
-}
+    ierr = PetscFree3(Sz, Sp, Sm); CHKERRQ(ierr);
+    init = PETSC_FALSE;
 
-
-PetscErrorCode Block_SpinOneHalf::UpdateH(Mat& H_new)
-{
-    PetscErrorCode  ierr = 0;
-
-    if (H_ == H_new) return ierr;
-    Mat H_temp = H_;
-    H_ = H_new;
-    H_new = nullptr;
-    ierr = MatDestroy(&H_temp); CHKERRQ(ierr);
+    if(verbose && !mpi_rank) printf(">>> site::%s\n",__FUNCTION__);
 
     return ierr;
 }
-
-
-PetscErrorCode Block_SpinOneHalf::CreateSm()
-{
-    PetscErrorCode ierr = 0;
-
-    if(!init_) SETERRQ(comm, 1, "Site was not initialized.");
-    if(!Sp_) SETERRQ(comm, 1, "Sp not initialized.");
-
-    LINALG_TOOLS__MATASSEMBLY_FINAL(Sp_);
-    ierr = MatHermitianTranspose(Sp_, MAT_INITIAL_MATRIX, &Sm_); CHKERRQ(ierr);
-
-    if(verbose && !rank) printf(">>> site::%s\n",__FUNCTION__);
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::DestroySm()
-{
-    PetscErrorCode ierr = 0;
-
-    if(!init_) SETERRQ(comm, 1, "Site was not initialized.");
-    ierr = MatDestroy(&Sm_); CHKERRQ(ierr);
-    Sm_ = nullptr;
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::CheckOperators()
-{
-    PetscErrorCode ierr = 0;
-
-    /* Check initialization */
-    if(!init_) SETERRQ(comm, 1, "Site was not initialized.");
-    if(!Sz_) SETERRQ(comm, 1, "Sz not initialized.");
-    if(!Sp_) SETERRQ(comm, 1, "Sp not initialized.");
-
-    /* Check sizes */
-    PetscInt M_Sz, N_Sz, M_Sp, N_Sp;
-    ierr = MatGetSize(Sz_, &M_Sz, &N_Sz); CHKERRQ(ierr);
-    ierr = MatGetSize(Sp_, &M_Sp, &N_Sp); CHKERRQ(ierr);
-    if(M_Sz != N_Sz) SETERRQ2(comm, 1, "Sz not square. Current size: (%d,%d)", M_Sz, N_Sz);
-    if(M_Sp != N_Sp) SETERRQ2(comm, 1, "Sp not square. Current size: (%d,%d)", M_Sp, N_Sp);
-    if(M_Sz != M_Sp) SETERRQ2(comm, 1, "Size of Sz (%d) different from that of Sp (%d).", M_Sz, M_Sp);
-
-    /* Set sizes as operator dimension */
-    mat_op_dim = M_Sz;
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::OpKronEye(PetscInt eye_dim)
-{
-    PetscErrorCode ierr = 0;
-
-    ierr = CheckOperators(); CHKERRQ(ierr);
-
-    Mat eye, mat_kron;
-    ierr = MatEyeCreate(comm, eye, eye_dim); CHKERRQ(ierr);
-
-    #define OP_KRON_EYE(MATRIX) \
-    ierr = MatKronProd(1.0, MATRIX, eye, mat_kron); CHKERRQ(ierr); \
-    ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); \
-    ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); \
-    ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); \
-    MATRIX = mat_kron; \
-    mat_kron = nullptr;
-
-    OP_KRON_EYE(Sz_)
-    OP_KRON_EYE(Sp_)
-    #undef OP_KRON_EYE
-
-    ierr = MatDestroy(&eye);
-    ierr = CheckOperators(); CHKERRQ(ierr);
-
-    return ierr;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::EyeKronOp(PetscInt eye_dim)
-{
-    PetscErrorCode ierr = 0;
-
-    ierr = CheckOperators(); CHKERRQ(ierr);
-
-    Mat eye, mat_kron;
-    ierr = MatEyeCreate(comm, eye, eye_dim); CHKERRQ(ierr);
-
-    #define EYE_KRON_OP(MATRIX) \
-    ierr = MatKronProd(1.0, eye, MATRIX, mat_kron); CHKERRQ(ierr); \
-    ierr = MatAssemblyBegin(MATRIX, MAT_FINAL_ASSEMBLY); \
-    ierr = MatAssemblyEnd(MATRIX, MAT_FINAL_ASSEMBLY); \
-    ierr = MatDestroy(&MATRIX); CHKERRQ(ierr); \
-    MATRIX = mat_kron; \
-    mat_kron = nullptr;
-
-    EYE_KRON_OP(Sz_)
-    EYE_KRON_OP(Sp_)
-    #undef EYE_KRON_OP
-
-    ierr = MatDestroy(&eye);
-    ierr = CheckOperators(); CHKERRQ(ierr);
-
-    return ierr;
-}
-
-
