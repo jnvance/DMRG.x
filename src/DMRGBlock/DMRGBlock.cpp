@@ -1,5 +1,6 @@
 #include "DMRGBlock.hpp"
 
+PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
 
 PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in)
 {
@@ -15,7 +16,11 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
 
     /* Initial number of sites and number of states */
     num_sites = num_sites_in;
-    num_states = num_states_in;
+    if(num_states_in == PETSC_DEFAULT){
+        num_states = ipow(loc_dim, num_sites);
+    } else{
+        num_states = num_states_in;
+    }
 
     /* Initialize array of operator matrices */
     ierr = PetscCalloc3(num_sites, &Sz, num_sites, &Sp, num_sites, &Sm); CHKERRQ(ierr);
@@ -75,6 +80,7 @@ PetscErrorCode Block_SpinOneHalf::CreateSm()
 
     if(init_Sm) SETERRQ(mpi_comm, 1, "Sm was previously initialized. Call DestroySm() first.");
 
+    ierr = CheckOperatorArray(Sp, "Sp"); CHKERRQ(ierr);
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatHermitianTranspose(Sp[isite], MAT_INITIAL_MATRIX, &Sm[isite]); CHKERRQ(ierr);
     }
