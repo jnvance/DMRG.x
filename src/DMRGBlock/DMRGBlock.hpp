@@ -61,7 +61,7 @@ private:
     /*------ Misc Functions ------*/
 
     /** Determines whether the operator arrays have been successfully filled with matrices */
-    PetscErrorCode CheckOperatorArray(Mat *Op, const char* label);
+    PetscErrorCode CheckOperatorArray(Mat *Op, const char* label) const;
 
 public:
 
@@ -81,7 +81,7 @@ public:
     PetscErrorCode Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in);
 
     /** Checks whether all operators have been initialized and have correct dimensions */
-    PetscErrorCode CheckOperators();
+    PetscErrorCode CheckOperators() const;
 
     /** Checks whether sector indexing was done properly */
     // PetscErrorCode CheckSectors();

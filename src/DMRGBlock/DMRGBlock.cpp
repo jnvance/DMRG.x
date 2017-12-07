@@ -41,7 +41,7 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label)
+PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label) const
 {
     PetscErrorCode ierr = 0;
 
@@ -65,7 +65,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label)
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CheckOperators()
+PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 {
     PetscErrorCode ierr = 0;
 
