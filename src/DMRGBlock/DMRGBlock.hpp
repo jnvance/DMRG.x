@@ -5,6 +5,14 @@
 #include "kron.hpp"
 #include "linalg_tools.hpp"
 
+/** Defines the offset of each operator */
+typedef enum {
+    OpSm=-1,
+    OpSz=0,
+    OpSp=+1
+} Op_t;
+
+
 class Block_SpinOneHalf
 {
 
@@ -27,6 +35,9 @@ private:
     /** Sz sectors of a single site */
     const std::vector<PetscScalar> loc_qn_list = {+0.5, -0.5};
 
+    /** Number of states in each sector in a single site */
+    const std::vector<PetscInt> loc_qn_size = {1, 1};
+
     /** Tells whether the block was initialized */
     PetscBool init = PETSC_FALSE;
 
@@ -42,7 +53,7 @@ private:
     /** Tells whether the Sm matrices have been initialized */
     PetscBool init_Sm = PETSC_FALSE;
 
-
+public:
     /*------ Magnetization Sectors ------*/
 
     /** Number of Sz sectors in the Hilbert space */
@@ -63,7 +74,10 @@ private:
     /** Determines whether the operator arrays have been successfully filled with matrices */
     PetscErrorCode CheckOperatorArray(Mat *Op, const char* label) const;
 
-public:
+    /** Indicates whether block has been initialized before us */
+    PetscBool Initialized() const { return init; }
+
+    /*------ Operator Matrices ------*/
 
     /** Matrix representation of the Hamiltonian operator */
     Mat     H = nullptr;
@@ -84,7 +98,13 @@ public:
     PetscErrorCode CheckOperators() const;
 
     /** Checks whether sector indexing was done properly */
-    // PetscErrorCode CheckSectors();
+    PetscErrorCode CheckSectors() const;
+
+    /** Checks whether blocks follow the correct sector indices */
+    PetscErrorCode CheckOperatorBlocks() const; /* TODO implementation */
+
+    /** Extracts the block structure for each operator */
+    PetscErrorCode GetOperatorBlocks(Op_t Operator); /* TODO implementation */
 
     /** Creates the Sm matrices on the fly */
     PetscErrorCode CreateSm();

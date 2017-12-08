@@ -1,7 +1,16 @@
 #include "DMRGBlockContainer.hpp"
+#include <iostream>
+
+PETSC_EXTERN PetscErrorCode Kron_Explicit(
+    const Block_SpinOneHalf& LeftBlock,
+    const Block_SpinOneHalf& RightBlock,
+    Block_SpinOneHalf& BlockOut,
+    PetscBool BuildHamiltonian
+    );
 
 
-PetscErrorCode HeisenbergSpinOneHalfLadder::Initialize()
+
+PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
 {
     PetscErrorCode ierr = 0;
 
@@ -42,7 +51,7 @@ PetscErrorCode HeisenbergSpinOneHalfLadder::Initialize()
     {
         ierr = PetscPrintf(mpi_comm,
             "\n"
-            "# HeisenbergSpinOneHalfLadder\n"
+            "# Heisenberg_SpinOneHalf_SquareLattice\n"
             "#   Coupling Constants:\n"
             "      J1 = %f\n"
             "      J2 = %f\n"
@@ -58,7 +67,7 @@ PetscErrorCode HeisenbergSpinOneHalfLadder::Initialize()
 }
 
 
-PetscErrorCode HeisenbergSpinOneHalfLadder::Destroy()
+PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Destroy()
 {
     PetscErrorCode ierr = 0;
 
@@ -81,15 +90,69 @@ PetscErrorCode HeisenbergSpinOneHalfLadder::Destroy()
     return ierr;
 }
 
-PetscErrorCode HeisenbergSpinOneHalfLadder::SingleDMRGStep(
-    const Block_SpinOneHalf& Sys,
-    const Block_SpinOneHalf& Env
-    )
+
+PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
+    const Block_SpinOneHalf& BlockIn,
+    Block_SpinOneHalf& BlockOut)
 {
     PetscErrorCode ierr = 0;
 
-    // if(&Sys==&Env) // object comparison by pointers
+    /*  Check whether all operators and sectors are usable */
+    ierr = BlockIn.CheckOperators(); CHKERRQ(ierr);
+    ierr = BlockIn.CheckSectors(); CHKERRQ(ierr);
 
+    #if 1
+        std::cout << "AddSite qn_list:   ";
+        for(auto i: AddSite.qn_list) std::cout << i << "   ";
+        std::cout << std::endl;
+
+        std::cout << "AddSite qn_size:   ";
+        for(auto i: AddSite.qn_size) std::cout << i << "   ";
+        std::cout << std::endl;
+
+        std::cout << "AddSite qn_offset: ";
+        for(auto i: AddSite.qn_offset) std::cout << i << "   ";
+        std::cout << std::endl;
+
+        std::cout << std::endl;
+
+        std::cout << "BlockIn qn_list:   ";
+        for(auto i: BlockIn.qn_list) std::cout << i << "   ";
+        std::cout << std::endl;
+
+        std::cout << "BlockIn qn_size:   ";
+        for(auto i: BlockIn.qn_size) std::cout << i << "   ";
+        std::cout << std::endl;
+
+        std::cout << "BlockIn qn_offset: ";
+        for(auto i: BlockIn.qn_offset) std::cout << i << "   ";
+        std::cout << std::endl;
+    #endif
+
+
+    ierr = Kron_Explicit(BlockIn, AddSite, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+
+
+    return ierr;
+}
+
+
+PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::SingleDMRGStep(
+    const Block_SpinOneHalf& Sys,
+    const Block_SpinOneHalf& Env,
+    Block_SpinOneHalf& SysOut)
+{
+    PetscErrorCode ierr = 0;
+
+    #if 0
+    /* This part should be done inside EnlargeBlock */
+    /* Check block operators */
+    ierr = Sys.CheckOperators(); CHKERRQ(ierr);
+    if(&Sys!=&Env){
+        /* Check the environment block only if it is distinct from the system block */
+        ierr = Env.CheckOperators(); CHKERRQ(ierr);
+    }
+    #endif
 
     return ierr;
 }

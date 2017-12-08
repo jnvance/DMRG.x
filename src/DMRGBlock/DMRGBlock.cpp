@@ -1,22 +1,36 @@
 #include "DMRGBlock.hpp"
+#include <numeric> // partial_sum
 
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 
+
+/** Miscellaneous function to calculate the offset vector given the size of each sector */
+std::vector<PetscInt> GetOffset(const std::vector<PetscInt>& sizes)
+{
+    std::vector<PetscInt> offset(sizes.size()+1);
+    offset[0] = 0;
+    for(PetscInt i = 1; i < sizes.size()+1; ++i)
+        offset[i] = offset[i-1] + sizes[i-1];
+
+    return offset;
+}
+
+
 PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in)
 {
     PetscErrorCode ierr = 0;
 
-    /* Check whether to do verbose logging */
+    /*  Check whether to do verbose logging  */
     ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
 
-    /* Initialize attributes*/
+    /*  Initialize attributes  */
     mpi_comm = comm_in;
     ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CPP_CHKERRQ(ierr);
     ierr = MPI_Comm_size(mpi_comm, &mpi_size); CPP_CHKERRQ(ierr);
 
-    /* Initial number of sites and number of states */
+    /*  Initial number of sites and number of states  */
     num_sites = num_sites_in;
     if(num_states_in == PETSC_DEFAULT){
         num_states = ipow(loc_dim, num_sites);
@@ -24,18 +38,28 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
         num_states = num_states_in;
     }
 
-    /* Initialize array of operator matrices */
+    /*  Initialize array of operator matrices  */
     ierr = PetscCalloc3(num_sites, &Sz, num_sites, &Sp, num_sites, &Sm); CHKERRQ(ierr);
 
-    /* Initialize single-site operators */
+    /*  Initialize switch  */
+    init = PETSC_TRUE;
+
+    /*  When creating a block for one site, initialize the single-site operators  */
     if (num_sites == 1)
     {
+        /*  Create the spin operators for the single site  */
         ierr = MatSpinOneHalfSzCreate(mpi_comm, Sz[0]); CHKERRQ(ierr);
         ierr = MatSpinOneHalfSpCreate(mpi_comm, Sp[0]); CHKERRQ(ierr);
-    }
 
-    /* Initialize switch */
-    init = PETSC_TRUE;
+        /*  Initialize the sector indexing for one site  */
+        qn_list = loc_qn_list;
+        qn_size = loc_qn_size;
+        num_sectors = qn_list.size();
+        qn_offset = GetOffset(qn_size);
+
+        /*  Check whether sector initialization was done right  */
+        ierr = CheckSectors(); CHKERRQ(ierr);
+    }
 
     return ierr;
 }
@@ -45,8 +69,8 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label)
 {
     PetscErrorCode ierr = 0;
 
-    /* Check the size of each matrix and make sure that it
-     * matches the number of basis states */
+    /*  Check the size of each matrix and make sure that it
+     *  matches the number of basis states  */
 
     PetscInt M, N;
     for(PetscInt isite = 0; isite < num_sites; ++isite)
@@ -77,6 +101,21 @@ PetscErrorCode Block_SpinOneHalf::CheckOperators() const
     if (init_Sm){
         ierr = CheckOperatorArray(Sm, "Sm"); CHKERRQ(ierr);
     }
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::CheckSectors() const
+{
+    PetscErrorCode ierr = 0;
+
+    if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
+
+    /*  The last element of qn_offset must match the total number of states  */
+    if(num_states != qn_offset.back())
+        SETERRQ2(mpi_comm,1,"Something is wrong with the last element of qn_offset. "
+            "Expected %d. Got %d.", num_states, qn_offset.back());
 
     return ierr;
 }
@@ -119,7 +158,7 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
 
     if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
 
-    /* Destroy operator matrices */
+    /*  Destroy operator matrices  */
     for(PetscInt isite = 0; isite < num_sites; ++isite)
     {
         ierr = MatDestroy(&Sz[isite]); CHKERRQ(ierr);

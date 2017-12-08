@@ -10,7 +10,7 @@
 #include "linalg_tools.hpp"
 
 
-class HeisenbergSpinOneHalfLadder
+class Heisenberg_SpinOneHalf_SquareLattice
 {
 
 private:
@@ -74,14 +74,26 @@ public:
     /** Static block containing single site operators for reference */
     Block_SpinOneHalf SingleSite;
 
+    /** Constant reference to added site */
+    const Block_SpinOneHalf& AddSite = SingleSite;
+
     /** Initializes the container object */
     PetscErrorCode Initialize();
 
-    /** Performs one single DMRG warmup step */
+    /** Performs one single DMRG step with Sys and Env */
     PetscErrorCode SingleDMRGStep(
         const Block_SpinOneHalf& Sys,
-        const Block_SpinOneHalf& Env
-        );
+        const Block_SpinOneHalf& Env,
+        Block_SpinOneHalf& SysOut);
+
+    /** Adds one site to BlockIn producing BlockOut */
+    PetscErrorCode EnlargeBlock(
+        const Block_SpinOneHalf& BlockIn,
+        Block_SpinOneHalf& BlockOut);
+
+
+
+
 
     /** Destroys the container object */
     PetscErrorCode Destroy();
