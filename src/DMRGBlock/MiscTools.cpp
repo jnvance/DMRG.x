@@ -95,7 +95,7 @@ PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscIn
 }
 
 
-PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat)
+PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat)
 {
     PetscErrorCode ierr = 0;
 
