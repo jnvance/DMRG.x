@@ -69,13 +69,24 @@ public:
     std::vector<PetscInt> qn_size;
 
 
-    /*------ Misc Functions ------*/
+    /*------ Checker Functions ------*/
 
     /** Determines whether the operator arrays have been successfully filled with matrices */
     PetscErrorCode CheckOperatorArray(Mat *Op, const char* label) const;
 
+    /*------ Getter Functions ------*/
+
     /** Indicates whether block has been initialized before us */
     PetscBool Initialized() const { return init; }
+
+    /** Gets the communicator associated to the block */
+    MPI_Comm MPIComm() const { return mpi_comm; }
+
+    /** Gets the number of sites that are currently initialized */
+    PetscInt NumSites() const {return num_sites; }
+
+    /** Gets the number of states that are currently used */
+    PetscInt NumStates() const {return num_states; }
 
     /*------ Operator Matrices ------*/
 
@@ -91,7 +102,9 @@ public:
     /** List of $S^-$ operators */
     Mat*    Sm = nullptr;
 
-    /** Initialize block object with input attributes and array of matrix operators */
+    /** Initialize block object with input attributes and array of matrix operators
+        Arrays of operator matrices are initialized to the correct number of sites and states
+     */
     PetscErrorCode Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in);
 
     /** Checks whether all operators have been initialized and have correct dimensions */
