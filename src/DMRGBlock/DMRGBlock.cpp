@@ -4,7 +4,7 @@
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
-
+PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 
 /** Miscellaneous function to calculate the offset vector given the size of each sector */
 std::vector<PetscInt> GetOffset(const std::vector<PetscInt>& sizes)
@@ -59,6 +59,16 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
 
         /*  Check whether sector initialization was done right  */
         ierr = CheckSectors(); CHKERRQ(ierr);
+    }
+    /*  When more than one site is requested, create all associated matrices and set the
+     *  correct sizes based on the number of states */
+    else if(num_sites > 1)
+    {
+        for(PetscInt isite = 0; isite < num_sites; ++isite)
+        {
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sz[isite]);
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sp[isite]);
+        }
     }
 
     return ierr;
