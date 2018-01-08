@@ -80,8 +80,10 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Destroy()
     delete [] SysBlocks;
     SysBlocks = nullptr;
 
-    /*  Deallocate environment block */
-    ierr = EnvBlock.Destroy(); CHKERRQ(ierr);
+    /*  Deallocate environment block only if initialized */
+    if(EnvBlock.Initialized()){
+        ierr = EnvBlock.Destroy(); CHKERRQ(ierr);
+    }
 
     if(verbose){
         ierr = PetscPrintf(mpi_comm,"\n\n"); CHKERRQ(ierr);
@@ -93,6 +95,7 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Destroy()
 
 PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
     const Block_SpinOneHalf& BlockIn,
+    const Side_t& AddSide,
     Block_SpinOneHalf& BlockOut)
 {
     PetscErrorCode ierr = 0;
@@ -129,9 +132,15 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
         std::cout << std::endl;
     #endif
 
-
-    ierr = Kron_Explicit(BlockIn, AddSite, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
-
+    /* Explicitly add a site */
+    if(AddSide==Right)
+    {
+        ierr = Kron_Explicit(BlockIn, AddSite, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+    }
+    else if(AddSide==Left)
+    {
+        ierr = Kron_Explicit(AddSite, BlockIn, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+    }
 
     return ierr;
 }
