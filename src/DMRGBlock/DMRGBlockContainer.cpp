@@ -101,7 +101,7 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
     ierr = BlockIn.CheckOperators(); CHKERRQ(ierr);
     ierr = BlockIn.CheckSectors(); CHKERRQ(ierr);
 
-    #if 1
+    #if 0
         std::cout << "AddSite qn_list:   ";
         for(auto i: AddSite.qn_list) std::cout << i << "   ";
         std::cout << std::endl;

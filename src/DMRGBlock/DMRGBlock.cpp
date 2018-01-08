@@ -60,14 +60,14 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
         /*  Check whether sector initialization was done right  */
         ierr = CheckSectors(); CHKERRQ(ierr);
     }
-    /*  When more than one site is requested, create all associated matrices and set the
+    /*  When more than one site is requested, create all operator matrices and set the
      *  correct sizes based on the number of states */
     else if(num_sites > 1)
     {
         for(PetscInt isite = 0; isite < num_sites; ++isite)
         {
-            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sz[isite]);
-            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sp[isite]);
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sz[isite]); CHKERRQ(ierr);
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sp[isite]); CHKERRQ(ierr);
         }
     }
 
@@ -179,6 +179,7 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
         ierr = DestroySm(); CHKERRQ(ierr);
     }
 
+    /*  Destroy arrays */
     ierr = PetscFree3(Sz, Sp, Sm); CHKERRQ(ierr);
     init = PETSC_FALSE;
 

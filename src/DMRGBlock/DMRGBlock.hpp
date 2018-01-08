@@ -55,6 +55,7 @@ private:
 
 public:
     /*------ Magnetization Sectors ------*/
+    /** TODO: Put in private and use self-consistent mutator and accessor functions */
 
     /** Number of Sz sectors in the Hilbert space */
     PetscInt num_sectors;
@@ -74,7 +75,7 @@ public:
     /** Determines whether the operator arrays have been successfully filled with matrices */
     PetscErrorCode CheckOperatorArray(Mat *Op, const char* label) const;
 
-    /*------ Getter Functions ------*/
+    /*------ Accessor Functions ------*/
 
     /** Indicates whether block has been initialized before us */
     PetscBool Initialized() const { return init; }
