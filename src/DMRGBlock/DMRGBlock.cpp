@@ -103,7 +103,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 {
     PetscErrorCode ierr = 0;
 
-    if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
+    if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
 
     ierr = CheckOperatorArray(Sz, "Sz"); CHKERRQ(ierr);
     ierr = CheckOperatorArray(Sp, "Sp"); CHKERRQ(ierr);
@@ -120,7 +120,7 @@ PetscErrorCode Block_SpinOneHalf::CheckSectors() const
 {
     PetscErrorCode ierr = 0;
 
-    if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
+    if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
 
     /*  The last element of qn_offset must match the total number of states  */
     if(num_states != qn_offset.back())
@@ -151,7 +151,7 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
 {
     PetscErrorCode ierr = 0;
 
-    if(!init_Sm) SETERRQ(mpi_comm, 1, "Sm not initialized. Nothing to destroy.");
+    if(!init_Sm) SETERRQ1(mpi_comm, 1, "%s was called but Sm was not yet initialized. Nothing to destroy.",__FUNCTION__);
 
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatDestroy(&Sm[isite]); CHKERRQ(ierr);
@@ -166,7 +166,7 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
 {
     PetscErrorCode ierr = 0;
 
-    if (!init) SETERRQ(mpi_comm, 1, "Block not yet initialized.");
+    if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
 
     /*  Destroy operator matrices  */
     for(PetscInt isite = 0; isite < num_sites; ++isite)
