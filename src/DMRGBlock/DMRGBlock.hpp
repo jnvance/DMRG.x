@@ -13,6 +13,13 @@ typedef enum {
 } Op_t;
 
 
+/** Identifies the side for each operator */
+typedef enum {
+    Left=0,
+    Right=1
+} Side_t;
+
+
 class Block_SpinOneHalf
 {
 
