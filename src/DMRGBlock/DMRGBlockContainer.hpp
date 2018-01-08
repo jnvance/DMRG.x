@@ -89,6 +89,7 @@ public:
     /** Adds one site to BlockIn producing BlockOut */
     PetscErrorCode EnlargeBlock(
         const Block_SpinOneHalf& BlockIn,
+        const Side_t& AddSide,
         Block_SpinOneHalf& BlockOut);
 
 
