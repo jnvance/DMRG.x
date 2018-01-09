@@ -69,29 +69,29 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     PRINT_RANK_BEGIN()
         std::cout << "***** Kron_Explicit *****" << std::endl;
         std::cout << "LeftBlock  qn_list:   ";
-        for(auto i: LeftBlock.qn_list) std::cout << i << "   ";
+        for(auto i: LeftBlock.Magnetization.List()) std::cout << i << "   ";
         std::cout << std::endl;
 
         std::cout << "LeftBlock  qn_size:   ";
-        for(auto i: LeftBlock.qn_size) std::cout << i << "   ";
+        for(auto i: LeftBlock.Magnetization.Sizes()) std::cout << i << "   ";
         std::cout << std::endl;
 
         std::cout << "LeftBlock  qn_offset: ";
-        for(auto i: LeftBlock.qn_offset) std::cout << i << "   ";
+        for(auto i: LeftBlock.Magnetization.Offsets()) std::cout << i << "   ";
         std::cout << std::endl;
 
         std::cout << std::endl;
 
         std::cout << "RightBlock qn_list:   ";
-        for(auto i: RightBlock.qn_list) std::cout << i << "   ";
+        for(auto i: RightBlock.Magnetization.List()) std::cout << i << "   ";
         std::cout << std::endl;
 
         std::cout << "RightBlock qn_size:   ";
-        for(auto i: RightBlock.qn_size) std::cout << i << "   ";
+        for(auto i: RightBlock.Magnetization.Sizes()) std::cout << i << "   ";
         std::cout << std::endl;
 
         std::cout << "RightBlock qn_offset: ";
-        for(auto i: RightBlock.qn_offset) std::cout << i << "   ";
+        for(auto i: RightBlock.Magnetization.Offsets()) std::cout << i << "   ";
         std::cout << std::endl;
     PRINT_RANK_END()
     #endif
@@ -99,15 +99,15 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     /*  Create a list of tuples of quantum numbers following the kronecker product structure */
     std::vector<KronBlock_t> KronBlocks;
     // for (PetscInt IL = LeftBlock.qn_list.size()-1; IL >= 0; --IL) // Checks sorting
-    for (size_t IL = 0; IL < LeftBlock.qn_list.size(); ++IL)
+    for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL)
     {
-        for (size_t IR = 0; IR < RightBlock.qn_list.size(); ++IR)
+        for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR)
         {
-            KronBlocks.push_back({LeftBlock.qn_list[IL] + RightBlock.qn_list[IR], IL, IR});
+            KronBlocks.push_back({LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR});
         }
     }
 
-    /*  Sort the list according to quantum numbers */
+    /*  Sort the list in descending order of quantum numbers */
     std::stable_sort(KronBlocks.begin(), KronBlocks.end(), compare_descending_qn);
 
     #if DMRG_KRON_TESTING

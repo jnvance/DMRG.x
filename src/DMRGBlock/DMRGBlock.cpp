@@ -1,24 +1,17 @@
 #include "DMRGBlock.hpp"
 #include <numeric> // partial_sum
+#include <iostream>
 
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 
-/** Miscellaneous function to calculate the offset vector given the size of each sector */
-std::vector<PetscInt> GetOffset(const std::vector<PetscInt>& sizes)
-{
-    std::vector<PetscInt> offset(sizes.size()+1);
-    offset[0] = 0;
-    for(PetscInt i = 1; i < sizes.size()+1; ++i)
-        offset[i] = offset[i-1] + sizes[i-1];
 
-    return offset;
-}
-
-
-PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in)
+PetscErrorCode Block_SpinOneHalf::Initialize(
+    const MPI_Comm& comm_in,
+    PetscInt num_sites_in,
+    PetscInt num_states_in)
 {
     PetscErrorCode ierr = 0;
 
@@ -51,11 +44,8 @@ PetscErrorCode Block_SpinOneHalf::Initialize(const MPI_Comm& comm_in, PetscInt n
         ierr = MatSpinOneHalfSzCreate(mpi_comm, Sz[0]); CHKERRQ(ierr);
         ierr = MatSpinOneHalfSpCreate(mpi_comm, Sp[0]); CHKERRQ(ierr);
 
-        /*  Initialize the sector indexing for one site  */
-        qn_list = loc_qn_list;
-        qn_size = loc_qn_size;
-        num_sectors = qn_list.size();
-        qn_offset = GetOffset(qn_size);
+        /*  Initialize the magnetization sectors using the defaults for one site */
+        ierr = Magnetization.Initialize(mpi_comm, loc_qn_list, loc_qn_size); CHKERRQ(ierr);
 
         /*  Check whether sector initialization was done right  */
         ierr = CheckSectors(); CHKERRQ(ierr);
@@ -123,9 +113,10 @@ PetscErrorCode Block_SpinOneHalf::CheckSectors() const
     if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
 
     /*  The last element of qn_offset must match the total number of states  */
-    if(num_states != qn_offset.back())
+    PetscInt magNumStates = Magnetization.NumStates();
+    if(num_states != magNumStates)
         SETERRQ2(mpi_comm,1,"Something is wrong with the last element of qn_offset. "
-            "Expected %d. Got %d.", num_states, qn_offset.back());
+            "Expected %d. Got %d.", num_states, magNumStates);
 
     return ierr;
 }

@@ -2,6 +2,7 @@
 #define __DMRG_SITE_HPP
 
 #include <petscmat.h>
+#include "QuantumNumbers.hpp"
 #include "kron.hpp"
 #include "linalg_tools.hpp"
 
@@ -61,21 +62,9 @@ private:
     PetscBool init_Sm = PETSC_FALSE;
 
 public:
+
     /*------ Magnetization Sectors ------*/
-    /** TODO: Put in private and use self-consistent mutator and accessor functions */
-
-    /** Number of Sz sectors in the Hilbert space */
-    PetscInt num_sectors;
-
-    /** List of Sz quantum numbers */
-    std::vector<PetscReal> qn_list;
-
-    /** Offset for each quantum number block */
-    std::vector<PetscInt> qn_offset;
-
-    /** Number of states in each quantum number block */
-    std::vector<PetscInt> qn_size;
-
+    QuantumNumbers Magnetization;
 
     /*------ Checker Functions ------*/
 

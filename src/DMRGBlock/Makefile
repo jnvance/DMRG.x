@@ -6,7 +6,7 @@ CXXFLAGS += -O3 -std=c++11 -Wall -I${PWD}/..
 # CXXFLAGS += -D__KRON_TIMINGS
 # CXXFLAGS += -D__KRON_PS_TIMINGS
 
-MAIN_DEPS = DMRGBlockContainer.o DMRGBlock.o DMRGKron.o MiscTools.o ../linalg_tools.o
+MAIN_DEPS = DMRGBlockContainer.o DMRGBlock.o DMRGKron.o QuantumNumbers.o MiscTools.o ../linalg_tools.o
 # ../linalg_tools.o ../kron.o
 
 all: ${TARGETS}
