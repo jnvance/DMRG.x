@@ -92,8 +92,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label)
 PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 {
     PetscErrorCode ierr = 0;
-
-    if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
+    CheckInit(__FUNCTION__);
 
     ierr = CheckOperatorArray(Sz, "Sz"); CHKERRQ(ierr);
     ierr = CheckOperatorArray(Sp, "Sp"); CHKERRQ(ierr);
@@ -109,8 +108,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 PetscErrorCode Block_SpinOneHalf::CheckSectors() const
 {
     PetscErrorCode ierr = 0;
-
-    if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
+    CheckInit(__FUNCTION__);
 
     /*  The last element of qn_offset must match the total number of states  */
     PetscInt magNumStates = Magnetization.NumStates();
@@ -156,8 +154,7 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
 PetscErrorCode Block_SpinOneHalf::Destroy()
 {
     PetscErrorCode ierr = 0;
-
-    if (!init) SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",__FUNCTION__);
+    CheckInit(__FUNCTION__);
 
     /*  Destroy operator matrices  */
     for(PetscInt isite = 0; isite < num_sites; ++isite)

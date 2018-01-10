@@ -21,6 +21,10 @@ typedef enum {
 } Side_t;
 
 
+#define CheckInit(func) if (PetscUnlikely(!init))\
+    SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",func);
+
+
 class Block_SpinOneHalf
 {
 
