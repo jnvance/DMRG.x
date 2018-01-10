@@ -69,6 +69,20 @@ public:
         return num_states;
     }
 
+    /** Maps the quantum number block index to the global indices [start,end) */
+    PetscErrorCode BlockIdxToGlobalRange(
+        const PetscInt& BlockIdx,
+        PetscInt& GlobIdxStart,
+        PetscInt& GlobIdxEnd
+        ) const;
+
+    /** Maps the quantum number value to the global indices [start,end) */
+    PetscErrorCode QNToGlobalRange(
+        const PetscReal& QNValue,
+        PetscInt& GlobIdxStart,
+        PetscInt& GlobIdxEnd
+        ) const;
+
 };
 
 #endif
