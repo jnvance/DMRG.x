@@ -2,9 +2,9 @@
 
 
 PetscErrorCode QuantumNumbers::Initialize(
-    MPI_Comm mpi_comm_in,
-    std::vector<PetscReal> qn_list_in,
-    std::vector<PetscInt> qn_size_in
+    const MPI_Comm& mpi_comm_in,
+    const std::vector<PetscReal>& qn_list_in,
+    const std::vector<PetscInt>& qn_size_in
     )
 {
     mpi_comm = mpi_comm_in;

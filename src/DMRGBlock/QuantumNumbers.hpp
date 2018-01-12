@@ -11,7 +11,7 @@ class QuantumNumbers
 private:
 
     /** MPI Communicator */
-    MPI_Comm mpi_comm;
+    MPI_Comm mpi_comm = PETSC_COMM_SELF;
 
     /** Number of Sz sectors in the Hilbert space */
     PetscInt num_sectors;
@@ -35,9 +35,9 @@ public:
 
     /** Initializes the object */
     PetscErrorCode Initialize(
-        MPI_Comm mpi_comm_in,
-        std::vector<PetscReal> qn_list_in,
-        std::vector<PetscInt> qn_size_in);
+        const MPI_Comm& mpi_comm_in,
+        const std::vector<PetscReal>& qn_list_in,
+        const std::vector<PetscInt>& qn_size_in);
 
     /** Accesses the number of quantum number sectors */
     PetscInt NumSectors() const {
