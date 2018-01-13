@@ -83,6 +83,18 @@ public:
         PetscInt& GlobIdxEnd
         ) const;
 
+    /** Maps the global index to block index */
+    PetscErrorCode GlobalIdxToBlockIdx(
+        const PetscInt& GlobIdx,
+        PetscInt& BlockIdx
+        ) const;
+
+    /** Maps the global index to quantum number */
+    PetscErrorCode GlobalIdxToQN(
+        const PetscInt& GlobIdx,
+        PetscReal& QNValue
+        ) const;
+
 };
 
 #endif

@@ -66,3 +66,37 @@ PetscErrorCode QuantumNumbers::QNToGlobalRange(
 
     return 0;
 }
+
+
+PetscErrorCode QuantumNumbers::GlobalIdxToBlockIdx(
+    const PetscInt& GlobIdx,
+    PetscInt& BlockIdx
+    ) const
+{
+    PetscInt ierr = 0;
+
+    if(PetscUnlikely(!initialized))
+        SETERRQ(mpi_comm, 1, "Object not initialized. Call Initialize() first.");
+
+    if(PetscUnlikely(GlobIdx < 0 || GlobIdx >= num_states))
+        SETERRQ2(PETSC_COMM_SELF, 1, "Given GlobIdx (%d) out of bounds [0,%d).", GlobIdx, num_states);
+
+    BlockIdx = -1;
+    while(GlobIdx >= qn_offset[BlockIdx+1]) ++BlockIdx;
+
+    return 0;
+}
+
+
+PetscErrorCode QuantumNumbers::GlobalIdxToQN(
+    const PetscInt& GlobIdx,
+    PetscReal& QNValue
+    ) const
+{
+    PetscInt ierr = 0;
+
+    PetscInt BlockIdx;
+    ierr = GlobalIdxToBlockIdx(GlobIdx, BlockIdx); CHKERRQ(ierr);
+
+    return 0;
+}
