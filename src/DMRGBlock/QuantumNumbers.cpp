@@ -84,7 +84,7 @@ PetscErrorCode QuantumNumbers::GlobalIdxToBlockIdx(
     BlockIdx = -1;
     while(GlobIdx >= qn_offset[BlockIdx+1]) ++BlockIdx;
 
-    return 0;
+    return ierr;
 }
 
 
@@ -98,5 +98,5 @@ PetscErrorCode QuantumNumbers::GlobalIdxToQN(
     PetscInt BlockIdx;
     ierr = GlobalIdxToBlockIdx(GlobIdx, BlockIdx); CHKERRQ(ierr);
 
-    return 0;
+    return ierr;
 }
