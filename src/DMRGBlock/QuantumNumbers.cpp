@@ -9,8 +9,10 @@ PetscErrorCode QuantumNumbers::Initialize(
 {
     mpi_comm = mpi_comm_in;
 
-    if(qn_list_in.size()==0) SETERRQ(mpi_comm,1,"Initialization error: Empty input list.");
-    if(qn_list_in.size()!=qn_size_in.size()) SETERRQ(mpi_comm,1,"Initialization error: Input list sizes mismatch.");
+    if(qn_list_in.size()==0)
+        SETERRQ(mpi_comm,1,"Initialization error: Empty input list.");
+    if(qn_list_in.size()!=qn_size_in.size())
+        SETERRQ(mpi_comm,1,"Initialization error: Input list sizes mismatch.");
 
     num_sectors = (PetscInt) qn_list_in.size();
     qn_list = qn_list_in;
@@ -55,7 +57,7 @@ PetscErrorCode QuantumNumbers::QNToGlobalRange(
     if(PetscUnlikely(!initialized))
         SETERRQ(mpi_comm, 1, "Object not initialized. Call Initialize() first.");
 
-    /*  Search QNValue from qn_list and get index */
+    /*  Search QNValue from qn_list and get the index */
     PetscInt BlockIdx = std::find(qn_list.begin(), qn_list.end(), QNValue) - qn_list.begin();
 
     if(PetscUnlikely(BlockIdx==num_sectors))
