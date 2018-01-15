@@ -76,6 +76,15 @@ public:
         PetscInt& GlobIdxEnd
         ) const;
 
+    /** Maps the shifted quantum number block index to the global indices [start,end) */
+    PetscErrorCode OpBlockToGlobalRange(
+        const PetscInt& BlockIdx,
+        const PetscInt& BlockShift,
+        PetscInt& GlobIdxStart,
+        PetscInt& GlobIdxEnd,
+        PetscBool& flg
+        ) const;
+
     /** Maps the quantum number value to the global indices [start,end) */
     PetscErrorCode QNToGlobalRange(
         const PetscReal& QNValue,

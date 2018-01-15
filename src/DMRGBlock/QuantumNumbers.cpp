@@ -48,6 +48,33 @@ PetscErrorCode QuantumNumbers::BlockIdxToGlobalRange(
 }
 
 
+PetscErrorCode QuantumNumbers::OpBlockToGlobalRange(
+    const PetscInt& BlockIdx,
+    const PetscInt& BlockShift,
+    PetscInt& GlobIdxStart,
+    PetscInt& GlobIdxEnd,
+    PetscBool& flg
+    ) const
+{
+    if(PetscUnlikely(!initialized))
+        SETERRQ(mpi_comm, 1, "Object not initialized. Call Initialize() first.");
+    if(PetscUnlikely((BlockIdx < 0) || (BlockIdx >= num_sectors)))
+        SETERRQ2(mpi_comm, 1, "Given BlockIdx (%d) out of bounds [0,%d).", BlockIdx, num_sectors);
+
+    PetscInt BlockIdx_out = BlockIdx + BlockShift;
+    if(BlockIdx_out < 0 || BlockIdx_out >= num_states)
+    {
+        flg = PETSC_FALSE;
+        return 0;
+    }
+
+    flg = PETSC_TRUE;
+    GlobIdxStart = qn_offset[BlockIdx_out];
+    GlobIdxEnd   = qn_offset[BlockIdx_out + 1];
+    return 0;
+}
+
+
 PetscErrorCode QuantumNumbers::QNToGlobalRange(
     const PetscReal& QNValue,
     PetscInt& GlobIdxStart,
