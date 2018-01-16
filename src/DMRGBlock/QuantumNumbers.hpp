@@ -5,6 +5,8 @@
 #include <vector>
 #include <cassert>
 
+#define DMRG_ERR_OUTOFBOUNDS        1001        /* An input index went out of bounds */
+
 class QuantumNumbers
 {
 
@@ -76,7 +78,8 @@ public:
         PetscInt& GlobIdxEnd
         ) const;
 
-    /** Maps the shifted quantum number block index to the global indices [start,end) */
+    /** Maps the shifted quantum number block index to the global indices [start,end)
+        The value of flg is set to PETSC_TRUE if the output block exists, PETSC_FALSE otherwise */
     PetscErrorCode OpBlockToGlobalRange(
         const PetscInt& BlockIdx,
         const PetscInt& BlockShift,

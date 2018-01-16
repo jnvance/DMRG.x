@@ -18,6 +18,10 @@ PetscErrorCode QuantumNumbers::Initialize(
     if(qn_list_in.size()!=qn_size_in.size())
         SETERRQ(mpi_comm,1,"Initialization error: Input list sizes mismatch.");
 
+    /* FIXME: Ensure that inputs are the same across entire communicator */
+    /* FIXME: Ensure that input list is in descending order */
+    /* FIXME: Think about how to handle zero-sized quantum number blocks esp in the context of truncation */
+
     num_sectors = (PetscInt) qn_list_in.size();
     qn_list = qn_list_in;
     qn_size = qn_size_in;
