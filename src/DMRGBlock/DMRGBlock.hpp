@@ -21,10 +21,6 @@ typedef enum {
 } Side_t;
 
 
-#define CheckInit(func) if (PetscUnlikely(!init))\
-    SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",func);
-
-
 class Block_SpinOneHalf
 {
 
@@ -104,8 +100,7 @@ public:
     Mat*    Sm = nullptr;
 
     /** Initialize block object with input attributes and array of matrix operators
-        Arrays of operator matrices are initialized to the correct number of sites and states
-     */
+        Arrays of operator matrices are initialized to the correct number of sites and states */
     PetscErrorCode Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in);
 
     /** Checks whether all operators have been initialized and have correct dimensions */
@@ -114,7 +109,12 @@ public:
     /** Checks whether sector indexing was done properly */
     PetscErrorCode CheckSectors() const;
 
-    /** Checks whether blocks follow the correct sector indices */
+    /** Checks the block indexing in the matrix
+        NOTE: This may be a costly operation as it checks every row of every operator */
+    PetscErrorCode MatCheckOperatorBlocks(const Op_t& op_t, const PetscInt& isite) const;
+
+    /** Checks whether matrix blocks follow the correct sector indices
+        NOTE: This may be a costly operation as it uses MatCheckOperatorBlocks */
     PetscErrorCode CheckOperatorBlocks() const; /* TODO implementation */
 
     /** Extracts the block structure for each operator */

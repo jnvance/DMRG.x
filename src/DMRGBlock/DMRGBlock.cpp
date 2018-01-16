@@ -1,12 +1,24 @@
 #include "DMRGBlock.hpp"
 #include <numeric> // partial_sum
 #include <iostream>
+#include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
+#include <../src/mat/impls/aij/mpi/mpiaij.h> /* Mat_MPIAIJ */
 
+/* External functions taken from MiscTools.cpp */
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz);
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
+PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 
+/* Internal macro for checking the initialization state of the block object */
+#define CheckInit(func) if (PetscUnlikely(!init))\
+    SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",func);
+
+/* Internal macro for checking that a column index belongs in the magnetization block boundaries */
+#define CheckIndex(row, col, cstart, cend) if((col) < (cstart) || (col) >= (cend))\
+    SETERRQ4(PETSC_COMM_SELF, DMRG_ERR_OUTOFBOUNDS, "On row %d, index %d out of bounds [%d,%d) ",\
+        (row), (col), (cstart), (cend));
 
 PetscErrorCode Block_SpinOneHalf::Initialize(
     const MPI_Comm& comm_in,
@@ -115,6 +127,106 @@ PetscErrorCode Block_SpinOneHalf::CheckSectors() const
     if(num_states != magNumStates)
         SETERRQ2(mpi_comm,1,"Something is wrong with the last element of qn_offset. "
             "Expected %d. Got %d.", num_states, magNumStates);
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
+{
+    PetscErrorCode ierr = 0;
+
+    /* Decipher inputs */
+    Mat matin;
+    if(isite >= num_sites)
+        SETERRQ2(mpi_comm, 1, "Input isite (%d) out of bounds [0,%d).", isite, num_sites);
+    switch(OpType) {
+        case OpSm: matin = Sm[isite]; break;
+        case OpSz: matin = Sz[isite]; break;
+        case OpSp: matin = Sp[isite]; break;
+        default: SETERRQ(mpi_comm, 1, "Incorrect operator type.");
+    }
+    /* Ensure that the matrix is assembled */
+    ierr = MatEnsureAssembled(matin); CHKERRQ(ierr);
+
+    /* Get row and column layout */
+    PetscInt rstart = matin->rmap->rstart;
+    PetscInt lrows  = matin->rmap->n;
+    PetscInt cstart = matin->cmap->rstart;
+    // PetscInt lcols  = matin->cmap->n;
+
+    /* Check the matrix type */
+    PetscBool matin_is_mpiaij;
+    ierr = PetscObjectTypeCompare((PetscObject)matin, MATMPIAIJ, &matin_is_mpiaij); CHKERRQ(ierr);
+
+    /* Do specific tasks for MATMPIAIJ using the diagonal structure */
+    if(matin_is_mpiaij){
+        /* Extract diagonal (A) and off-diagonal (B) sequential matrices */
+        Mat_MPIAIJ *mat = (Mat_MPIAIJ*)matin->data;
+        PetscInt *cmap = mat->garray;
+
+        PetscInt nzA, nzB, *cA=nullptr, *cB=nullptr;
+
+        /* Determine the starting block */
+        PetscBool flg;
+        PetscInt row_BlockIdx, col_GlobIdxStart, col_GlobIdxEnd;
+        const std::vector<PetscInt>& qn_offset = Magnetization.Offsets();
+
+        /* Calculate block boundaries */
+        ierr = Magnetization.GlobalIdxToBlockIdx(rstart, row_BlockIdx); CHKERRQ(ierr); /* Call this function once */
+        ierr = Magnetization.OpBlockToGlobalRange(row_BlockIdx, OpType, col_GlobIdxStart, col_GlobIdxEnd, flg); CHKERRQ(ierr);
+
+        for(PetscInt lrow = 0; lrow < lrows ; ++lrow)
+        {
+            /* Decide whether to move to next BlockIdx for the current row */
+            if(lrow+rstart >= qn_offset[row_BlockIdx+1]){
+                ++row_BlockIdx;
+                ierr = Magnetization.OpBlockToGlobalRange(row_BlockIdx, OpType, col_GlobIdxStart, col_GlobIdxEnd, flg); CHKERRQ(ierr);
+            }
+
+            ierr  = (*mat->A->ops->getrow)(mat->A, lrow, &nzA, &cA, nullptr);CHKERRQ(ierr);
+            ierr  = (*mat->B->ops->getrow)(mat->B, lrow, &nzB, &cB, nullptr);CHKERRQ(ierr);
+
+            if(!flg && nzA!=0 && nzB!=0)
+                SETERRQ1(PETSC_COMM_SELF, 1, "Row %d should have zero entries.", lrow+rstart);
+
+            /* Check first and last element assuming entries are sorted */
+            if(nzA){
+                CheckIndex(lrow+rstart, cA[0] + cstart,     col_GlobIdxStart, col_GlobIdxEnd);
+                CheckIndex(lrow+rstart, cA[nzA-1] + cstart, col_GlobIdxStart, col_GlobIdxEnd);
+            }
+
+            if(nzB){
+                CheckIndex(lrow+rstart, cmap[cB[0]],     col_GlobIdxStart, col_GlobIdxEnd);
+                CheckIndex(lrow+rstart, cmap[cB[nzB-1]], col_GlobIdxStart, col_GlobIdxEnd);
+            }
+        }
+    }
+    else{
+        SETERRQ(mpi_comm, 1, "Implemented only for MATMPIAIJ.");
+    }
+
+    return ierr;
+}
+
+
+PetscErrorCode Block_SpinOneHalf::CheckOperatorBlocks() const
+{
+    PetscErrorCode ierr = 0;
+    CheckInit(__FUNCTION__);
+
+    /* Check all operator matrices */
+    ierr = CheckOperators(); CHKERRQ(ierr);
+
+    /* Check operator blocks of Sz matrices */
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = MatCheckOperatorBlocks(OpSz, isite); CHKERRQ(ierr);
+    }
+
+    /* Check operator blocks of Sp matrices */
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = MatCheckOperatorBlocks(OpSp, isite); CHKERRQ(ierr);
+    }
 
     return ierr;
 }
