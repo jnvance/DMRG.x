@@ -164,3 +164,19 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp
     ierr = MatAssemblyEnd(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     return ierr;
 }
+
+
+PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin)
+{
+    PetscErrorCode ierr = 0;
+
+    PetscBool assembled;
+    ierr = MatAssembled(matin, &assembled); CHKERRQ(ierr);
+    if(!assembled)
+    {
+        ierr = MatAssemblyBegin(matin, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(matin, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
