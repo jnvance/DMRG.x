@@ -15,6 +15,9 @@ main.x: main.o ${MAIN_DEPS} chkopts
 	-${CLINKER} -o main.x main.o ${MAIN_DEPS} ${SLEPC_EPS_LIB}
 	${RM} main.o
 
+docs:
+	cd ../.. && doxygen Doxyfile
+
 flush: clean
 	${RM} ${TARGETS} *.dat *.dat.info *.x
 	${RM} -rf test_kron/*

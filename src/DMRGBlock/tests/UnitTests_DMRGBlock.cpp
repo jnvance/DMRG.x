@@ -55,7 +55,7 @@ PetscErrorCode Test_MatCheckOperatorBlocks()
     ierr = MatPeek(blk.Sp[0], "blk.Sp[0]"); CHKERRQ(ierr);
     ierr = blk.MatCheckOperatorBlocks(OpSp, 0); CHKERRQ(ierr);
 
-    /*  Set the entries of Sz[1] following the incorrect sectors */
+    /*  Set the entries of Sz[1] following the INCORRECT sectors */
     ierr = SetRow(blk.Sz[1], 0, {0,1}); CHKERRQ(ierr);
     ierr = SetRow(blk.Sz[1], 1, {1}); CHKERRQ(ierr);
     ierr = SetRow(blk.Sz[1], 2, {2,3,4}); CHKERRQ(ierr);
@@ -70,7 +70,7 @@ PetscErrorCode Test_MatCheckOperatorBlocks()
         PetscInt rstart, rend;
         MatGetOwnershipRange(blk.Sz[1], &rstart, &rend);
         if(rstart <= 7 && 7 < rend){
-            if(ierr!=DMRG_ERR_OUTOFBOUNDS){
+            if(ierr!=PETSC_ERR_ARG_OUTOFRANGE){
                 SETERRQ(PETSC_COMM_SELF, 1, "Failed test");
             } else {
                 printf("\n    Exception caught. :)\n\n");

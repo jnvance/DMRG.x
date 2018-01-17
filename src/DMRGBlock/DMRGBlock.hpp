@@ -1,32 +1,40 @@
 #ifndef __DMRG_SITE_HPP
 #define __DMRG_SITE_HPP
 
+/**
+    @defgroup   DMRGBlock   Block
+    @brief      Implementation of the Block_SpinOneHalf class which contains the data and methods
+                for a block of spin sites
+    @addtogroup DMRGBlock
+    @{ */
+
 #include <petscmat.h>
 #include "QuantumNumbers.hpp"
 #include "kron.hpp"
 #include "linalg_tools.hpp"
 
-/** Defines the offset of each operator */
-typedef enum {
-    OpSm=-1,
-    OpSz=0,
-    OpSp=+1
+/** Identifies the three possible spin operators and also represents the shift associated
+    to its action on the quantum number blocks */
+typedef enum
+{
+    OpSm = -1,  /**< \f$ S^- \f$ operator */
+    OpSz = 0,   /**< \f$ S^z \f$ operator */
+    OpSp = +1   /**< \f$ S^+ \f$ operator */
 } Op_t;
 
-
-/** Identifies the side for each operator */
-typedef enum {
-    Left=0,
-    Right=1
+/** Identifies the sides of the DMRG block */
+typedef enum
+{
+    SideLeft = 0,   /**< left block */
+    SideRight = 1   /**< right block */
 } Side_t;
 
-
+/** Contains the matrix representations of the operators of a block of spin-1/2 sites, the associated
+    magnetization sectors and some useful information and checking functions */
 class Block_SpinOneHalf
 {
 
 private:
-
-    /*------ Basic attributes ------*/
 
     /** MPI Communicator */
     MPI_Comm        mpi_comm;
@@ -37,13 +45,16 @@ private:
     /** MPI size of mpi_comm */
     PetscMPIInt     mpi_size;
 
-    /** Local dimension of a single site */
+    /** Local dimension of a single site.
+        @remarks __NOTE:__ Default for spin-1/2 */
     const PetscInt loc_dim = 2;
 
-    /** Sz sectors of a single site */
+    /** Sz sectors of a single site.
+        @remarks __NOTE:__ Default for spin-1/2 */
     const std::vector<PetscScalar> loc_qn_list = {+0.5, -0.5};
 
-    /** Number of states in each sector in a single site */
+    /** Number of states in each sector in a single site.
+        @remarks __NOTE:__ Default for spin-1/2 */
     const std::vector<PetscInt> loc_qn_size = {1, 1};
 
     /** Tells whether the block was initialized */
@@ -63,17 +74,31 @@ private:
 
 public:
 
-    /*------ Magnetization Sectors ------*/
+    /** Initializes block object with input attributes and array of matrix operators.
+        @post Arrays of operator matrices are initialized to the correct number of sites and states.
+        @remarks __TODO:__ Consider interfacing this to the object constructor.
+    */
+    PetscErrorCode Initialize(
+        const MPI_Comm& comm_in,    /**< [in] MPI communicator */
+        PetscInt num_sites_in,      /**< [in] Number of sites */
+        PetscInt num_states_in      /**< [in] Number of states (or PETSC_DEFAULT) */
+        );
+
+    /** Destroys all operator matrices and frees memory.
+        @remarks __TODO:__ Consider interfacing this to the object desctructor */
+    PetscErrorCode Destroy();
+
+    /** Stores the information on the magnetization Sectors */
     QuantumNumbers Magnetization;
 
-    /*------ Checker Functions ------*/
+    /** Determines whether the operator arrays have been successfully filled with matrices.
+        @remarks __TODO:__ Change the interface to take in only Op_t */
+    PetscErrorCode CheckOperatorArray(
+        Mat *Op,            /**< [in] pointer to the array of operator matrices */
+        const char* label   /**< [in] string identifying the operator matrices */
+        ) const;
 
-    /** Determines whether the operator arrays have been successfully filled with matrices */
-    PetscErrorCode CheckOperatorArray(Mat *Op, const char* label) const;
-
-    /*------ Accessor Functions ------*/
-
-    /** Indicates whether block has been initialized before us */
+    /** Indicates whether block has been initialized before using it */
     PetscBool Initialized() const { return init; }
 
     /** Gets the communicator associated to the block */
@@ -85,23 +110,17 @@ public:
     /** Gets the number of states that are currently used */
     PetscInt NumStates() const {return num_states; }
 
-    /*------ Operator Matrices ------*/
-
     /** Matrix representation of the Hamiltonian operator */
     Mat     H = nullptr;
 
-    /** List of $S^z$ operators */
+    /** Array of matrices representing \f$S^z\f$ operators */
     Mat*    Sz = nullptr;
 
-    /** List of $S^+$ operators */
+    /** Array of matrices representing \f$S^+\f$ operators */
     Mat*    Sp = nullptr;
 
-    /** List of $S^-$ operators */
+    /** Array of matrices representing \f$S^-\f$ operators */
     Mat*    Sm = nullptr;
-
-    /** Initialize block object with input attributes and array of matrix operators
-        Arrays of operator matrices are initialized to the correct number of sites and states */
-    PetscErrorCode Initialize(const MPI_Comm& comm_in, PetscInt num_sites_in, PetscInt num_states_in);
 
     /** Checks whether all operators have been initialized and have correct dimensions */
     PetscErrorCode CheckOperators() const;
@@ -109,16 +128,19 @@ public:
     /** Checks whether sector indexing was done properly */
     PetscErrorCode CheckSectors() const;
 
-    /** Checks the block indexing in the matrix
-        NOTE: This may be a costly operation as it checks every row of every operator */
-    PetscErrorCode MatCheckOperatorBlocks(const Op_t& op_t, const PetscInt& isite) const;
+    /** Checks the block indexing in the matrix operator op_t on site isite.
+        @pre Implemented only for MPIAIJ matrices */
+    PetscErrorCode MatCheckOperatorBlocks(
+        const Op_t& op_t,       /**< [in] operator type */
+        const PetscInt& isite   /**< [in] site index */
+        ) const;
 
-    /** Checks whether matrix blocks follow the correct sector indices
-        NOTE: This may be a costly operation as it uses MatCheckOperatorBlocks */
-    PetscErrorCode CheckOperatorBlocks() const; /* TODO implementation */
+    /** Checks whether all matrix blocks follow the correct sector indices using MatCheckOperatorBlocks() */
+    PetscErrorCode CheckOperatorBlocks() const;
 
-    /** Extracts the block structure for each operator */
-    PetscErrorCode GetOperatorBlocks(Op_t Operator); /* TODO implementation */
+    /** Extracts the block structure for each operator.
+        @remark __TODO:__ Implementation */
+    PetscErrorCode GetOperatorBlocks(Op_t Operator);
 
     /** Creates the Sm matrices on the fly */
     PetscErrorCode CreateSm();
@@ -126,9 +148,10 @@ public:
     /** Destroys the Sm matrices on the fly */
     PetscErrorCode DestroySm();
 
-    /** Destroys all operator matrices and frees memory */
-    PetscErrorCode Destroy();
-
 };
+
+/**
+    @}
+ */
 
 #endif // __DMRG_SITE_HPP

@@ -13,11 +13,11 @@ PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 
 /* Internal macro for checking the initialization state of the block object */
 #define CheckInit(func) if (PetscUnlikely(!init))\
-    SETERRQ1(mpi_comm, 1, "%s was called but block was not yet initialized.",func);
+    SETERRQ1(mpi_comm, PETSC_ERR_ARG_CORRUPT, "%s was called but block was not yet initialized.",func);
 
 /* Internal macro for checking that a column index belongs in the magnetization block boundaries */
 #define CheckIndex(row, col, cstart, cend) if((col) < (cstart) || (col) >= (cend))\
-    SETERRQ4(PETSC_COMM_SELF, DMRG_ERR_OUTOFBOUNDS, "On row %d, index %d out of bounds [%d,%d) ",\
+    SETERRQ4(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "On row %d, index %d out of bounds [%d,%d) ",\
         (row), (col), (cstart), (cend));
 
 PetscErrorCode Block_SpinOneHalf::Initialize(
@@ -42,6 +42,7 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     } else{
         num_states = num_states_in;
     }
+    /** If num_states_in is PETSC_DEFAULT, the number of states is calculated exactly from the number of sites */
 
     /*  Initialize array of operator matrices  */
     ierr = PetscCalloc3(num_sites, &Sz, num_sites, &Sp, num_sites, &Sm); CHKERRQ(ierr);
@@ -49,7 +50,7 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     /*  Initialize switch  */
     init = PETSC_TRUE;
 
-    /*  When creating a block for one site, initialize the single-site operators  */
+    /**  When creating a block for one site, the single-site operators are initialized using the defaults */
     if (num_sites == 1)
     {
         /*  Create the spin operators for the single site  */
@@ -62,8 +63,8 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
         /*  Check whether sector initialization was done right  */
         ierr = CheckSectors(); CHKERRQ(ierr);
     }
-    /*  When more than one site is requested, create all operator matrices and set the
-     *  correct sizes based on the number of states */
+    /** When more than one site is requested, all operator matrices are created with the correct sizes based on the
+        number of states */
     else if(num_sites > 1)
     {
         for(PetscInt isite = 0; isite < num_sites; ++isite)
@@ -82,18 +83,22 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label)
     PetscErrorCode ierr = 0;
 
     /*  Check the size of each matrix and make sure that it
-     *  matches the number of basis states  */
-
+        matches the number of basis states  */
     PetscInt M, N;
     for(PetscInt isite = 0; isite < num_sites; ++isite)
     {
         if(!Op[isite])
-            SETERRQ2(mpi_comm, 1, "%s[%d] matrix not yet created.", label, isite);
+            /** @throw PETSC_ERR_ARG_CORRUPT Matrix not yet created */
+            SETERRQ2(mpi_comm, PETSC_ERR_ARG_CORRUPT, "%s[%d] matrix not yet created.", label, isite);
+
         ierr = MatGetSize(Op[isite], &M, &N); CHKERRQ(ierr);
         if (M != N)
-            SETERRQ2(mpi_comm, 1, "%s[%d] matrix not square.", label, isite);
+            /** @throw PETSC_ERR_ARG_WRONG Matrix not square */
+            SETERRQ2(mpi_comm, PETSC_ERR_ARG_WRONG, "%s[%d] matrix not square.", label, isite);
+
         if (M != num_states)
-            SETERRQ4(mpi_comm, 1, "%s[%d] matrix dimension does not match "
+            /** @throw PETSC_ERR_ARG_WRONG Matrix dimension does not match the number of states */
+            SETERRQ4(mpi_comm, PETSC_ERR_ARG_WRONG, "%s[%d] matrix dimension does not match "
                 "the number of states. Expected %d. Got %d.", label, isite, num_states, M);
     }
 
@@ -124,9 +129,12 @@ PetscErrorCode Block_SpinOneHalf::CheckSectors() const
 
     /*  The last element of qn_offset must match the total number of states  */
     PetscInt magNumStates = Magnetization.NumStates();
+
     if(num_states != magNumStates)
-        SETERRQ2(mpi_comm,1,"Something is wrong with the last element of qn_offset. "
-            "Expected %d. Got %d.", num_states, magNumStates);
+        /** @throw PETSC_ERR_ARG_WRONG The number of states in the Magnetization object
+            and the internal value do not match */
+        SETERRQ2(mpi_comm, PETSC_ERR_ARG_WRONG, "The number of states in the Magnetization object "
+            "and the internal value do not match. " "Expected %d. Got %d.", num_states, magNumStates);
 
     return ierr;
 }
@@ -138,13 +146,14 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
 
     /* Decipher inputs */
     Mat matin;
-    if(isite >= num_sites)
-        SETERRQ2(mpi_comm, 1, "Input isite (%d) out of bounds [0,%d).", isite, num_sites);
+    if(isite >= num_sites) /** @throw PETSC_ERR_ARG_WRONG The input isite is out of bounds */
+        SETERRQ2(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Input isite (%d) out of bounds [0,%d).", isite, num_sites);
     switch(OpType) {
         case OpSm: matin = Sm[isite]; break;
         case OpSz: matin = Sz[isite]; break;
         case OpSp: matin = Sp[isite]; break;
-        default: SETERRQ(mpi_comm, 1, "Incorrect operator type.");
+        default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
+        /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
     }
     /* Ensure that the matrix is assembled */
     ierr = MatEnsureAssembled(matin); CHKERRQ(ierr);
@@ -154,6 +163,7 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
     PetscInt lrows  = matin->rmap->n;
     PetscInt cstart = matin->cmap->rstart;
     // PetscInt lcols  = matin->cmap->n;
+    PetscInt nrows  = matin->rmap->N;
 
     /* Check the matrix type */
     PetscBool matin_is_mpiaij;
@@ -172,6 +182,9 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
         PetscInt row_BlockIdx, col_GlobIdxStart, col_GlobIdxEnd;
         const std::vector<PetscInt>& qn_offset = Magnetization.Offsets();
 
+        /* Ensure that empty processes do nothing */
+        if(!(0 <= rstart && rstart < nrows)) return ierr;
+
         /* Calculate block boundaries */
         ierr = Magnetization.GlobalIdxToBlockIdx(rstart, row_BlockIdx); CHKERRQ(ierr); /* Call this function once */
         ierr = Magnetization.OpBlockToGlobalRange(row_BlockIdx, OpType, col_GlobIdxStart, col_GlobIdxEnd, flg); CHKERRQ(ierr);
@@ -188,7 +201,9 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
             ierr  = (*mat->B->ops->getrow)(mat->B, lrow, &nzB, &cB, nullptr);CHKERRQ(ierr);
 
             if(!flg && nzA!=0 && nzB!=0)
-                SETERRQ1(PETSC_COMM_SELF, 1, "Row %d should have zero entries.", lrow+rstart);
+                /** @throw PETSC_ERR_ARG_WRONG The current row should have no entries since it is not a valid quantum
+                    number block */
+                SETERRQ1(PETSC_COMM_SELF, 1, "Row %d should have no entries.", lrow+rstart);
 
             /* Check first and last element assuming entries are sorted */
             if(nzA){
@@ -203,7 +218,8 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
         }
     }
     else{
-        SETERRQ(mpi_comm, 1, "Implemented only for MATMPIAIJ.");
+        /** @throw PETSC_ERR_SUP This checking has been implemented specifically for MATMPIAIJ only */
+        SETERRQ(mpi_comm, PETSC_ERR_SUP, "Implemented only for MATMPIAIJ.");
     }
 
     return ierr;
@@ -251,8 +267,7 @@ PetscErrorCode Block_SpinOneHalf::CreateSm()
 PetscErrorCode Block_SpinOneHalf::DestroySm()
 {
     PetscErrorCode ierr = 0;
-
-    if(!init_Sm) SETERRQ1(mpi_comm, 1, "%s was called but Sm was not yet initialized. Nothing to destroy.",__FUNCTION__);
+    if(!init_Sm) SETERRQ1(mpi_comm, 1, "%s was called but Sm was not yet initialized. ",__FUNCTION__);
 
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatDestroy(&Sm[isite]); CHKERRQ(ierr);
@@ -269,8 +284,7 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
     CheckInit(__FUNCTION__);
 
     /*  Destroy operator matrices  */
-    for(PetscInt isite = 0; isite < num_sites; ++isite)
-    {
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatDestroy(&Sz[isite]); CHKERRQ(ierr);
         ierr = MatDestroy(&Sp[isite]); CHKERRQ(ierr);
     }
