@@ -8,8 +8,6 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     PetscBool BuildHamiltonian
     );
 
-
-
 PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
 {
     PetscErrorCode ierr = 0;
@@ -37,14 +35,14 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
     ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
     /*  Allocate the array of system blocks */
-    SysBlocks = new Block_SpinOneHalf[num_blocks];
+    sys_blocks = new Block_SpinOneHalf[num_blocks];
 
     /*  Initialize the first system block with one site  */
-    ierr = SysBlocks[0].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
-    ++SysBlocks_num_init;
+    ierr = sys_blocks[0].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+    ++sys_blocks_num_init;
 
     /*  Initialize the environment block with one site  */
-    ierr = EnvBlock.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = env_block.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
     /*  Print some info */
     if(verbose)
@@ -63,6 +61,8 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
             J1, J2, Lx, Ly, mstates); CHKERRQ(ierr);
     }
 
+    initialized = PETSC_TRUE;
+
     return ierr;
 }
 
@@ -74,15 +74,15 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Destroy()
     ierr = SingleSite.Destroy(); CHKERRQ(ierr);
 
     /*  Deallocate system blocks  */
-    for(PetscInt iblock = 0; iblock < SysBlocks_num_init; ++iblock){
-        ierr = SysBlocks[iblock].Destroy(); CHKERRQ(ierr);
+    for(PetscInt iblock = 0; iblock < sys_blocks_num_init; ++iblock){
+        ierr = sys_blocks[iblock].Destroy(); CHKERRQ(ierr);
     }
-    delete [] SysBlocks;
-    SysBlocks = nullptr;
+    delete [] sys_blocks;
+    sys_blocks = nullptr;
 
     /*  Deallocate environment block only if initialized */
-    if(EnvBlock.Initialized()){
-        ierr = EnvBlock.Destroy(); CHKERRQ(ierr);
+    if(env_block.Initialized()){
+        ierr = env_block.Destroy(); CHKERRQ(ierr);
     }
 
     if(verbose){
@@ -133,11 +133,11 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
     #endif
 
     /* Explicitly add a site */
-    if(AddSide==Right)
+    if(AddSide==SideRight)
     {
         ierr = Kron_Explicit(BlockIn, AddSite, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
     }
-    else if(AddSide==Left)
+    else if(AddSide==SideLeft)
     {
         ierr = Kron_Explicit(AddSite, BlockIn, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
     }

@@ -29,6 +29,8 @@ private:
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
 
+    PetscBool   initialized = PETSC_FALSE;
+
     /*------ Coupling Constants ------*/
 
     /** Coupling strength for nearest-neighbor interactions */
@@ -54,8 +56,6 @@ private:
     /** Total number of sites */
     PetscInt    num_sites;
 
-public:
-
     /*------ Blocks ------*/
 
     /** Number of system blocks to store, usually Lx*Ly-1 */
@@ -63,13 +63,13 @@ public:
 
     /** Array of system blocks each of which will be kept
         all throughout the simulation */
-    Block_SpinOneHalf *SysBlocks;
+    Block_SpinOneHalf *sys_blocks;
 
     /** Number of initialized blocks in SysBlocks */
-    PetscInt    SysBlocks_num_init = 0;
+    PetscInt    sys_blocks_num_init = 0;
 
     /** Environment block to be used only during warmup */
-    Block_SpinOneHalf EnvBlock;
+    Block_SpinOneHalf env_block;
 
     /** Static block containing single site operators for reference */
     Block_SpinOneHalf SingleSite;
@@ -77,7 +77,9 @@ public:
     /** Constant reference to added site */
     const Block_SpinOneHalf& AddSite = SingleSite;
 
-    /** Initializes the container object */
+public:
+
+    /** Initializes the container object with one site */
     PetscErrorCode Initialize();
 
     /** Performs one single DMRG step with Sys and Env */
@@ -92,14 +94,26 @@ public:
         const Side_t& AddSide,
         Block_SpinOneHalf& BlockOut);
 
-
-
-
-
     /** Destroys the container object */
     PetscErrorCode Destroy();
 
-};
+    /** Accesses a specified system block */
+    const Block_SpinOneHalf& SysBlock(const PetscInt& iblock) const
+    {
+        assert(initialized);
+        assert(iblock < sys_blocks_num_init);
+        assert(sys_blocks[iblock].Initialized());
+        return sys_blocks[iblock];
+    }
 
+    /** Accesses the environment block */
+    const Block_SpinOneHalf& EnvBlock() const
+    {
+        assert(initialized);
+        assert(env_block.Initialized());
+        return env_block;
+    }
+
+};
 
 #endif // __DMRG_BLOCK_HPP__
