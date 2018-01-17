@@ -12,6 +12,8 @@
 #include "QuantumNumbers.hpp"
 #include "kron.hpp"
 #include "linalg_tools.hpp"
+#include <string>
+#include <map>
 
 /** Identifies the three possible spin operators and also represents the shift associated
     to its action on the quantum number blocks */
@@ -21,6 +23,14 @@ typedef enum
     OpSz = 0,   /**< \f$ S^z \f$ operator */
     OpSp = +1   /**< \f$ S^+ \f$ operator */
 } Op_t;
+
+/** Lists down the names for each operator */
+static const std::map<Op_t, std::string> OpString =
+{
+    {OpSm, "Sm"},
+    {OpSz, "Sz"},
+    {OpSp, "Sp"}
+};
 
 /** Identifies the sides of the DMRG block */
 typedef enum
@@ -94,8 +104,7 @@ public:
     /** Determines whether the operator arrays have been successfully filled with matrices.
         @remarks __TODO:__ Change the interface to take in only Op_t */
     PetscErrorCode CheckOperatorArray(
-        Mat *Op,            /**< [in] pointer to the array of operator matrices */
-        const char* label   /**< [in] string identifying the operator matrices */
+        const Op_t& OpType  /**< [in] operator type */
         ) const;
 
     /** Indicates whether block has been initialized before using it */

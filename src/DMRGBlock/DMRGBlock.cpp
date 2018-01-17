@@ -78,9 +78,19 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(Mat *Op, const char* label) const
+PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 {
     PetscErrorCode ierr = 0;
+
+    PetscInt label = 0;
+    Mat *Op;
+    switch(OpType) {
+        case OpSm: Op = Sm; break;
+        case OpSz: Op = Sz; break;
+        case OpSp: Op = Sp; break;
+        default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
+        /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
+    }
 
     /*  Check the size of each matrix and make sure that it
         matches the number of basis states  */
@@ -111,11 +121,11 @@ PetscErrorCode Block_SpinOneHalf::CheckOperators() const
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__);
 
-    ierr = CheckOperatorArray(Sz, "Sz"); CHKERRQ(ierr);
-    ierr = CheckOperatorArray(Sp, "Sp"); CHKERRQ(ierr);
+    ierr = CheckOperatorArray(OpSz); CHKERRQ(ierr);
+    ierr = CheckOperatorArray(OpSp); CHKERRQ(ierr);
 
     if (init_Sm){
-        ierr = CheckOperatorArray(Sm, "Sm"); CHKERRQ(ierr);
+        ierr = CheckOperatorArray(OpSm); CHKERRQ(ierr);
     }
 
     return ierr;
@@ -254,7 +264,7 @@ PetscErrorCode Block_SpinOneHalf::CreateSm()
 
     if(init_Sm) SETERRQ(mpi_comm, 1, "Sm was previously initialized. Call DestroySm() first.");
 
-    ierr = CheckOperatorArray(Sp, "Sp"); CHKERRQ(ierr);
+    ierr = CheckOperatorArray(OpSp); CHKERRQ(ierr);
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatHermitianTranspose(Sp[isite], MAT_INITIAL_MATRIX, &Sm[isite]); CHKERRQ(ierr);
     }
