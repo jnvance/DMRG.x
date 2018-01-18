@@ -8,7 +8,7 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     PetscBool BuildHamiltonian
     );
 
-PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
+PetscErrorCode J1J2_SpinOneHalf_SquareLattice::Initialize()
 {
     PetscErrorCode ierr = 0;
 
@@ -35,7 +35,8 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
     ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
     /*  Allocate the array of system blocks */
-    sys_blocks = new Block_SpinOneHalf[num_blocks];
+    // sys_blocks = new Block_SpinOneHalf[num_blocks];
+    sys_blocks.resize(num_blocks);
 
     /*  Initialize the first system block with one site  */
     ierr = sys_blocks[0].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
@@ -49,7 +50,7 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
     {
         ierr = PetscPrintf(mpi_comm,
             "\n"
-            "# Heisenberg_SpinOneHalf_SquareLattice\n"
+            "# J1J2_SpinOneHalf_SquareLattice\n"
             "#   Coupling Constants:\n"
             "      J1 = %f\n"
             "      J2 = %f\n"
@@ -67,20 +68,18 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Initialize()
 }
 
 
-PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Destroy()
+PetscErrorCode J1J2_SpinOneHalf_SquareLattice::Destroy()
 {
     PetscErrorCode ierr = 0;
 
     ierr = SingleSite.Destroy(); CHKERRQ(ierr);
 
-    /*  Deallocate system blocks  */
+    /**  Deallocates system blocks  */
     for(PetscInt iblock = 0; iblock < sys_blocks_num_init; ++iblock){
         ierr = sys_blocks[iblock].Destroy(); CHKERRQ(ierr);
     }
-    delete [] sys_blocks;
-    sys_blocks = nullptr;
 
-    /*  Deallocate environment block only if initialized */
+    /**  Deallocates environment block only if it is still initialized */
     if(env_block.Initialized()){
         ierr = env_block.Destroy(); CHKERRQ(ierr);
     }
@@ -93,7 +92,7 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::Destroy()
 }
 
 
-PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
+PetscErrorCode J1J2_SpinOneHalf_SquareLattice::EnlargeBlock(
     const Block_SpinOneHalf& BlockIn,
     const Side_t& AddSide,
     Block_SpinOneHalf& BlockOut)
@@ -146,7 +145,7 @@ PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::EnlargeBlock(
 }
 
 
-PetscErrorCode Heisenberg_SpinOneHalf_SquareLattice::SingleDMRGStep(
+PetscErrorCode J1J2_SpinOneHalf_SquareLattice::SingleDMRGStep(
     const Block_SpinOneHalf& Sys,
     const Block_SpinOneHalf& Env,
     Block_SpinOneHalf& SysOut)

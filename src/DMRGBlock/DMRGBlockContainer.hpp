@@ -1,6 +1,12 @@
 #ifndef __DMRG_BLOCK_HPP__
 #define __DMRG_BLOCK_HPP__
 
+/**
+    @defgroup   DMRGBlockContainer   DMRGBlockContainer
+    @brief      Implementation of the J1J2_SpinOneHalf_SquareLattice class
+    @addtogroup DMRGBlockContainer
+    @{ */
+
 #include <slepceps.h>
 #include <petscmat.h>
 #include <vector>
@@ -9,13 +15,15 @@
 #include "DMRGBlock.hpp"
 #include "linalg_tools.hpp"
 
+/** Contains and manipulates the system and environment blocks used in a single DMRG run
+    and deals specifically with a J1-J2 Hamiltonian on a square lattice
 
-class Heisenberg_SpinOneHalf_SquareLattice
+    @remarks __TODO:__ Insert some brief description of the J1-J2 Hamiltonian and some use cases of this code
+ */
+class J1J2_SpinOneHalf_SquareLattice
 {
 
 private:
-
-    /*------ MPI and Misc ------*/
 
     /** MPI Communicator */
     MPI_Comm    mpi_comm = PETSC_COMM_WORLD;
@@ -29,9 +37,8 @@ private:
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
 
+    /** Tells whether the object was initialized using Initialize() */
     PetscBool   initialized = PETSC_FALSE;
-
-    /*------ Coupling Constants ------*/
 
     /** Coupling strength for nearest-neighbor interactions */
     PetscScalar J1 = 1.0;
@@ -39,13 +46,8 @@ private:
     /** Coupling strength for next-nearest-neighbor interactions */
     PetscScalar J2 = 1.0;
 
-    /*------ DMRG Attributes ------*/
-
     /** Target maximum number of states after truncation */
     PetscInt    mstates = 20;
-
-
-    /*------ Geometry ------*/
 
     /** Length along (growing) longitudinal direction */
     PetscInt    Lx = 4;
@@ -56,14 +58,12 @@ private:
     /** Total number of sites */
     PetscInt    num_sites;
 
-    /*------ Blocks ------*/
-
     /** Number of system blocks to store, usually Lx*Ly-1 */
     PetscInt    num_blocks;
 
     /** Array of system blocks each of which will be kept
         all throughout the simulation */
-    Block_SpinOneHalf *sys_blocks;
+    std::vector< Block_SpinOneHalf > sys_blocks;
 
     /** Number of initialized blocks in SysBlocks */
     PetscInt    sys_blocks_num_init = 0;
@@ -74,7 +74,8 @@ private:
     /** Static block containing single site operators for reference */
     Block_SpinOneHalf SingleSite;
 
-    /** Constant reference to added site */
+    /** Constant reference to the single site that is added to each block
+        during the EnlargeBlock() procedure */
     const Block_SpinOneHalf& AddSite = SingleSite;
 
 public:
@@ -115,5 +116,9 @@ public:
     }
 
 };
+
+/**
+    @}
+ */
 
 #endif // __DMRG_BLOCK_HPP__
