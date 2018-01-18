@@ -50,7 +50,8 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     /*  Initialize switch  */
     init = PETSC_TRUE;
 
-    /**  When creating a block for one site, the single-site operators are initialized using the defaults */
+    /** When creating a block for one site, the single-site operators are initialized using the default
+        values and matrix operators for spin-1/2 defined in Block_SpinOneHalf::loc_dim, Block_SpinOneHalf::loc_qn_list and Block_SpinOneHalf::loc_qn_size */
     if (num_sites == 1)
     {
         /*  Create the spin operators for the single site  */

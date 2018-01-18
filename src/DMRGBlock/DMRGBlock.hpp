@@ -2,7 +2,7 @@
 #define __DMRG_SITE_HPP
 
 /**
-    @defgroup   DMRGBlock   Block
+    @defgroup   DMRGBlock   DMRGBlock
     @brief      Implementation of the Block_SpinOneHalf class which contains the data and methods
                 for a block of spin sites
     @addtogroup DMRGBlock
