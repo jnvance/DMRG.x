@@ -83,17 +83,22 @@ public:
     /** Initializes the container object with one site */
     PetscErrorCode Initialize();
 
-    /** Performs one single DMRG step with Sys and Env */
+    /** Performs one single DMRG step with Sys and Env.
+        The new system and environment blocks will each have one site added based on ::AddSite
+     */
     PetscErrorCode SingleDMRGStep(
-        const Block_SpinOneHalf& Sys,
-        const Block_SpinOneHalf& Env,
-        Block_SpinOneHalf& SysOut);
+        const Block_SpinOneHalf& Sys,   /**< [in] the old system (left) block */
+        const Block_SpinOneHalf& Env,   /**< [in] the old environment (right) block */
+        Block_SpinOneHalf& SysOut,      /**< [out] the new system (left) block */
+        Block_SpinOneHalf& EnvOut       /**< [out] the new environment (right) block */
+        );
 
     /** Adds one site to BlockIn producing BlockOut */
     PetscErrorCode EnlargeBlock(
-        const Block_SpinOneHalf& BlockIn,
-        const Side_t& AddSide,
-        Block_SpinOneHalf& BlockOut);
+        const Block_SpinOneHalf& BlockIn,   /**< [in] input block */
+        const Side_t& AddSide,              /**< [in] side on which to add a site (SideLeft or SideRight) */
+        Block_SpinOneHalf& BlockOut         /**< [in] output block */
+        );
 
     /** Destroys the container object */
     PetscErrorCode Destroy();

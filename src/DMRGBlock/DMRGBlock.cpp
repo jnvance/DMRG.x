@@ -11,11 +11,11 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 
-/* Internal macro for checking the initialization state of the block object */
+/** Internal macro for checking the initialization state of the block object */
 #define CheckInit(func) if (PetscUnlikely(!init))\
     SETERRQ1(mpi_comm, PETSC_ERR_ARG_CORRUPT, "%s was called but block was not yet initialized.",func);
 
-/* Internal macro for checking that a column index belongs in the magnetization block boundaries */
+/** Internal macro for checking that a column index belongs in the magnetization block boundaries */
 #define CheckIndex(row, col, cstart, cend) if((col) < (cstart) || (col) >= (cend))\
     SETERRQ4(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "On row %d, index %d out of bounds [%d,%d) ",\
         (row), (col), (cstart), (cend));
@@ -120,7 +120,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__);
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
 
     ierr = CheckOperatorArray(OpSz); CHKERRQ(ierr);
     ierr = CheckOperatorArray(OpSp); CHKERRQ(ierr);
@@ -136,7 +136,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 PetscErrorCode Block_SpinOneHalf::CheckSectors() const
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__);
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
 
     /*  The last element of qn_offset must match the total number of states  */
     PetscInt magNumStates = Magnetization.NumStates();
@@ -240,7 +240,7 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
 PetscErrorCode Block_SpinOneHalf::CheckOperatorBlocks() const
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__);
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
 
     /* Check all operator matrices */
     ierr = CheckOperators(); CHKERRQ(ierr);
@@ -292,7 +292,7 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
 PetscErrorCode Block_SpinOneHalf::Destroy()
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__);
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
 
     /*  Destroy operator matrices  */
     for(PetscInt isite = 0; isite < num_sites; ++isite){
