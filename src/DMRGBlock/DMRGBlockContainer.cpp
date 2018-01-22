@@ -43,7 +43,9 @@ PetscErrorCode J1J2_SpinOneHalf_SquareLattice::Initialize()
     ++sys_blocks_num_init;
 
     /*  Initialize the environment block with one site  */
-    ierr = env_block.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+    env_blocks.resize(1);
+    ierr = env_blocks[0].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+    ++env_blocks_num_init;
 
     /*  Print some info */
     if(verbose)
@@ -80,8 +82,8 @@ PetscErrorCode J1J2_SpinOneHalf_SquareLattice::Destroy()
     }
 
     /**  Deallocates environment block only if it is still initialized */
-    if(env_block.Initialized()){
-        ierr = env_block.Destroy(); CHKERRQ(ierr);
+    for(PetscInt iblock = 0; iblock < env_blocks_num_init; ++iblock){
+        ierr = env_blocks[iblock].Destroy(); CHKERRQ(ierr);
     }
 
     if(verbose){

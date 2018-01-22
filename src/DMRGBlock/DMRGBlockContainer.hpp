@@ -68,8 +68,13 @@ private:
     /** Number of initialized blocks in SysBlocks */
     PetscInt    sys_blocks_num_init = 0;
 
-    /** Environment block to be used only during warmup */
-    Block_SpinOneHalf env_block;
+    /** Environment blocks to be used only during warmup.
+        For our purposes, this will contain only one block which will
+        continuously be enlarged after each iteration */
+    std::vector< Block_SpinOneHalf > env_blocks;
+
+    /** Number of initialized blocks in EnvBlocks */
+    PetscInt    env_blocks_num_init = 0;
 
     /** Static block containing single site operators for reference */
     Block_SpinOneHalf SingleSite;
@@ -106,19 +111,21 @@ public:
     /** Accesses a specified system block */
     const Block_SpinOneHalf& SysBlock(const PetscInt& iblock) const
     {
-        assert(initialized);
-        assert(iblock < sys_blocks_num_init);
-        assert(sys_blocks[iblock].Initialized());
         return sys_blocks[iblock];
     }
 
-    /** Accesses the environment block */
+    /** Accesses a specifieds environment block */
+    const Block_SpinOneHalf& EnvBlock(const PetscInt& iblock) const
+    {
+        return env_blocks[iblock];
+    }
+
+    /** Accesses the 0th environment block */
     const Block_SpinOneHalf& EnvBlock() const
     {
-        assert(initialized);
-        assert(env_block.Initialized());
-        return env_block;
+        return env_blocks[0];
     }
+
 
 };
 
