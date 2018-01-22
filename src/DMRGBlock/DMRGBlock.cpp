@@ -45,7 +45,9 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     /** If num_states_in is PETSC_DEFAULT, the number of states is calculated exactly from the number of sites */
 
     /*  Initialize array of operator matrices  */
-    ierr = PetscCalloc3(num_sites, &Sz, num_sites, &Sp, num_sites, &Sm); CHKERRQ(ierr);
+    Sz.resize(num_sites);
+    Sp.resize(num_sites);
+    Sm.resize(num_sites);
 
     /*  Initialize switch  */
     init = PETSC_TRUE;
@@ -84,11 +86,11 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
     PetscErrorCode ierr = 0;
 
     PetscInt label = 0;
-    Mat *Op;
+    const Mat *Op;
     switch(OpType) {
-        case OpSm: Op = Sm; break;
-        case OpSz: Op = Sz; break;
-        case OpSp: Op = Sp; break;
+        case OpSm: Op = &Sm[0]; break;
+        case OpSz: Op = &Sz[0]; break;
+        case OpSp: Op = &Sp[0]; break;
         default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
         /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
     }
@@ -305,7 +307,6 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
     }
 
     /*  Destroy arrays */
-    ierr = PetscFree3(Sz, Sp, Sm); CHKERRQ(ierr);
     init = PETSC_FALSE;
 
     return ierr;

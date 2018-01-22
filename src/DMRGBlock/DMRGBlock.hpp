@@ -123,13 +123,13 @@ public:
     Mat     H = nullptr;
 
     /** Array of matrices representing \f$S^z\f$ operators */
-    Mat*    Sz = nullptr;
+    std::vector<Mat> Sz;
 
     /** Array of matrices representing \f$S^+\f$ operators */
-    Mat*    Sp = nullptr;
+    std::vector<Mat> Sp;
 
     /** Array of matrices representing \f$S^-\f$ operators */
-    Mat*    Sm = nullptr;
+    std::vector<Mat> Sm;
 
     /** Checks whether all operators have been initialized and have correct dimensions */
     PetscErrorCode CheckOperators() const;
