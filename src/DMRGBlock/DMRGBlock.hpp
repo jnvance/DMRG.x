@@ -89,10 +89,24 @@ public:
         @remarks __TODO:__ Consider interfacing this to the object constructor.
     */
     PetscErrorCode Initialize(
-        const MPI_Comm& comm_in,    /**< [in] MPI communicator */
-        PetscInt num_sites_in,      /**< [in] Number of sites */
-        PetscInt num_states_in      /**< [in] Number of states (or PETSC_DEFAULT) */
+        const MPI_Comm& comm_in,      /**< [in] MPI communicator */
+        const PetscInt& num_sites_in, /**< [in] Number of sites */
+        const PetscInt& num_states_in /**< [in] Number of states (or PETSC_DEFAULT) */
         );
+
+    /** Initializes block object with input attributes and array of matrix operators.
+        @post Arrays of operator matrices are initialized to the correct number of sites and states.
+        @post Magnetization object is initialized as well
+        @remarks __TODO:__ Consider interfacing this to the object constructor.
+    */
+    PetscErrorCode Initialize(
+        const MPI_Comm& comm_in,
+        const PetscInt& num_sites_in,
+        const std::vector<PetscReal>& qn_list_in,
+        const std::vector<PetscInt>& qn_size_in
+        );
+
+
 
     /** Destroys all operator matrices and frees memory.
         @remarks __TODO:__ Consider interfacing this to the object desctructor */

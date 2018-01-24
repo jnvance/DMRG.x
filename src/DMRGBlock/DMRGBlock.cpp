@@ -22,8 +22,8 @@ PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 
 PetscErrorCode Block_SpinOneHalf::Initialize(
     const MPI_Comm& comm_in,
-    PetscInt num_sites_in,
-    PetscInt num_states_in)
+    const PetscInt& num_sites_in,
+    const PetscInt& num_states_in)
 {
     PetscErrorCode ierr = 0;
 
@@ -76,10 +76,33 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
             ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sp[isite]); CHKERRQ(ierr);
         }
     }
+    else
+        SETERRQ1(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Invalid input num_sites_in > 0. Given %d.", num_sites_in);
 
     return ierr;
 }
 
+PetscErrorCode Block_SpinOneHalf::Initialize(
+    const MPI_Comm& comm_in,
+    const PetscInt& num_sites_in,
+    const std::vector<PetscReal>& qn_list_in,
+    const std::vector<PetscInt>& qn_size_in)
+{
+    PetscErrorCode ierr = 0;
+
+    if(PetscUnlikely(num_sites_in == 1))
+        SETERRQ(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE,
+            "Invalid input num_sites_in cannot be equal to 1. Call a different Initialize() function.");
+
+    QuantumNumbers Magnetization_temp;
+    ierr = Magnetization_temp.Initialize(comm_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
+    PetscInt num_states_in = Magnetization_temp.NumStates();
+
+    ierr = Initialize(comm_in, num_sites_in, num_states_in); CHKERRQ(ierr);
+    Magnetization = Magnetization_temp;
+
+    return ierr;
+}
 
 PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 {

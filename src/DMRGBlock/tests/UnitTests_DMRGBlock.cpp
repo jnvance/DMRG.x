@@ -78,8 +78,7 @@ PetscErrorCode Test_InitAndCopy()
     PetscErrorCode ierr = 0;
 
     Block_SpinOneHalf blk;
-    ierr = blk.Initialize(PETSC_COMM_WORLD, 2, 8);CHKERRQ(ierr);
-    ierr = blk.Magnetization.Initialize(PETSC_COMM_WORLD, {1.5,0.5,-0.5,-1.5}, {2,3,2,1}); CHKERRQ(ierr);
+    ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
 
     {
@@ -127,12 +126,9 @@ PetscErrorCode Test_InitAndCopy()
 PetscErrorCode Test_MatCheckOperatorBlocks()
 {
     PetscErrorCode ierr = 0;
-    /*  Create an artificial block object */
-    Block_SpinOneHalf blk;
-    ierr = blk.Initialize(PETSC_COMM_WORLD, 2, 8);CHKERRQ(ierr);
 
-    /*  Initialize the block's magnetization sectors */
-    ierr = blk.Magnetization.Initialize(PETSC_COMM_WORLD, {1.5,0.5,-0.5,-1.5}, {2,3,2,1}); CHKERRQ(ierr);
+    Block_SpinOneHalf blk;
+    ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
 
     /*  Set the entries of Sz[0] following the correct sectors */
