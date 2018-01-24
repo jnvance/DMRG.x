@@ -174,6 +174,9 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
     /* Ensure that the matrix is assembled */
     ierr = MatEnsureAssembled(matin); CHKERRQ(ierr);
 
+    /*  Check whether sector initialization was done right  */
+    ierr = CheckSectors(); CHKERRQ(ierr);
+
     /* Get row and column layout */
     PetscInt rstart = matin->rmap->rstart;
     PetscInt lrows  = matin->rmap->n;
