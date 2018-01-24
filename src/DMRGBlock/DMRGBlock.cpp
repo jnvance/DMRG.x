@@ -140,6 +140,9 @@ PetscErrorCode Block_SpinOneHalf::CheckSectors() const
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
 
+    /*  Check whether the Magnetization object has been initialized correctly */
+    ierr = Magnetization.CheckInitialized(); CHKERRQ(ierr);
+
     /*  The last element of qn_offset must match the total number of states  */
     PetscInt magNumStates = Magnetization.NumStates();
 

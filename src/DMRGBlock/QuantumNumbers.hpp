@@ -54,6 +54,15 @@ public:
         const std::vector<PetscInt>& qn_size_in     /**< [in] size of each quantum number block */
         );
 
+    /** Checks whether quantum number object was properly initialized */
+    PetscErrorCode CheckInitialized() const
+    {
+        if(PetscUnlikely(!initialized))
+            SETERRQ(mpi_comm, PETSC_ERR_ARG_CORRUPT, "QuantumNumbers object not yet initialized.");
+        else
+            return 0;
+    }
+
     /** Returns the number of quantum number sectors */
     PetscInt NumSectors() const
     {
