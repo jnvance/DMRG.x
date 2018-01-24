@@ -73,7 +73,7 @@ PetscErrorCode SetSp1(const Mat& Sp)
 }
 
 /** Tests initialization and ownership transfer*/
-PetscErrorCode Test_InitAndTransfer()
+PetscErrorCode Test_InitAndCopy()
 {
     PetscErrorCode ierr = 0;
 
@@ -195,8 +195,8 @@ int main(int argc, char **argv)
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
-    PrintHeader(comm, "Test 01: Test_InitAndTransfer");
-    ierr = Test_InitAndTransfer(); CHKERRQ(ierr);
+    PrintHeader(comm, "Test 01: Test_InitAndCopy");
+    ierr = Test_InitAndCopy(); CHKERRQ(ierr);
     PrintHeader(comm, "Test 02: Test_MatCheckOperatorBlocks");
     ierr = Test_MatCheckOperatorBlocks(); CHKERRQ(ierr);
 
