@@ -103,7 +103,7 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     {
         for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR)
         {
-            KronBlocks.push_back({LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR});
+            KronBlocks.push_back(std::make_tuple(LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR));
         }
     }
 

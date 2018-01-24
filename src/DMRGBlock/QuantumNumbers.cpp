@@ -1,4 +1,5 @@
 #include "QuantumNumbers.hpp"
+#include <algorithm>
 
 /* Internal macro for checking the initialization state of the qn object */
 #define CheckInit(func) \
