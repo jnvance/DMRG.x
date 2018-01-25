@@ -1,8 +1,6 @@
 #include <iostream>
-
 #include <petscsys.h>
 #include <slepceps.h>
-
 #include "DMRGBlock.hpp"
 
 #define DMRG_KRON_TESTING 1
@@ -33,14 +31,17 @@
 /** Storage for information on resulting blocks of quantum numbers
     0th entry:  Quantum number
     1st entry:  Left block index
-    2nd entry:  Right block index */
-typedef std::tuple<PetscReal, PetscInt, PetscInt> KronBlock_t;
+    2nd entry:  Right block index
+    3rd entry:  Number of states in the block */
+typedef std::tuple<PetscReal, PetscInt, PetscInt, PetscInt> KronBlock_t;
+
 
 /** Comparison function to sort KronBlocks in descending order of quantum numbers */
 bool compare_descending_qn(KronBlock_t a, KronBlock_t b)
 {
     return (std::get<0>(a)) > (std::get<0>(b));
 }
+
 
 /** Calculates the new block combining two spin-1/2 blocks */
 PETSC_EXTERN PetscErrorCode Kron_Explicit(
@@ -66,7 +67,7 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     /*  For checking the accuracy of the routine
         TODO: Remove later */
     #if DMRG_KRON_TESTING
-    PRINT_RANK_BEGIN()
+        PRINT_RANK_BEGIN()
         std::cout << "***** Kron_Explicit *****" << std::endl;
         std::cout << "LeftBlock  qn_list:   ";
         for(auto i: LeftBlock.Magnetization.List()) std::cout << i << "   ";
@@ -93,17 +94,25 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
         std::cout << "RightBlock qn_offset: ";
         for(auto i: RightBlock.Magnetization.Offsets()) std::cout << i << "   ";
         std::cout << std::endl;
-    PRINT_RANK_END()
+        PRINT_RANK_END()
     #endif
+
+    /* Check the validity of input blocks */
+    ierr = LeftBlock.CheckOperators(); CHKERRQ(ierr);
+    ierr = LeftBlock.CheckSectors(); CHKERRQ(ierr);
+    ierr = LeftBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
+    ierr = RightBlock.CheckOperators(); CHKERRQ(ierr);
+    ierr = RightBlock.CheckSectors(); CHKERRQ(ierr);
+    ierr = RightBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
 
     /*  Create a list of tuples of quantum numbers following the kronecker product structure */
     std::vector<KronBlock_t> KronBlocks;
     // for (PetscInt IL = LeftBlock.qn_list.size()-1; IL >= 0; --IL) // Checks sorting
-    for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL)
-    {
-        for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR)
-        {
-            KronBlocks.push_back(std::make_tuple(LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR));
+    for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL){
+        for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR){
+            KronBlocks.push_back(std::make_tuple(
+                LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR,
+                LeftBlock.Magnetization.Sizes()[IL] * RightBlock.Magnetization.Sizes()[IR]));
         }
     }
 
@@ -111,15 +120,18 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     std::stable_sort(KronBlocks.begin(), KronBlocks.end(), compare_descending_qn);
 
     #if DMRG_KRON_TESTING
-    PRINT_RANK_BEGIN()
-    std::cout << "KronBlocks: \n";
-    for(auto k: KronBlocks)
-        std::cout << "( "
-            << std::get<0>(k) << ", "
-            << std::get<1>(k) << ", "
-            << std::get<2>(k) << " )\n";
-    std::cout << "*************************" << std::endl;
-    PRINT_RANK_END()
+        PRINT_RANK_BEGIN()
+        std::cout << "KronBlocks: \n";
+        for(auto k: KronBlocks)
+        {
+            std::cout << "( "
+                << std::get<0>(k) << ", "
+                << std::get<1>(k) << ", "
+                << std::get<2>(k) << ", "
+                << std::get<3>(k) << " )\n";
+        }
+        std::cout << "*************************" << std::endl;
+        PRINT_RANK_END()
     #endif
 
     /*  Count the input and output number of sites */
@@ -127,20 +139,62 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
     PetscInt nsites_right = RightBlock.NumSites();
     PetscInt nsites_out   = nsites_left + nsites_right;
 
+    /*  Count the input and output number of sectors */
+    PetscInt nsectors_left  = LeftBlock.Magnetization.NumSectors();
+    PetscInt nsectors_right = RightBlock.Magnetization.NumSectors();
+    PetscInt nsectors_out   = nsectors_left * nsectors_right;
+    if(PetscUnlikely((size_t) KronBlocks.size() != nsectors_out ))
+        SETERRQ2(mpi_comm, 1, "Mismatch in number of sectors. Expected %lu. Got %d.", KronBlocks.size(), nsectors_out);
+
     /*  Count the input and output number of states */
-    PetscInt nstates_left  = LeftBlock.NumStates();
-    PetscInt nstates_right = RightBlock.NumStates();
-    PetscInt nstates_out   = nstates_left + nstates_right;
+    PetscInt nstates_left  = LeftBlock.Magnetization.NumStates();
+    PetscInt nstates_right = RightBlock.Magnetization.NumStates();
+    PetscInt nstates_out   = nstates_left * nstates_right;
+    PetscInt KronBlocks_nstates = 0;
+    for (auto tup: KronBlocks) KronBlocks_nstates += std::get<3>(tup);
+    if(PetscUnlikely(KronBlocks_nstates != nstates_out))
+        SETERRQ2(mpi_comm, 1, "Mismatch in number of states. Expected %lu. Got %d.", KronBlocks_nstates, nstates_out);
+
+    /*  Some quantum numbers that appear multiple times need to be grouped into a single quantum number block
+        NOTE: This assumes that KronBlocks has been sorted */
+    std::vector<PetscReal>  QN_List;
+    std::vector<PetscInt>   QN_Size;
+    PetscReal QN_last = 0;
+    for (auto tup: KronBlocks){
+        const PetscReal& qn   = std::get<0>(tup);
+        const PetscInt&  size = std::get<3>(tup);
+        if(qn < QN_last || QN_List.size()==0){
+            QN_List.push_back(qn);
+            QN_Size.push_back(size);
+        } else {
+            QN_Size.back() += size;
+        }
+        QN_last = qn;
+    }
+
+    PetscInt QN_Size_total = 0;
+    for(PetscInt size: QN_Size) QN_Size_total += size;
+    if(PetscUnlikely(nstates_out != QN_Size_total))
+        SETERRQ2(mpi_comm, 1, "Mismatch in number of states. Expected %d. Got %d.", nstates_out, QN_Size_total);
 
     #if DMRG_KRON_TESTING
-    PRINT_RANK_BEGIN()
-    std::cout << "Total Sites: " << nsites_out << std::endl;
-    std::cout << "Total States: " << nstates_out << std::endl;
-    PRINT_RANK_END()
+        PRINT_RANK_BEGIN()
+        std::cout << "QN_List: "; for(auto q: QN_List) std::cout << q << " "; std::cout << std::endl;
+        std::cout << "Total Sites: " << nsites_out << std::endl;
+        std::cout << "Total Sectors: " << nsectors_out << std::endl;
+        std::cout << "Total States: " << nstates_out << std::endl;
+        PRINT_RANK_END()
     #endif
 
-    /*  Initialize the new block */
-    ierr = BlockOut.Initialize(mpi_comm, nsites_out, nstates_out); CHKERRQ(ierr);
+    /*  Initialize the new block using the quantum number blocks */
+    ierr = BlockOut.Initialize(mpi_comm, nsites_out, QN_List, QN_Size); CHKERRQ(ierr);
+
+    #if DMRG_KRON_TESTING
+        PRINT_RANK_BEGIN()
+        std::cout << "Mag: QN_List: "; for(auto q: BlockOut.Magnetization.List()) std::cout << q << " "; std::cout << std::endl;
+        std::cout << "Mag: QN_Size: "; for(auto q: BlockOut.Magnetization.Sizes()) std::cout << q << " "; std::cout << std::endl;
+        PRINT_RANK_END()
+    #endif
 
     /*  Combine sites from the old blocks to form the new block */
     /*  Expand the left-block states explicitly by padding identities to the right */
@@ -155,12 +209,6 @@ PETSC_EXTERN PetscErrorCode Kron_Explicit(
         /* TODO: Call routine that fills in the matrices */
         if(!mpi_rank) printf("isite: %d\n",isite);
     }
-
-
-    /*  TODO: Some quantum numbers that appear multiple times need to be grouped
-        into a single quantum number block */
-
-
 
     return ierr;
 }

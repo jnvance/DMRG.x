@@ -1,6 +1,9 @@
 #include <vector>
 #include "petscmat.h"
 
+PETSC_EXTERN const char hborder[] = "------------------------------------------------------------"
+                                     "------------------------------------------------------------";
+
 PETSC_EXTERN PetscErrorCode SetRow(const Mat& A, const PetscInt& row, const std::vector<PetscInt>& idxn)
 {
     PetscErrorCode ierr = 0;
@@ -14,5 +17,19 @@ PETSC_EXTERN PetscErrorCode SetRow(const Mat& A, const PetscInt& row, const std:
         for(const PetscInt i: idxn) v.push_back(PetscReal(i));
         ierr = MatSetValues(A, 1, &idxm.front(), idxn.size(), &idxn.front(), &v.front(), INSERT_VALUES); CHKERRQ(ierr);
     }
+    return ierr;
+}
+
+PETSC_EXTERN PetscErrorCode CatchErrorCode(const MPI_Comm& comm, const PetscInt& ierr_in, const PetscInt& ierr_exp)
+{
+    PetscErrorCode ierr = 0;
+
+    if(ierr_in != ierr_exp)
+    {
+        SETERRQ2(comm, 1, "Failed test. Expected error code %d. Got %d.", ierr_exp, ierr_in);
+    } else {
+        PetscPrintf(comm, "\n    Exception caught. :)\n\n");
+    }
+
     return ierr;
 }
