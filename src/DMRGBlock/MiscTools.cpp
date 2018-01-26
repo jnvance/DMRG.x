@@ -117,8 +117,6 @@ PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const P
 
 /*----- Spin-1/2 functions -----*/
 
-#undef __FUNCT__
-#define __FUNCT__ "MatSzCreate"
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz)
 {
     PetscErrorCode  ierr = 0;
@@ -143,8 +141,6 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz
 }
 
 
-#undef __FUNCT__
-#define __FUNCT__ "MatSpCreate"
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp)
 {
     PetscErrorCode  ierr = 0;
@@ -177,6 +173,19 @@ PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin)
         ierr = MatAssemblyBegin(matin, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
         ierr = MatAssemblyEnd(matin, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     }
+
+    return ierr;
+}
+
+
+PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& dim, Mat& eye)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = InitSingleSiteOperator(comm, dim, &eye); CHKERRQ(ierr);
+    ierr = MatEnsureAssembled(eye); CHKERRQ(ierr);
+    ierr = MatShift(eye, 1.00); CHKERRQ(ierr);
+    ierr = MatEnsureAssembled(eye); CHKERRQ(ierr);
 
     return ierr;
 }
