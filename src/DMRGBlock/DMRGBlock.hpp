@@ -145,6 +145,11 @@ public:
     /** Array of matrices representing \f$S^-\f$ operators */
     std::vector<Mat> Sm;
 
+    /** Matrix representing the identity operator of the block.
+        __TODO__: To avoid redundancy set this pointer to one of some global set of matrices
+        owned by the BlockContainer */
+    Mat Eye = nullptr;
+
     /** Checks whether all operators have been initialized and have correct dimensions */
     PetscErrorCode CheckOperators() const;
 

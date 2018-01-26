@@ -10,6 +10,7 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
+PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& dim, Mat& eye);
 
 /** Internal macro for checking the initialization state of the block object */
 #define CheckInit(func) if (PetscUnlikely(!init))\
@@ -78,6 +79,9 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     }
     else
         SETERRQ1(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Invalid input num_sites_in > 0. Given %d.", num_sites_in);
+
+    /* Set the identity operator */
+    ierr = MatEyeCreate(mpi_comm, num_states, Eye); CHKERRQ(ierr);
 
     return ierr;
 }
@@ -334,9 +338,8 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
     if (init_Sm){
         ierr = DestroySm(); CHKERRQ(ierr);
     }
-
-    /*  Destroy arrays */
+    /* Destroy identity matrix */
+    ierr = MatDestroy(&Eye); CHKERRQ(ierr);
     init = PETSC_FALSE;
-
     return ierr;
 }
