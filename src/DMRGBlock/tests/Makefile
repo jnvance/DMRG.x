@@ -1,6 +1,5 @@
 
 TARGETS = 	UnitTests_DMRGBlock.x \
-			UnitTests_DMRGBlockContainer.x \
 			UnitTests_DMRGKron.x
 
 CXXFLAGS += -O3 -std=c++11 -Wall -I${PWD}/.. -I${PWD}/../..
