@@ -212,11 +212,12 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
     PetscInt nrows  = matin->rmap->N;
 
     /* Check the matrix type */
-    PetscBool matin_is_mpiaij;
+    PetscBool matin_is_mpiaij, matin_is_mpiaijmkl;
     ierr = PetscObjectTypeCompare((PetscObject)matin, MATMPIAIJ, &matin_is_mpiaij); CHKERRQ(ierr);
+    ierr = PetscObjectTypeCompare((PetscObject)matin, MATMPIAIJMKL, &matin_is_mpiaijmkl); CHKERRQ(ierr);
 
-    /* Do specific tasks for MATMPIAIJ using the diagonal structure */
-    if(matin_is_mpiaij){
+    /* Do specific tasks for MATMPIAIJ or MATMPIAIJMKL using the diagonal structure */
+    if(matin_is_mpiaij || matin_is_mpiaijmkl){
         /* Extract diagonal (A) and off-diagonal (B) sequential matrices */
         Mat_MPIAIJ *mat = (Mat_MPIAIJ*)matin->data;
         PetscInt *cmap = mat->garray;
