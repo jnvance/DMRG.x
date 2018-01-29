@@ -208,8 +208,10 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
     PetscInt rstart = matin->rmap->rstart;
     PetscInt lrows  = matin->rmap->n;
     PetscInt cstart = matin->cmap->rstart;
-    // PetscInt lcols  = matin->cmap->n;
     PetscInt nrows  = matin->rmap->N;
+
+    /* Ensure that empty processes do nothing */
+    if(!(0 <= rstart && rstart < nrows)) return ierr;
 
     /* Check the matrix type */
     PetscBool matin_is_mpiaij, matin_is_mpiaijmkl;
@@ -226,23 +228,12 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
 
         /* Determine the starting block */
         PetscBool flg;
-        PetscInt row_BlockIdx, col_GlobIdxStart, col_GlobIdxEnd;
-        const std::vector<PetscInt>& qn_offset = Magnetization.Offsets();
+        PetscInt col_GlobIdxStart, col_GlobIdxEnd;
 
-        /* Ensure that empty processes do nothing */
-        if(!(0 <= rstart && rstart < nrows)) return ierr;
-
-        /* Calculate block boundaries */
-        ierr = Magnetization.GlobalIdxToBlockIdx(rstart, row_BlockIdx); CHKERRQ(ierr); /* Call this function once */
-        ierr = Magnetization.OpBlockToGlobalRange(row_BlockIdx, OpType, col_GlobIdxStart, col_GlobIdxEnd, flg); CHKERRQ(ierr);
-
-        for(PetscInt lrow = 0; lrow < lrows ; ++lrow)
+        for(QuantumNumbersIterator Iter(Magnetization, rstart, rstart + lrows); Iter.Loop(); ++Iter)
         {
-            /* Decide whether to move to next BlockIdx for the current row */
-            if(lrow+rstart >= qn_offset[row_BlockIdx+1]){
-                ++row_BlockIdx;
-                ierr = Magnetization.OpBlockToGlobalRange(row_BlockIdx, OpType, col_GlobIdxStart, col_GlobIdxEnd, flg); CHKERRQ(ierr);
-            }
+            const PetscInt lrow = Iter.Steps();
+            ierr = Iter.OpBlockToGlobalRange(OpType, col_GlobIdxStart, col_GlobIdxEnd, flg); CHKERRQ(ierr);
 
             ierr  = (*mat->A->ops->getrow)(mat->A, lrow, &nzA, &cA, nullptr);CHKERRQ(ierr);
             ierr  = (*mat->B->ops->getrow)(mat->B, lrow, &nzB, &cB, nullptr);CHKERRQ(ierr);

@@ -136,6 +136,98 @@ public:
 
 };
 
+
+/** Iterates over a range of basis indices with information on each of its quantum number. */
+class QuantumNumbersIterator
+{
+private:
+
+    /** Reference to the Quantum Numbers object on which this iterator is based on */
+    const QuantumNumbers& QN;
+
+    /** Starting index in the range [Istart, Iend) */
+    PetscInt istart_ = 0;
+
+    /** The final excluded index of the range [Istart, Iend) */
+    PetscInt iend_ = 0;
+
+    /* Stores the value of the current index */
+    PetscInt idx_;
+
+    /** The block index associated with Idx */
+    PetscInt blockidx_ = 0;
+
+public:
+
+    typedef QuantumNumbersIterator Self_t;
+
+    /** Initialize an iterator through all quantum numbers */
+    QuantumNumbersIterator(
+        const QuantumNumbers& QN_in     /**< [in] base QuantumNumbers object */
+        ):
+        QN(QN_in)
+    {}
+
+    /** Initialize an iterator through a range of indices */
+    QuantumNumbersIterator(
+        const QuantumNumbers& QN_in,  /**< [in] Base QuantumNumbers object */
+        const PetscInt& GlobIdxStart, /**< [in] Inclusive lower bound index */
+        const PetscInt& GlobIdxEnd    /**< [in] Exclusive upper bound index */
+        ):
+        QN(QN_in),
+        istart_(GlobIdxStart),
+        iend_(GlobIdxEnd),
+        idx_(istart_)
+    {
+        PetscErrorCode ierr;
+        ierr = QN.GlobalIdxToBlockIdx(istart_, blockidx_);
+        assert(!ierr);
+    }
+
+    /* TODO: Initialize an iterator through a range of quantum number blocks */
+
+    /** Gets the current state index */
+    PetscInt Idx() const {return idx_;}
+
+    /** Gets the current quantum number block index */
+    PetscInt BlockIdx() const {return blockidx_;}
+
+    /** Gets the first quantum number block index */
+    PetscInt IdxStart() const {return istart_;}
+
+    /** Gets the first quantum number block index */
+    PetscInt IdxEnd() const {return iend_;}
+
+    /** Determines whether the end of the range has not yet been reached */
+    PetscBool Loop() const {return PetscBool(idx_ < iend_);}
+
+    /** Gets the number of steps incremented from the starting index */
+    PetscInt Steps() const {return idx_-istart_;}
+
+    /** Overloading the ++ increment */
+    Self_t operator++()
+    {
+        ++idx_;
+        if(idx_ >= QN.Offsets()[blockidx_+1]) ++blockidx_;
+        return *this;
+    }
+
+    /** Interfaced function OpBlockToGlobalRange from the Quantum Numbers class with current block index as input */
+    PetscErrorCode OpBlockToGlobalRange(
+        const PetscInt& BlockShift,
+        PetscInt& GlobIdxStart,
+        PetscInt& GlobIdxEnd,
+        PetscBool& flg
+        ) const
+    {
+        PetscInt ierr;
+        ierr = QN.OpBlockToGlobalRange(blockidx_, BlockShift, GlobIdxStart, GlobIdxEnd, flg); CHKERRQ(ierr);
+        return(0);
+    }
+
+};
+
+
 /**
     @}
  */
