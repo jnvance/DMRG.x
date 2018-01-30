@@ -160,7 +160,7 @@ private:
     PetscInt iend_ = 0;
 
     /* Stores the value of the current index */
-    PetscInt idx_;
+    PetscInt idx_ = 0;
 
     /** The block index associated with Idx */
     PetscInt blockidx_ = 0;
