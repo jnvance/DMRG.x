@@ -26,6 +26,9 @@ UnitTests_DMRGKron.x: UnitTests_DMRGKron.o ${UnitTests_DMRGKron_DEPS} chkopts
 	-${CLINKER} -o UnitTests_DMRGKron.x UnitTests_DMRGKron.o ${UnitTests_DMRGKron_DEPS} ${SLEPC_EPS_LIB}
 	${RM} UnitTests_DMRGKron.o
 
+docs:
+	cd .. && make docs
+
 flush: clean
 	${RM} -rf ${TARGETS} ${UnitTests_DMRGBlockContainer_DEPS} *.dat *.dat.info *.x
 	${RM} -rf test_kron/*
