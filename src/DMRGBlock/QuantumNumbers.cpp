@@ -128,6 +128,22 @@ PetscErrorCode QuantumNumbers::GlobalIdxToBlockIdx(
 }
 
 
+PetscErrorCode QuantumNumbers::GlobalIdxToBlockIdx(
+    const PetscInt& GlobIdx,
+    PetscInt& BlockIdx,
+    PetscInt& LocIdx
+    ) const
+{
+    PetscInt ierr;
+
+    ierr = GlobalIdxToBlockIdx(GlobIdx, BlockIdx); CHKERRQ(ierr);
+    LocIdx = GlobIdx - qn_offset[BlockIdx];
+
+    return(0);
+}
+
+
+
 PetscErrorCode QuantumNumbers::GlobalIdxToQN(
     const PetscInt& GlobIdx,
     PetscReal& QNValue

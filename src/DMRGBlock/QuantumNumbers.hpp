@@ -128,6 +128,14 @@ public:
         PetscInt& BlockIdx          /**< [out] Block index */
         ) const;
 
+    /** Maps the global index of a basis state to its block index and local index in the block */
+    PetscErrorCode GlobalIdxToBlockIdx(
+        const PetscInt& GlobIdx,    /**< [in]  Global index */
+        PetscInt& BlockIdx,         /**< [out] Block index */
+        PetscInt& LocIdx            /**< [out] Local index in the block */
+        ) const;
+
+
     /** Maps the global index of a basis state to its quantum number */
     PetscErrorCode GlobalIdxToQN(
         const PetscInt& GlobIdx,    /**< [in]  Global index */
@@ -157,6 +165,10 @@ private:
     /** The block index associated with Idx */
     PetscInt blockidx_ = 0;
 
+    /** The local index in the block associated with Idx */
+    PetscInt locidx_ = 0;
+
+
 public:
 
     typedef QuantumNumbersIterator Self_t;
@@ -181,6 +193,7 @@ public:
     {
         PetscErrorCode ierr;
         ierr = QN.GlobalIdxToBlockIdx(istart_, blockidx_);
+
         assert(!ierr);
     }
 
@@ -197,6 +210,8 @@ public:
 
     /** Gets the first quantum number block index */
     PetscInt IdxEnd() const {return iend_;}
+
+    PetscInt LocIdx() const {return idx_ - QN.Offsets()[blockidx_];}
 
     /** Determines whether the end of the range has not yet been reached */
     PetscBool Loop() const {return PetscBool(idx_ < iend_);}
