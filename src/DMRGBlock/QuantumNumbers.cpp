@@ -177,3 +177,14 @@ PetscErrorCode QuantumNumbers::BlockIdxToGlobalIdx(
     GlobIdx = qn_offset[BlockIdx] + LocIdx;
     return(0);
 }
+
+
+PetscInt QuantumNumbers::BlockIdxToGlobalIdx(
+    const PetscInt& BlockIdx,
+    const PetscInt& LocIdx
+    ) const
+{
+    assert(initialized);
+    assert((0 <= BlockIdx) && (BlockIdx < num_sectors));
+    return qn_offset[BlockIdx] + LocIdx;
+}

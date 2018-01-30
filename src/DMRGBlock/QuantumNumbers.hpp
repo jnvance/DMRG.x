@@ -148,6 +148,12 @@ public:
         PetscInt& GlobIdx           /**< [out] Global index */
         ) const;
 
+    /** Maps the block index of a basis state to its global index and returns the value directly */
+    PetscInt BlockIdxToGlobalIdx(
+        const PetscInt& BlockIdx,   /**< [in]  Block index */
+        const PetscInt& LocIdx      /**< [in]  Local index in the block */
+        ) const;
+
 };
 
 
