@@ -113,7 +113,7 @@ PetscErrorCode QuantumNumbers::GlobalIdxToBlockIdx(
     PetscInt& BlockIdx
     ) const
 {
-    PetscInt ierr = 0;
+    PetscErrorCode ierr = 0;
 
     /** @throw PETSC_ERR_ARG_WRONGSTATE Object not initialized. Call Initialize() first.*/
     CheckInit(__FUNCTION__);
@@ -134,7 +134,7 @@ PetscErrorCode QuantumNumbers::GlobalIdxToBlockIdx(
     PetscInt& LocIdx
     ) const
 {
-    PetscInt ierr;
+    PetscErrorCode ierr;
 
     ierr = GlobalIdxToBlockIdx(GlobIdx, BlockIdx); CHKERRQ(ierr);
     LocIdx = GlobIdx - qn_offset[BlockIdx];
@@ -149,7 +149,7 @@ PetscErrorCode QuantumNumbers::GlobalIdxToQN(
     PetscReal& QNValue
     ) const
 {
-    PetscInt ierr = 0;
+    PetscErrorCode ierr = 0;
     /** @throw PETSC_ERR_ARG_WRONGSTATE Object not initialized. Call Initialize() first.*/
     CheckInit(__FUNCTION__);
 
@@ -158,4 +158,22 @@ PetscErrorCode QuantumNumbers::GlobalIdxToQN(
     ierr = GlobalIdxToBlockIdx(GlobIdx, BlockIdx); CHKERRQ(ierr);
 
     return ierr;
+}
+
+
+PetscErrorCode QuantumNumbers::BlockIdxToGlobalIdx(
+    const PetscInt& BlockIdx,
+    const PetscInt& LocIdx,
+    PetscInt& GlobIdx
+    ) const
+{
+    /** @throw PETSC_ERR_ARG_WRONGSTATE Object not initialized. Call Initialize() first.*/
+    CheckInit(__FUNCTION__);
+
+    if(PetscUnlikely((BlockIdx < 0) || (BlockIdx >= num_sectors)))
+        /** @throw PETSC_ERR_ARG_OUTOFRANGE Given BlockIdx is out of bounds [0, num_sectors).*/
+        SETERRQ2(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Given BlockIdx (%d) out of bounds [0, %d).", BlockIdx, num_sectors);
+
+    GlobIdx = qn_offset[BlockIdx] + LocIdx;
+    return(0);
 }
