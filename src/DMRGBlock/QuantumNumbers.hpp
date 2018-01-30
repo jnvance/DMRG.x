@@ -205,9 +205,12 @@ public:
         idx_(istart_)
     {
         PetscErrorCode ierr;
-        ierr = QN.GlobalIdxToBlockIdx(istart_, blockidx_);
-
-        assert(!ierr);
+        if(istart_==iend_) {}
+        else
+        {
+            ierr = QN.GlobalIdxToBlockIdx(istart_, blockidx_);
+            assert(!ierr);
+        }
     }
 
     /* TODO: Initialize an iterator through a range of quantum number blocks */
