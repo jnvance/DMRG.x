@@ -91,6 +91,13 @@ public:
         return qn_size;
     }
 
+    /** Returns the number of basis states in each quantum number block */
+    PetscInt Sizes(const PetscInt& idx) const
+    {
+        assert(initialized);
+        return qn_size[idx];
+    }
+
     /** Returns the total number of states */
     PetscInt NumStates() const
     {
@@ -105,7 +112,7 @@ public:
         PetscInt& GlobIdxEnd        /**< [out] Exclusive upper bound index */
         ) const;
 
-    /** Maps the shifted quantum number block index to the global indices [start,end)
+    /** Maps the shifted quantum number block index to the global indices [start,end).
         The value of flg is set to PETSC_TRUE if the output block exists, PETSC_FALSE otherwise */
     PetscErrorCode OpBlockToGlobalRange(
         const PetscInt& BlockIdx,   /**< [in]  Index of the quantum number block */
@@ -114,6 +121,21 @@ public:
         PetscInt& GlobIdxEnd,       /**< [out] Exclusive upper bound index */
         PetscBool& flg              /**< [out] Indicates whether range is non-zero */
         ) const;
+
+    /** Maps the shifted quantum number block index to the global index start in the range [start,end).
+        The value of flg is set to PETSC_TRUE if the output block exists, PETSC_FALSE otherwise */
+    PetscInt OpBlockToGlobalRangeStart(
+        const PetscInt& BlockIdx,   /**< [in]  Index of the quantum number block */
+        const PetscInt& BlockShift, /**< [in]  Shift in quantum number associated to the operator */
+        PetscBool& flg              /**< [out] Indicates whether range is non-zero */
+        ) const
+    {
+        PetscErrorCode ierr;
+        PetscInt GlobIdxStart, GlobIdxEnd;
+        ierr = OpBlockToGlobalRange(BlockIdx, BlockShift, GlobIdxStart, GlobIdxEnd, flg);
+        assert(!ierr);
+        return GlobIdxStart;
+    }
 
     /** Maps the quantum number value to the global indices [start,end) */
     PetscErrorCode QNToGlobalRange(
