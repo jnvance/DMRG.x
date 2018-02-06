@@ -39,6 +39,9 @@ typedef enum
     SideRight = 1   /**< right block */
 } Side_t;
 
+static const std::vector<Op_t> BasicOpTypes = { OpSz, OpSp };
+static const std::vector<Side_t> SideTypes = { SideLeft, SideRight };
+
 /** Contains the matrix representations of the operators of a block of spin-1/2 sites, the associated
     magnetization sectors and some useful information and checking functions */
 class Block_SpinOneHalf
