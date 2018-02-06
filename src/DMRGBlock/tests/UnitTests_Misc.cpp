@@ -20,6 +20,51 @@ PETSC_EXTERN PetscErrorCode SetRow(const Mat& A, const PetscInt& row, const std:
     return ierr;
 }
 
+PETSC_EXTERN PetscErrorCode CheckRow(const Mat& A, const char* label, const PetscInt& row, const std::vector<PetscInt>& idxn,
+    const std::vector<PetscScalar>& v, const PetscBool& CheckZeros = PETSC_FALSE)
+{
+    PetscErrorCode ierr = 0;
+
+    /*  Check row ownership range */
+    PetscInt rstart, rend;
+    ierr = MatGetOwnershipRange(A, &rstart, &rend); CHKERRQ(ierr);
+
+    if(rstart <= row && row < rend)
+    {
+        if(idxn.size()!=v.size())
+            SETERRQ3(PETSC_COMM_SELF, 1, "On matrix %s: Input size mismatch: idxn (%d) != v (%d).", label, idxn.size(), v.size());
+
+        std::vector<PetscInt> idxm = {row};
+        PetscInt ncols;
+        const PetscInt *cols;
+        const PetscScalar *vals;
+        ierr = MatGetRow(A, row, &ncols, &cols, &vals); CHKERRQ(ierr);
+
+        /* Compare cols and vals with idxn and v */
+        if (size_t(ncols) != idxn.size())
+            SETERRQ4(PETSC_COMM_SELF, 1, "On matrix %s: Error at row %d: ncols (%d) != idxn.size (%d).", label, row, ncols, idxn.size());
+
+        /* Compare column indices */
+        for(PetscInt i = 0; i < ncols; ++i)
+        {
+            if(cols[i] != idxn[i])
+                SETERRQ5(PETSC_COMM_SELF, 1, "On matrix %s: Error at row %d idx %d: cols (%d) != idxn (%d).",
+                    label, row, i, cols[i], idxn[i] );
+        }
+
+        /* Compare values */
+        for(PetscInt i = 0; i < ncols; ++i)
+        {
+            if(!PetscEqualScalar(vals[i], v[i]))
+                SETERRQ5(PETSC_COMM_SELF, 1, "On matrix %s: Error at row %d idx %d: vals (%g) != v (%g).",
+                    label, row, i, vals[i], v[i] );
+        }
+
+        ierr = MatRestoreRow(A, row, &ncols, &cols, &vals); CHKERRQ(ierr);
+    }
+    return ierr;
+}
+
 PETSC_EXTERN PetscErrorCode CatchErrorCode(const MPI_Comm& comm, const PetscInt& ierr_in, const PetscInt& ierr_exp)
 {
     PetscErrorCode ierr = 0;
