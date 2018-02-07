@@ -226,6 +226,29 @@ PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin)
     return ierr;
 }
 
+PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMats(const std::vector<Mat>& matrices)
+{
+    PetscErrorCode ierr = 0;
+
+    for(const Mat& mat: matrices){
+        ierr = MatEnsureAssembled(mat); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
+
+PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMatGroups(const std::vector<std::vector<Mat>>& matgroups)
+{
+    PetscErrorCode ierr = 0;
+
+    for(const std::vector<Mat>& matrices: matgroups){
+        ierr = MatEnsureAssembled_MultipleMats(matrices); CHKERRQ(ierr);
+    }
+
+    return ierr;
+}
+
 
 PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& dim, Mat& eye)
 {
