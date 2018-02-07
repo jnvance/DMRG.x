@@ -1,5 +1,6 @@
 #include <petscsys.h>
 #include <slepceps.h>
+#include <vector>
 
 /* Obtained from: https://gist.github.com/orlp/3551590 */
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp) {
@@ -110,6 +111,54 @@ PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const P
     ierr = MatSetOption(*mat, MAT_NO_OFF_PROC_ZERO_ROWS        , PETSC_TRUE);
     ierr = MatSetOption(*mat, MAT_IGNORE_OFF_PROC_ENTRIES      , PETSC_TRUE);
     ierr = MatSetOption(*mat, MAT_IGNORE_ZERO_ENTRIES          , PETSC_TRUE);
+
+    return ierr;
+}
+
+
+PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMats(
+    const std::vector<Mat>& matrices,
+    const std::vector<MatOption>& options,
+    const std::vector<PetscBool>& flgs)
+{
+    PetscErrorCode ierr = 0;
+
+    if(flgs.size() == 1)
+    {
+        for(const Mat& mat: matrices){
+            for(const MatOption& op: options){
+                ierr = MatSetOption(mat, op, flgs[0]); CHKERRQ(ierr);
+            }
+        }
+    }
+    else if(flgs.size() == options.size())
+    {
+        for(const Mat& mat: matrices){
+            size_t i = 0;
+            for(const MatOption& op: options){
+                ierr = MatSetOption(mat, op, flgs[i++]); CHKERRQ(ierr);
+            }
+        }
+    }
+    else
+    {
+        SETERRQ(PETSC_COMM_WORLD, 1, "Incorrect input. Either flgs.size() == 1 or flgs.size() == options.size()");
+    }
+
+    return ierr;
+}
+
+
+PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMatGroups(
+    const std::vector<std::vector<Mat>>& matgroups,
+    const std::vector<MatOption>& options,
+    const std::vector<PetscBool>& flgs)
+{
+    PetscErrorCode ierr = 0;
+
+    for(const std::vector<Mat>& matrices: matgroups){
+        ierr = MatSetOption_MultipleMats(matrices, options, flgs); CHKERRQ(ierr);
+    }
 
     return ierr;
 }
