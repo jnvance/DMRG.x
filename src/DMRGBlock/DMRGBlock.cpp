@@ -319,7 +319,7 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
 PetscErrorCode Block_SpinOneHalf::Destroy()
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
+    if (PetscUnlikely(!init)) return 0;
 
     /*  Destroy operator matrices  */
     for(PetscInt isite = 0; isite < num_sites; ++isite){
