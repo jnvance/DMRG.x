@@ -84,7 +84,6 @@ PetscErrorCode MatKronEyeConstruct(
 
     const PetscInt TotSites = BlockOut.NumSites();
     const std::vector<PetscInt> NumSites_LR = {LeftBlock.NumSites(), RightBlock.NumSites()};
-    const QuantumNumbers& Magnetization = BlockOut.Magnetization;
 
     /*  Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
     std::unordered_map<PetscInt,PetscInt> MapRowsL, MapRowsR;
@@ -98,13 +97,12 @@ PetscErrorCode MatKronEyeConstruct(
         SUBMATRIX COLLECTION
      **************************/
     {
-        QuantumNumbersIterator QIter(Magnetization, rstart, rstart+lrows);
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows);
 
         /* Temporarily stores the global rows of L and R needed for the local rows of O */
         std::set<PetscInt> SetRowsL, SetRowsR;
 
-        for( ; QIter.Loop() && KIter.Loop(); ++QIter, ++KIter)
+        for( ; KIter.Loop(); ++KIter)
         {
             const PetscInt BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt BlockIdx_R = KIter.BlockIdxRight();
@@ -117,9 +115,6 @@ PetscErrorCode MatKronEyeConstruct(
             SetRowsL.insert(RowL);
             SetRowsR.insert(RowR);
         }
-
-        if(QIter.Loop() || KIter.Loop())
-            SETERRQ(PETSC_COMM_SELF, 1, "Iterators QIter and KIter did not finish simultaneously.");
 
         /*  Store the results from the sets into the corresponding map where the key represents the global row while
             the value represents the sequential index where that global row will be stored */
@@ -193,11 +188,10 @@ PetscErrorCode MatKronEyeConstruct(
         std::vector<PetscInt> fws_O_Sp_LR, col_NStatesR_LR;
         const std::vector<std::vector<Mat>>& MatOut_ZP = {BlockOut.Sz,BlockOut.Sp};
 
-        QuantumNumbersIterator QIter(Magnetization, rstart, rstart+lrows);
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows);
-        for( ; QIter.Loop() && KIter.Loop(); ++QIter, ++KIter)
+        for( ; KIter.Loop(); ++KIter)
         {
-            const PetscInt lrow = QIter.Steps();
+            const PetscInt lrow = KIter.Steps();
             const PetscInt row_BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt row_BlockIdx_R = KIter.BlockIdxRight();
             const PetscInt row_NumStates_R = RightBlock.Magnetization.Sizes()[row_BlockIdx_R];
@@ -306,8 +300,6 @@ PetscErrorCode MatKronEyeConstruct(
                 }
             }
         }
-        if(QIter.Loop() || KIter.Loop())
-            SETERRQ(PETSC_COMM_SELF, 1, "Iterators QIter and KIter did not finish simultaneously.");
 
         /*  Call the preallocation for all matrices */
         for(Side_t SideType: SideTypes){
@@ -334,13 +326,12 @@ PetscErrorCode MatKronEyeConstruct(
         PetscInt *idx;
         ierr = PetscCalloc1(MaxElementsPerRow, &idx); CHKERRQ(ierr);
 
-        QuantumNumbersIterator QIter(Magnetization, rstart, rstart+lrows); /* Iterates through the final block */
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows); /* Iterates through component subspaces and final block */
         std::vector<PetscInt> fws_O_Sp_LR, col_NStatesR_LR;
          /* Iterate through all basis states belonging to local rows */
-        for( ; QIter.Loop() && KIter.Loop(); ++QIter, ++KIter)
+        for( ; KIter.Loop(); ++KIter)
         {
-            const PetscInt lrow = QIter.Steps(); /* output local row index */
+            const PetscInt lrow = KIter.Steps(); /* output local row index */
             const PetscInt Irow = lrow + rstart; /* output global row index */
             /* Index of the block in the Kronecker-product block */
             const PetscInt row_BlockIdx_L = KIter.BlockIdxLeft();
@@ -451,9 +442,6 @@ PetscErrorCode MatKronEyeConstruct(
                 }
             }
         }
-
-        if(QIter.Loop() || KIter.Loop())
-            SETERRQ(PETSC_COMM_SELF, 1, "Iterators QIter and KIter did not finish simultaneously.");
 
         ierr = PetscFree(idx); CHKERRQ(ierr);
     }

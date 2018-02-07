@@ -79,23 +79,22 @@ int main(int argc, char **argv)
     SetRow(RightBlock.Sp[1],2, {         3});
     SetRow(RightBlock.Sp[1],3, {          });
 
-    ierr = PetscPrintf(PETSC_COMM_WORLD, "Left: %lu  Right %lu\n", LeftBlock.NumStates(), RightBlock.NumStates()); CHKERRQ(ierr);
-
     /* Calculate the Kronecker product of the blocks */
     ierr = Kron_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
 
-    ierr = MatPeek(BlockOut.Sz[0], "BlockOut.Sz[0]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sz[1], "BlockOut.Sz[1]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sz[2], "BlockOut.Sz[2]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sz[3], "BlockOut.Sz[3]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sz[4], "BlockOut.Sz[4]"); CHKERRQ(ierr);
+    if(false){
+        ierr = MatPeek(BlockOut.Sz[0], "BlockOut.Sz[0]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sz[1], "BlockOut.Sz[1]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sz[2], "BlockOut.Sz[2]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sz[3], "BlockOut.Sz[3]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sz[4], "BlockOut.Sz[4]"); CHKERRQ(ierr);
 
-    ierr = MatPeek(BlockOut.Sp[0], "BlockOut.Sp[0]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sp[1], "BlockOut.Sp[1]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sp[2], "BlockOut.Sp[2]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sp[3], "BlockOut.Sp[3]"); CHKERRQ(ierr);
-    ierr = MatPeek(BlockOut.Sp[4], "BlockOut.Sp[4]"); CHKERRQ(ierr);
-
+        ierr = MatPeek(BlockOut.Sp[0], "BlockOut.Sp[0]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sp[1], "BlockOut.Sp[1]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sp[2], "BlockOut.Sp[2]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sp[3], "BlockOut.Sp[3]"); CHKERRQ(ierr);
+        ierr = MatPeek(BlockOut.Sp[4], "BlockOut.Sp[4]"); CHKERRQ(ierr);
+    }
     /* Check all blocks */
     ierr = BlockOut.CheckOperatorBlocks(); CHKERRQ(ierr);
 
