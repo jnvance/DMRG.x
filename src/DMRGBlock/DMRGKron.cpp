@@ -34,6 +34,15 @@
 
 PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
+PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMats(
+    const std::vector<Mat>& matrices,
+    const std::vector<MatOption>& options,
+    const std::vector<PetscBool>& flgs);
+PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMatGroups(
+    const std::vector<std::vector<Mat>>& matgroups,
+    const std::vector<MatOption>& options,
+    const std::vector<PetscBool>& flgs);
+PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMatGroups(const std::vector<std::vector<Mat>>& matgroups);
 
 static const PetscScalar one = 1.0;
 
@@ -55,8 +64,23 @@ PetscErrorCode MatKronEyeConstruct(
     /*  Determine the ownership range from the Sz matrix of the 0th site */
     if(!BlockOut.NumSites()) SETERRQ(PETSC_COMM_SELF,1,"BlockOut must have at least one site.");
     Mat matin = BlockOut.Sz[0];
+
     const PetscInt rstart = matin->rmap->rstart;
     const PetscInt lrows  = matin->rmap->n;
+    const PetscInt cstart = matin->cmap->rstart;
+    const PetscInt cend   = matin->cmap->rend;
+
+    /*  Verify that the row and column mapping match what is expected */
+    {
+        PetscInt M,N, locrows, loccols, Istart, Cstart, lcols=cend-cstart;
+        ierr = MatGetSize(matin, &M, &N); CHKERRQ(ierr);
+        ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
+        if(locrows!=lrows) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for locrows. Expected %d. Got %d.", locrows, lrows);
+        if(Istart!=rstart) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for Istart. Expected %d. Got %d.",  Istart, rstart);
+        ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
+        if(loccols!=lcols) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for loccols. Expected %d. Got %d.", loccols, lcols);
+        if(Cstart!=cstart) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for Cstart. Expected %d. Got %d.",  Cstart, cstart);
+    }
 
     const PetscInt TotSites = BlockOut.NumSites();
     const std::vector<PetscInt> NumSites_LR = {LeftBlock.NumSites(), RightBlock.NumSites()};
@@ -70,7 +94,9 @@ PetscErrorCode MatKronEyeConstruct(
     PetscInt *ReqRowsL, *ReqRowsR;
     size_t NReqRowsL, NReqRowsR;
 
-    /*  Localized scope for iterators and sets */
+    /**************************
+        SUBMATRIX COLLECTION
+     **************************/
     {
         QuantumNumbersIterator QIter(Magnetization, rstart, rstart+lrows);
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows);
@@ -120,7 +146,7 @@ PetscErrorCode MatKronEyeConstruct(
 
     /*  Submatrix array containing local rows of all operators of both the left and right sides */
     Mat **SubMatArray;
-    ierr = PetscCalloc1(TotSites*2, &SubMatArray); CHKERRQ(ierr);
+    ierr = PetscCalloc1(2*TotSites, &SubMatArray); CHKERRQ(ierr);
     const std::vector<PetscInt> SiteShifts_LR = {0, LeftBlock.NumSites()};
     #define p_SubMat(OPTYPE, SIDETYPE, ISITE) (SubMatArray[ (ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE) ])
     #define SubMat(OPTYPE, SIDETYPE, ISITE) (*p_SubMat((OPTYPE), (SIDETYPE), (ISITE)))
@@ -148,13 +174,165 @@ PetscErrorCode MatKronEyeConstruct(
                 MAT_INITIAL_MATRIX, &p_SubMat(OpSp, SideRight, isite)); CHKERRQ(ierr);
     }
 
-    /*  TODO: Preallocate the local rows so do one more loop */
-    /*  Determine the maximum number of elements in a row during preallocation */
+    /*******************
+        PREALLOCATION
+     *******************/
+    PetscInt MaxElementsPerRow = 0;
     {
+        /*  Require all output block matrices to be preallocated */
+        ierr = MatSetOption_MultipleMatGroups({ BlockOut.Sz, BlockOut.Sp },
+            { MAT_NO_OFF_PROC_ENTRIES, MAT_NEW_NONZERO_LOCATION_ERR }, { PETSC_TRUE, PETSC_TRUE }); CHKERRQ(ierr);
 
-        #if DMRG_KRON_TESTING
-            PRINT_RANK_BEGIN()
-        #endif
+        /*  Array of vectors containing the number of elements in the diagonal and off-diagonal
+            blocks of Sz and Sp matrices on each site */
+        std::vector< std::vector<PetscInt> > D_NNZ_all(2*TotSites, std::vector<PetscInt>(lrows));
+        std::vector< std::vector<PetscInt> > O_NNZ_all(2*TotSites, std::vector<PetscInt>(lrows));
+        #define Dnnz(OPTYPE, SIDETYPE, ISITE) (D_NNZ_all[ (ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE) ])
+        #define Onnz(OPTYPE, SIDETYPE, ISITE) (O_NNZ_all[ (ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE) ])
+
+        std::vector<PetscInt> fws_O_Sp_LR, col_NStatesR_LR;
+        const std::vector<std::vector<Mat>>& MatOut_ZP = {BlockOut.Sz,BlockOut.Sp};
+
+        QuantumNumbersIterator QIter(Magnetization, rstart, rstart+lrows);
+        KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows);
+        for( ; QIter.Loop() && KIter.Loop(); ++QIter, ++KIter)
+        {
+            const PetscInt lrow = QIter.Steps();
+            const PetscInt row_BlockIdx_L = KIter.BlockIdxLeft();
+            const PetscInt row_BlockIdx_R = KIter.BlockIdxRight();
+            const PetscInt row_NumStates_R = RightBlock.Magnetization.Sizes()[row_BlockIdx_R];
+            const PetscInt LocIdxL = KIter.LocIdx() / row_NumStates_R;
+            const PetscInt LocIdxR = KIter.LocIdx() % row_NumStates_R;
+            const PetscInt RowL = LeftBlock.Magnetization.BlockIdxToGlobalIdx(row_BlockIdx_L, LocIdxL);
+            const PetscInt RowR = RightBlock.Magnetization.BlockIdxToGlobalIdx(row_BlockIdx_R, LocIdxR);
+            const PetscInt LocRow_L = MapRowsL[RowL];
+            const PetscInt LocRow_R = MapRowsR[RowR];
+
+            PetscBool flg[2];
+            PetscInt nz_L, nz_R, col_NStatesR;
+            const PetscInt *idx_L, *idx_R;
+            const PetscScalar *v_L, *v_R, *v_O;
+
+            /* Precalculate the post-shift for Sz operators */
+            const PetscInt fws_O_Sz = KIter.BlockStartIdx(OpSz);
+            /*  Reduced redundant map lookup by pre-calculating all possible post-shifts and rblock numstates
+                for S+ operators in the left and right blocks and updating them only when the Row_BlockIdx is updated */
+            if(KIter.UpdatedBlock()){
+                fws_O_Sp_LR = {
+                    KronBlocks.Offsets(row_BlockIdx_L + 1, row_BlockIdx_R),
+                    KronBlocks.Offsets(row_BlockIdx_L, row_BlockIdx_R + 1)
+                };
+                col_NStatesR_LR = {
+                    RightBlock.Magnetization.Sizes(row_BlockIdx_R),
+                    RightBlock.Magnetization.Sizes(row_BlockIdx_R + 1)
+                };
+            }
+
+            /* Operator-dependent scope */
+            for(Op_t OpType: BasicOpTypes)
+            {
+                /*  Calculate the backward pre-shift associated to taking only the non-zero quantum number block */
+                const std::vector<PetscInt> shift_L = {
+                    LeftBlock.Magnetization.OpBlockToGlobalRangeStart(row_BlockIdx_L, OpType, flg[SideLeft]), 0 };
+                const std::vector<PetscInt> shift_R = {
+                    0, RightBlock.Magnetization.OpBlockToGlobalRangeStart(row_BlockIdx_R, OpType, flg[SideRight])};
+
+                for (Side_t SideType: SideTypes)
+                {
+                    /*  Calculate the forward shift for the final elements
+                        corresponding to the first element of the non-zero block */
+                    PetscInt fws_O;
+                    if(OpType == OpSz)
+                    {
+                        col_NStatesR = row_NumStates_R;
+                        fws_O = fws_O_Sz; /* The row and column indices of the block are the same */
+                        if(fws_O == -1) continue;
+                    }
+                    else if(OpType == OpSp)
+                    {
+                        /*  +1 on block index that corresponds to the side */
+                        col_NStatesR = col_NStatesR_LR[SideType];
+                        fws_O = fws_O_Sp_LR[SideType];
+                        if(fws_O == -1) continue;
+                    }
+                    else
+                    {
+                        SETERRQ(mpi_comm, 1, "Invalid operator type.");
+                    }
+
+                    /*  Site-dependent scope */
+                    for(PetscInt isite=0; isite < NumSites_LR[SideType]; ++isite)
+                    {
+                        if(!flg[SideType]) continue;
+
+                        /* Get the pre-shift value of the operator based on whether [L,R] and [Sz,Sp] and set the other as 0 */
+                        const PetscInt bks_L = shift_L[SideType];
+                        const PetscInt bks_R = shift_R[SideType];
+                        const Mat mat = SubMat(OpType, SideType, isite);
+
+                        /* Fill one side (L/R) with operator values and fill the other (R/L) with the indentity */
+                        if(SideType) /* Right */
+                        {
+                            nz_L = 1;
+                            idx_L = &LocIdxL;
+                            v_L = &one;
+                            ierr = (*mat->ops->getrow)(mat, LocRow_R, &nz_R, (PetscInt**)&idx_R, (PetscScalar**)&v_R); CHKERRQ(ierr);
+                            v_O = v_R;
+                        }
+                        else /* Left */
+                        {
+                            ierr = (*mat->ops->getrow)(mat, LocRow_L, &nz_L, (PetscInt**)&idx_L, (PetscScalar**)&v_L); CHKERRQ(ierr);
+                            nz_R = 1;
+                            idx_R = &LocIdxR;
+                            v_R = &one;
+                            v_O = v_L;
+                        }
+
+                        /* Calculate the resulting indices */
+                        PetscInt idx;
+                        PetscInt& diag  = Dnnz(OpType, SideType, isite)[lrow];
+                        PetscInt& odiag = Onnz(OpType, SideType, isite)[lrow];
+                        for(size_t l=0; l<nz_L; ++l){
+                            for(size_t r=0; r<nz_R; ++r)
+                            {
+                                idx = (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O;
+                                if ( cstart <= idx && idx < cend ) ++diag;
+                                else ++odiag;
+                            }
+                        }
+                        PetscInt nelts = nz_L * nz_R;
+                        if (nelts > MaxElementsPerRow) MaxElementsPerRow = nelts;
+                    }
+                }
+            }
+        }
+        if(QIter.Loop() || KIter.Loop())
+            SETERRQ(PETSC_COMM_SELF, 1, "Iterators QIter and KIter did not finish simultaneously.");
+
+        /*  Call the preallocation for all matrices */
+        for(Side_t SideType: SideTypes){
+            for(Op_t OpType: BasicOpTypes){
+                for(PetscInt isite = 0; isite < NumSites_LR[SideType]; ++isite){
+                    ierr = MatMPIAIJSetPreallocation(
+                            MatOut_ZP[OpType][isite+SiteShifts_LR[SideType]],
+                            -1, Dnnz(OpType,SideType,isite).data(),
+                            -1, Onnz(OpType,SideType,isite).data()); CHKERRQ(ierr);
+                    /* Note: Preallocation for seq not required as long as mpiaij(mkl) matrices are specified */
+                }
+            }
+        }
+
+        #undef Dnnz
+        #undef Onnz
+    }
+
+    /*************************
+        MATRIX CONSTRUCTION
+     *************************/
+    {
+        /* Allocate static workspace for idx */
+        PetscInt *idx;
+        ierr = PetscCalloc1(MaxElementsPerRow, &idx); CHKERRQ(ierr);
 
         QuantumNumbersIterator QIter(Magnetization, rstart, rstart+lrows); /* Iterates through the final block */
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows); /* Iterates through component subspaces and final block */
@@ -262,8 +440,6 @@ PetscErrorCode MatKronEyeConstruct(
                             v_O = v_L;
                         }
 
-                        std::vector<PetscInt> idx(nz_L*nz_R);
-
                         /* Calculate the resulting indices */
                         for(size_t l=0; l<nz_L; ++l)
                             for(size_t r=0; r<nz_R; ++r)
@@ -279,11 +455,7 @@ PetscErrorCode MatKronEyeConstruct(
         if(QIter.Loop() || KIter.Loop())
             SETERRQ(PETSC_COMM_SELF, 1, "Iterators QIter and KIter did not finish simultaneously.");
 
-
-        #if DMRG_KRON_TESTING
-            PRINT_RANK_END()
-        #endif
-
+        ierr = PetscFree(idx); CHKERRQ(ierr);
     }
 
     for(PetscInt i=0; i<2*TotSites; ++i){
@@ -296,6 +468,11 @@ PetscErrorCode MatKronEyeConstruct(
     ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
     ierr = PetscFree(ReqRowsL); CHKERRQ(ierr);
     ierr = PetscFree(ReqRowsR); CHKERRQ(ierr);
+    #undef p_SubMat
+    #undef SubMat
+
+    /*  Assemble all output block matrices */
+    ierr = MatEnsureAssembled_MultipleMatGroups({BlockOut.Sz,BlockOut.Sp}); CHKERRQ(ierr);
 
     return ierr;
 }
@@ -365,7 +542,6 @@ PetscErrorCode Kron_Explicit(
     ierr = RightBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
 
     /*  Create a list of tuples of quantum numbers following the kronecker product structure */
-    // KronBlocks_t KronBlocks = KronBlocksCreate(LeftBlock, RightBlock);
     KronBlocks_t KronBlocks(LeftBlock, RightBlock);
 
     #if DMRG_KRON_TESTING
