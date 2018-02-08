@@ -46,9 +46,9 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     /** If num_states_in is PETSC_DEFAULT, the number of states is calculated exactly from the number of sites */
 
     /*  Initialize array of operator matrices  */
-    Sz.resize(num_sites);
-    Sp.resize(num_sites);
-    Sm.resize(num_sites);
+    SzData.resize(num_sites);
+    SpData.resize(num_sites);
+    SmData.resize(num_sites);
 
     /*  Initialize switch  */
     init = PETSC_TRUE;
@@ -58,8 +58,8 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     if (num_sites == 1)
     {
         /*  Create the spin operators for the single site  */
-        ierr = MatSpinOneHalfSzCreate(mpi_comm, Sz[0]); CHKERRQ(ierr);
-        ierr = MatSpinOneHalfSpCreate(mpi_comm, Sp[0]); CHKERRQ(ierr);
+        ierr = MatSpinOneHalfSzCreate(mpi_comm, SzData[0]); CHKERRQ(ierr);
+        ierr = MatSpinOneHalfSpCreate(mpi_comm, SpData[0]); CHKERRQ(ierr);
 
         /*  Initialize the magnetization sectors using the defaults for one site */
         ierr = Magnetization.Initialize(mpi_comm, loc_qn_list, loc_qn_size); CHKERRQ(ierr);
@@ -73,8 +73,8 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     {
         for(PetscInt isite = 0; isite < num_sites; ++isite)
         {
-            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sz[isite]); CHKERRQ(ierr);
-            ierr = InitSingleSiteOperator(mpi_comm, num_states, &Sp[isite]); CHKERRQ(ierr);
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &SzData[isite]); CHKERRQ(ierr);
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &SpData[isite]); CHKERRQ(ierr);
         }
     }
     else
@@ -115,9 +115,9 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
     PetscInt label = 0;
     const Mat *Op;
     switch(OpType) {
-        case OpSm: Op = &Sm[0]; break;
-        case OpSz: Op = &Sz[0]; break;
-        case OpSp: Op = &Sp[0]; break;
+        case OpSm: Op = SmData.data(); break;
+        case OpSz: Op = SzData.data(); break;
+        case OpSp: Op = SpData.data(); break;
         default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
         /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
     }
@@ -192,9 +192,9 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
     if(isite >= num_sites) /** @throw PETSC_ERR_ARG_WRONG The input isite is out of bounds */
         SETERRQ2(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Input isite (%d) out of bounds [0,%d).", isite, num_sites);
     switch(OpType) {
-        case OpSm: matin = Sm[isite]; break;
-        case OpSz: matin = Sz[isite]; break;
-        case OpSp: matin = Sp[isite]; break;
+        case OpSm: matin = SmData[isite]; break;
+        case OpSz: matin = SzData[isite]; break;
+        case OpSp: matin = SpData[isite]; break;
         default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
         /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
     }
@@ -294,7 +294,7 @@ PetscErrorCode Block_SpinOneHalf::CreateSm()
 
     ierr = CheckOperatorArray(OpSp); CHKERRQ(ierr);
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = MatHermitianTranspose(Sp[isite], MAT_INITIAL_MATRIX, &Sm[isite]); CHKERRQ(ierr);
+        ierr = MatHermitianTranspose(SpData[isite], MAT_INITIAL_MATRIX, &SmData[isite]); CHKERRQ(ierr);
     }
     init_Sm = PETSC_TRUE;
 
@@ -308,7 +308,7 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
     if(!init_Sm) SETERRQ1(mpi_comm, 1, "%s was called but Sm was not yet initialized. ",__FUNCTION__);
 
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = MatDestroy(&Sm[isite]); CHKERRQ(ierr);
+        ierr = MatDestroy(&SmData[isite]); CHKERRQ(ierr);
     }
     init_Sm = PETSC_FALSE;
 
@@ -323,8 +323,8 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
 
     /*  Destroy operator matrices  */
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = MatDestroy(&Sz[isite]); CHKERRQ(ierr);
-        ierr = MatDestroy(&Sp[isite]); CHKERRQ(ierr);
+        ierr = MatDestroy(&SzData[isite]); CHKERRQ(ierr);
+        ierr = MatDestroy(&SpData[isite]); CHKERRQ(ierr);
     }
 
     if (init_Sm){

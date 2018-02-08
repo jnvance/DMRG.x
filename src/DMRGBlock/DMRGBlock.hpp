@@ -85,6 +85,15 @@ private:
     /** Tells whether the Sm matrices have been initialized */
     PetscBool init_Sm = PETSC_FALSE;
 
+    /** Array of matrices representing \f$S^z\f$ operators */
+    std::vector<Mat> SzData;
+
+    /** Array of matrices representing \f$S^+\f$ operators */
+    std::vector<Mat> SpData;
+
+    /** Array of matrices representing \f$S^-\f$ operators */
+    std::vector<Mat> SmData;
+
 public:
 
     /** Initializes block object with input attributes and array of matrix operators.
@@ -139,14 +148,27 @@ public:
     /** Matrix representation of the Hamiltonian operator */
     Mat     H = nullptr;
 
-    /** Array of matrices representing \f$S^z\f$ operators */
-    std::vector<Mat> Sz;
+    Mat Sz(const PetscInt& Isite) const {
+        if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
+        return SzData[Isite];
+    }
 
-    /** Array of matrices representing \f$S^+\f$ operators */
-    std::vector<Mat> Sp;
+    Mat Sp(const PetscInt& Isite) const {
+        if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
+        return SpData[Isite];
+    }
 
-    /** Array of matrices representing \f$S^-\f$ operators */
-    std::vector<Mat> Sm;
+    Mat Sm(const PetscInt& Isite) const {
+        if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
+        return SmData[Isite];
+    }
+
+    const std::vector<Mat>& Sz() const { return SzData; }
+
+    const std::vector<Mat>& Sp() const { return SpData; }
+
+    const std::vector<Mat>& Sm() const { return SmData; }
+
 
     /** Matrix representing the identity operator of the block.
         __TODO__: To avoid redundancy set this pointer to one of some global set of matrices

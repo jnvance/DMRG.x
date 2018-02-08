@@ -63,7 +63,7 @@ PetscErrorCode MatKronEyeConstruct(
 
     /*  Determine the ownership range from the Sz matrix of the 0th site */
     if(!BlockOut.NumSites()) SETERRQ(PETSC_COMM_SELF,1,"BlockOut must have at least one site.");
-    Mat matin = BlockOut.Sz[0];
+    Mat matin = BlockOut.Sz(0);
 
     const PetscInt rstart = matin->rmap->rstart;
     const PetscInt lrows  = matin->rmap->n;
@@ -157,15 +157,15 @@ PetscErrorCode MatKronEyeConstruct(
 
     /*  Looping through all sites and matrices, get the submatrices containing the required rows */
     for(PetscInt isite=0; isite<LeftBlock.NumSites(); ++isite){
-        ierr = MatCreateSubMatrices(LeftBlock.Sz[isite], 1, &isrow_L, &iscol_L,
+        ierr = MatCreateSubMatrices(LeftBlock.Sz(isite), 1, &isrow_L, &iscol_L,
                 MAT_INITIAL_MATRIX, &p_SubMat(OpSz, SideLeft, isite)); CHKERRQ(ierr);
-        ierr = MatCreateSubMatrices(LeftBlock.Sp[isite], 1, &isrow_L, &iscol_L,
+        ierr = MatCreateSubMatrices(LeftBlock.Sp(isite), 1, &isrow_L, &iscol_L,
                 MAT_INITIAL_MATRIX, &p_SubMat(OpSp, SideLeft, isite)); CHKERRQ(ierr);
     }
     for(PetscInt isite=0; isite<RightBlock.NumSites(); ++isite){
-        ierr = MatCreateSubMatrices(RightBlock.Sz[isite], 1, &isrow_R, &iscol_R,
+        ierr = MatCreateSubMatrices(RightBlock.Sz(isite), 1, &isrow_R, &iscol_R,
                 MAT_INITIAL_MATRIX, &p_SubMat(OpSz, SideRight, isite)); CHKERRQ(ierr);
-        ierr = MatCreateSubMatrices(RightBlock.Sp[isite], 1, &isrow_R, &iscol_R,
+        ierr = MatCreateSubMatrices(RightBlock.Sp(isite), 1, &isrow_R, &iscol_R,
                 MAT_INITIAL_MATRIX, &p_SubMat(OpSp, SideRight, isite)); CHKERRQ(ierr);
     }
 
@@ -175,7 +175,7 @@ PetscErrorCode MatKronEyeConstruct(
     PetscInt MaxElementsPerRow = 0;
     {
         /*  Require all output block matrices to be preallocated */
-        ierr = MatSetOption_MultipleMatGroups({ BlockOut.Sz, BlockOut.Sp },
+        ierr = MatSetOption_MultipleMatGroups({ BlockOut.Sz(), BlockOut.Sp() },
             { MAT_NO_OFF_PROC_ENTRIES, MAT_NEW_NONZERO_LOCATION_ERR }, { PETSC_TRUE, PETSC_TRUE }); CHKERRQ(ierr);
 
         /*  Array of vectors containing the number of elements in the diagonal and off-diagonal
@@ -186,7 +186,7 @@ PetscErrorCode MatKronEyeConstruct(
         #define Onnz(OPTYPE, SIDETYPE, ISITE) (O_NNZ_all[ (ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE) ])
 
         std::vector<PetscInt> fws_O_Sp_LR, col_NStatesR_LR;
-        const std::vector<std::vector<Mat>>& MatOut_ZP = {BlockOut.Sz,BlockOut.Sp};
+        const std::vector<std::vector<Mat>>& MatOut_ZP = {BlockOut.Sz(), BlockOut.Sp()};
 
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows);
         for( ; KIter.Loop(); ++KIter)
@@ -368,7 +368,7 @@ PetscErrorCode MatKronEyeConstruct(
             }
 
             /* Operator-dependent scope */
-            const std::vector<std::vector<Mat>>& MatOut = {BlockOut.Sz,BlockOut.Sp};
+            const std::vector<std::vector<Mat>>& MatOut = {BlockOut.Sz(), BlockOut.Sp()};
             for(Op_t OpType: BasicOpTypes)
             {
                 /*  Calculate the backward pre-shift associated to taking only the non-zero quantum number block */
@@ -460,7 +460,7 @@ PetscErrorCode MatKronEyeConstruct(
     #undef SubMat
 
     /*  Assemble all output block matrices */
-    ierr = MatEnsureAssembled_MultipleMatGroups({BlockOut.Sz,BlockOut.Sp}); CHKERRQ(ierr);
+    ierr = MatEnsureAssembled_MultipleMatGroups({BlockOut.Sz(), BlockOut.Sp()}); CHKERRQ(ierr);
 
     return ierr;
 }
