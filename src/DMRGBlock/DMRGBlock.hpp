@@ -60,15 +60,15 @@ private:
 
     /** Local dimension of a single site.
         @remarks __NOTE:__ Default for spin-1/2 */
-    const PetscInt loc_dim = 2;
+    PetscInt loc_dim = 2;
 
     /** Sz sectors of a single site.
         @remarks __NOTE:__ Default for spin-1/2 */
-    const std::vector<PetscScalar> loc_qn_list = {+0.5, -0.5};
+    std::vector<PetscScalar> loc_qn_list = {+0.5, -0.5};
 
     /** Number of states in each sector in a single site.
         @remarks __NOTE:__ Default for spin-1/2 */
-    const std::vector<PetscInt> loc_qn_size = {1, 1};
+    std::vector<PetscInt> loc_qn_size = {1, 1};
 
     /** Tells whether the block was initialized */
     PetscBool init = PETSC_FALSE;
