@@ -133,7 +133,7 @@ private:
 
 
 /** Calculates a new block combining two spin-1/2 blocks */
-PetscErrorCode Kron_Explicit(
+PetscErrorCode KronEye_Explicit(
     const Block_SpinOneHalf& LeftBlock,
     const Block_SpinOneHalf& RightBlock,
     Block_SpinOneHalf& BlockOut,

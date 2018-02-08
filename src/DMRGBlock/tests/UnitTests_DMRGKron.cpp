@@ -80,7 +80,7 @@ int main(int argc, char **argv)
     SetRow(RightBlock.Sp[1],3, {          });
 
     /* Calculate the Kronecker product of the blocks */
-    ierr = Kron_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+    ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
 
     if(false){
         ierr = MatPeek(BlockOut.Sz[0], "BlockOut.Sz[0]"); CHKERRQ(ierr);

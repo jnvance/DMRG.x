@@ -466,7 +466,7 @@ PetscErrorCode MatKronEyeConstruct(
 }
 
 
-PetscErrorCode Kron_Explicit(
+PetscErrorCode KronEye_Explicit(
     const Block_SpinOneHalf& LeftBlock,
     const Block_SpinOneHalf& RightBlock,
     Block_SpinOneHalf& BlockOut,
