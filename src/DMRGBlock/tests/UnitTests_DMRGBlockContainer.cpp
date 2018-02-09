@@ -1,26 +1,24 @@
 static char help[] =
     "Test code for DMRGBlockContainer module\n";
 
+#include "DMRGBlock.hpp"
+#include "Hamiltonians.hpp"
 #include "DMRGBlockContainer.hpp"
 
 PETSC_EXTERN PetscErrorCode SetRow(const Mat& A, const PetscInt& row, const std::vector<PetscInt>& idxn);
+PETSC_EXTERN PetscErrorCode CatchErrorCode(const MPI_Comm& comm, const PetscInt& ierr_in, const PetscInt& ierr_exp);
 
-/** Tests the EnlargeBlock method */
-PetscErrorCode Test_EnlargeBlock()
+PetscErrorCode Test()
 {
     PetscErrorCode ierr = 0;
 
-    /*  Initialize a block-container object */
-    Heisenberg_SpinOneHalf_SquareLattice Lattice;
-    ierr = Lattice.Initialize(); CHKERRQ(ierr);
+    DMRGBlockContainer<Block_SpinOneHalf, J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
 
-    /*  Check the matrix operator blocks */
-    ierr = Lattice.SysBlock(0).CheckOperators(); CHKERRQ(ierr);
-    ierr = Lattice.EnvBlock().CheckOperators(); CHKERRQ(ierr);
+    ierr = DMRG.Warmup(10); CHKERRQ(ierr);
 
-    /* TODO: Insert some operations here with EnlargeBlock() */
+    /* Peek at the last created envblock */
+    ierr = MatPeek(DMRG.SysBlock(4).Sz(0),"DMRG.SysBlock(4).Sz[0]"); CHKERRQ(ierr);
 
-    ierr = Lattice.Destroy(); CHKERRQ(ierr);
     return ierr;
 }
 
@@ -35,7 +33,7 @@ int main(int argc, char **argv)
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
-    ierr = Test_EnlargeBlock(); CHKERRQ(ierr);
+    ierr = Test(); CHKERRQ(ierr);
 
     ierr = SlepcFinalize(); CHKERRQ(ierr);
     return ierr;

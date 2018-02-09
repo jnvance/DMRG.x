@@ -3,7 +3,7 @@
 
 /**
     @defgroup   DMRGBlockContainer   DMRGBlockContainer
-    @brief      Implementation of the J1J2_SpinOneHalf_SquareLattice class
+    @brief      Implementation of the DMRGBlockContainer class
     @addtogroup DMRGBlockContainer
     @{ */
 
@@ -12,21 +12,116 @@
 #include <vector>
 #include <map>
 
-#include "DMRGBlock.hpp"
-#include "linalg_tools.hpp"
+#include "DMRGKron.hpp"
 
-/** Contains and manipulates the system and environment blocks used in a single DMRG run
-    and deals specifically with a J1-J2 Hamiltonian on a square lattice
-
-    @remarks __TODO:__ Insert some brief description of the J1-J2 Hamiltonian and some use cases of this code
- */
-class J1J2_SpinOneHalf_SquareLattice
+/** Provides an alias of Side_t to follow the Sys-Env convention */
+typedef enum
 {
+    BlockSys = 0,
+    BlockEnv = 1
+}
+Block_t;
+
+/** Contains and manipulates the system and environment blocks used in a single DMRG run */
+template<class Block, class Hamiltonian> class DMRGBlockContainer
+{
+
+public:
+
+    /** Initializes the container object with blocks of one site on each of the system and environment */
+    DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
+    {
+        PetscInt ierr = 0;
+
+        /*  Get MPI attributes */
+        ierr = MPI_Comm_size(mpi_comm, &mpi_size); assert(!ierr);
+        ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); assert(!ierr);
+
+        /*  Initialize SingleSite which is used as added site */
+        ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+
+        num_sites = Ham.NumSites();
+        num_sys_blocks = num_sites - 1;
+
+        if((num_sites) < 2) throw std::runtime_error("There must be at least two total sites.");
+        if((num_sites) % 2)  throw std::runtime_error("Total number of sites must be even.");
+
+        sys_blocks.resize(num_sys_blocks);
+        env_blocks.resize(num_env_blocks);
+
+        /*  Initialize the 0th system block and the environment with one site each  */
+        ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+        ierr = env_blocks[env_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+
+        /*  Get some info from command line */
+        ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
+    }
+
+    /** Destroys all created blocks */
+    ~DMRGBlockContainer()
+    {
+        PetscInt ierr = 0;
+        ierr = SingleSite.Destroy(); assert(!ierr);
+        for(Block blk: sys_blocks) { ierr = blk.Destroy(); assert(!ierr); }
+        for(Block blk: env_blocks) { ierr = blk.Destroy(); assert(!ierr); }
+    }
+
+    /** Performs the warmup stage of DMRG.
+        The system and environment blocks are grown until both reach the maximum number which is half the total number
+        of sites. All created system blocks and only the last environment block are stored all of which will
+        be represented by `MStates` number of basis states */
+    PetscErrorCode Warmup(
+        const PetscInt& MStates /**< [in] the maximum number of states to keep after each truncation */
+        )
+    {
+        PetscErrorCode ierr = 0;
+
+        if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
+        /* Continuously enlarge the system block until it reaches half the total system size */
+        while(sys_ninit < num_sites/2)
+        {
+            if(!mpi_rank && verbose) printf("sys_ninit = %d  env_ninit = %d\n", sys_ninit, env_ninit);
+
+            Block env_temp;
+            ierr = SingleDMRGStep( sys_blocks[sys_ninit-1], env_blocks[0], MStates,
+                sys_blocks[sys_ninit], env_temp); CHKERRQ(ierr);
+            ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
+            env_blocks[0] = env_temp;
+
+            ++sys_ninit;
+        }
+        warmed_up = PETSC_TRUE;
+
+        if(!mpi_rank && verbose) printf("sys_ninit = %d   num_sites = %d\n", sys_ninit, num_sites);
+
+        return ierr;
+    }
+
+    /** Destroys the container object */
+    PetscErrorCode Destroy();
+
+    /** Accesses the specified system block */
+    const Block& SysBlock(const PetscInt& BlockIdx) const {
+        if(BlockIdx >= sys_ninit) throw std::runtime_error("Attempted to access uninitialized system block.");
+        return sys_blocks[BlockIdx];
+    }
+
+    /** Accesses the specified environment block */
+    const Block& EnvBlock(const PetscInt& BlockIdx) const {
+        if(BlockIdx >= env_ninit) throw std::runtime_error("Attempted to access uninitialized environment block.");
+        return env_blocks[BlockIdx];
+    }
+
+    /** Accesses the 0th environment block */
+    const Block& EnvBlock() const{ return env_blocks[0]; }
+
+    /** Returns that number of sites recorded in the Hamiltonian object */
+    PetscInt NumSites() const { return num_sites; }
 
 private:
 
     /** MPI Communicator */
-    MPI_Comm    mpi_comm = PETSC_COMM_WORLD;
+    MPI_Comm    mpi_comm = PETSC_COMM_SELF;
 
     /** MPI rank in mpi_comm */
     PetscMPIInt mpi_rank;
@@ -38,94 +133,93 @@ private:
     PetscBool   verbose = PETSC_FALSE;
 
     /** Tells whether the object was initialized using Initialize() */
-    PetscBool   initialized = PETSC_FALSE;
-
-    /** Coupling strength for nearest-neighbor interactions */
-    PetscScalar J1 = 1.0;
-
-    /** Coupling strength for next-nearest-neighbor interactions */
-    PetscScalar J2 = 1.0;
-
-    /** Target maximum number of states after truncation */
-    PetscInt    mstates = 20;
-
-    /** Length along (growing) longitudinal direction */
-    PetscInt    Lx = 4;
-
-    /** Length along (fixed) transverse direction */
-    PetscInt    Ly = 3;
+    PetscBool   warmed_up = PETSC_FALSE;
 
     /** Total number of sites */
     PetscInt    num_sites;
 
-    /** Number of system blocks to store, usually Lx*Ly-1 */
-    PetscInt    num_blocks;
+    /** Number of system blocks to be stored.
+        Usually it is the maximum number of system sites (num_sites - 1) */
+    PetscInt    num_sys_blocks;
+
+    /** Number of environment blocks to be stored.
+        Usually it is only 1 since the environment block will be re-used */
+    PetscInt    num_env_blocks = 1;
 
     /** Array of system blocks each of which will be kept
         all throughout the simulation */
-    std::vector< Block_SpinOneHalf > sys_blocks;
+    std::vector< Block > sys_blocks;
 
     /** Number of initialized blocks in SysBlocks */
-    PetscInt    sys_blocks_num_init = 0;
+    PetscInt    sys_ninit = 0;
 
     /** Environment blocks to be used only during warmup.
         For our purposes, this will contain only one block which will
         continuously be enlarged after each iteration */
-    std::vector< Block_SpinOneHalf > env_blocks;
+    std::vector< Block > env_blocks;
 
     /** Number of initialized blocks in EnvBlocks */
-    PetscInt    env_blocks_num_init = 0;
+    PetscInt    env_ninit = 0;
 
-    /** Static block containing single site operators for reference */
-    Block_SpinOneHalf SingleSite;
+    /** Container for the Hamiltonian and geometry */
+    Hamiltonian Ham;
 
-    /** Constant reference to the single site that is added to each block
-        during the EnlargeBlock() procedure */
-    const Block_SpinOneHalf& AddSite = SingleSite;
+    /** Single site that is added to each block
+        during the block enlargement procedure */
+    Block SingleSite;
 
-public:
-
-    /** Initializes the container object with one site */
-    PetscErrorCode Initialize();
-
-    /** Performs one single DMRG step with Sys and Env.
-        The new system and environment blocks will each have one site added based on ::AddSite
-     */
-    PetscErrorCode SingleDMRGStep(
-        const Block_SpinOneHalf& Sys,   /**< [in] the old system (left) block */
-        const Block_SpinOneHalf& Env,   /**< [in] the old environment (right) block */
-        Block_SpinOneHalf& SysOut,      /**< [out] the new system (left) block */
-        Block_SpinOneHalf& EnvOut       /**< [out] the new environment (right) block */
-        );
+    /** Const reference to SingleSite which prevents editing its contents */
+    const Block& AddSite = SingleSite;
 
     /** Adds one site to BlockIn producing BlockOut */
     PetscErrorCode EnlargeBlock(
-        const Block_SpinOneHalf& BlockIn,   /**< [in] input block */
-        const Side_t& AddSide,              /**< [in] side on which to add a site (SideLeft or SideRight) */
-        Block_SpinOneHalf& BlockOut         /**< [in] output block */
+        const Block_t& BlockType,   /**< [in] the source block type (`BlockSys` or `BlockEnv`) */
+        const PetscInt& BlockIdx,   /**< [in] the index of the source block */
+        Block& BlockOut             /**< [out] the output enlarged block */
         );
 
-    /** Destroys the container object */
-    PetscErrorCode Destroy();
-
-    /** Accesses a specified system block */
-    const Block_SpinOneHalf& SysBlock(const PetscInt& iblock) const
+    PetscErrorCode SingleDMRGStep(
+        const Block& SysBlock,      /**< [in] the old system (left) block */
+        const Block& EnvBlock,      /**< [in] the old environment (right) block */
+        const PetscInt& MStates,    /**< [in] the maximum number of states to keep */
+        Block& SysBlockOut,         /**< [out] the new system (left) block */
+        Block& EnvBlockOut          /**< [out] the new environment (right) block */
+        )
     {
-        return sys_blocks[iblock];
-    }
+        PetscErrorCode ierr;
 
-    /** Accesses a specifieds environment block */
-    const Block_SpinOneHalf& EnvBlock(const PetscInt& iblock) const
-    {
-        return env_blocks[iblock];
-    }
+        /* Check whether the system and environment blocks are the same */
+        const PetscBool flg = PetscBool(&SysBlock==&EnvBlock);
 
-    /** Accesses the 0th environment block */
-    const Block_SpinOneHalf& EnvBlock() const
-    {
-        return env_blocks[0];
-    }
+        if(!mpi_rank && verbose) printf("flg=%s\n", flg?"TRUE":"FALSE");
 
+        /* (Block) Add one site to each block */
+        ierr  =          KronEye_Explicit(SysBlock, AddSite, SysBlockOut, PETSC_FALSE); CHKERRQ(ierr);
+        if(!flg){ ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockOut, PETSC_FALSE); CHKERRQ(ierr); }
+
+        /* Prepare the Hamiltonian taking both enlarged blocks together */
+
+
+        /* Solve for the ground state */
+
+
+        /* Calculate the reduced density matrices */
+
+
+        /* (Block) Get the eigendecomposition of the reduced density matrices */
+
+
+        /* (Block) Sort the eigenvalues and initialize the quantum number list and sizes */
+
+
+        /* (Block) Calculate the rotation matrices */
+
+
+        /* (Block) Initialize the new blocks
+            TODO: Write an initializer for DMRGBlock that uses uninitialized matrices <?> */
+
+        return(0);
+    }
 
 };
 
