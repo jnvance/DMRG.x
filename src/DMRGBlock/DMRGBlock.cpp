@@ -80,9 +80,6 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     else
         SETERRQ1(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Invalid input num_sites_in > 0. Given %d.", num_sites_in);
 
-    /* Set the identity operator */
-    ierr = MatEyeCreate(mpi_comm, num_states, Eye); CHKERRQ(ierr);
-
     return ierr;
 }
 
@@ -330,8 +327,6 @@ PetscErrorCode Block_SpinOneHalf::Destroy()
     if (init_Sm){
         ierr = DestroySm(); CHKERRQ(ierr);
     }
-    /* Destroy identity matrix */
-    ierr = MatDestroy(&Eye); CHKERRQ(ierr);
     init = PETSC_FALSE;
     return ierr;
 }
