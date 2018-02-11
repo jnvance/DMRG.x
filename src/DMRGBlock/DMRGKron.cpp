@@ -176,21 +176,22 @@ PetscErrorCode MatKronEyeConstruct(
     /*******************
         PREALLOCATION
      *******************/
+    /*  Array of vectors containing the number of elements in the diagonal and off-diagonal
+        blocks of Sz and Sp matrices on each site */
+    PetscInt *D_NNZ_all, *O_NNZ_all;
+    ierr = PetscCalloc1(2*TotSites*lrows, &D_NNZ_all); CHKERRQ(ierr);
+    ierr = PetscCalloc1(2*TotSites*lrows, &O_NNZ_all); CHKERRQ(ierr);
+    #define Dnnz(OPTYPE,SIDETYPE,ISITE,LROW) (D_NNZ_all[ ((ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE))*lrows + LROW ])
+    #define Onnz(OPTYPE,SIDETYPE,ISITE,LROW) (O_NNZ_all[ ((ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE))*lrows + LROW ])
+
+    /*  Require all output block matrices to be preallocated */
+    ierr = MatSetOption_MultipleMatGroups({ BlockOut.Sz(), BlockOut.Sp() },
+        { MAT_NO_OFF_PROC_ENTRIES, MAT_NEW_NONZERO_LOCATION_ERR }, { PETSC_TRUE, PETSC_TRUE }); CHKERRQ(ierr);
+
+    const std::vector<std::vector<Mat>>& MatOut_ZP = {BlockOut.Sz(), BlockOut.Sp()};
     PetscInt MaxElementsPerRow = 0;
     {
-        /*  Require all output block matrices to be preallocated */
-        ierr = MatSetOption_MultipleMatGroups({ BlockOut.Sz(), BlockOut.Sp() },
-            { MAT_NO_OFF_PROC_ENTRIES, MAT_NEW_NONZERO_LOCATION_ERR }, { PETSC_TRUE, PETSC_TRUE }); CHKERRQ(ierr);
-
-        /*  Array of vectors containing the number of elements in the diagonal and off-diagonal
-            blocks of Sz and Sp matrices on each site */
-        std::vector< std::vector<PetscInt> > D_NNZ_all(2*TotSites, std::vector<PetscInt>(lrows));
-        std::vector< std::vector<PetscInt> > O_NNZ_all(2*TotSites, std::vector<PetscInt>(lrows));
-        #define Dnnz(OPTYPE, SIDETYPE, ISITE) (D_NNZ_all[ (ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE) ])
-        #define Onnz(OPTYPE, SIDETYPE, ISITE) (O_NNZ_all[ (ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE) ])
-
         std::vector<PetscInt> fws_O_Sp_LR, col_NStatesR_LR;
-        const std::vector<std::vector<Mat>>& MatOut_ZP = {BlockOut.Sz(), BlockOut.Sp()};
 
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows);
         for( ; KIter.Loop(); ++KIter)
@@ -288,8 +289,8 @@ PetscErrorCode MatKronEyeConstruct(
 
                         /* Calculate the resulting indices */
                         PetscInt idx;
-                        PetscInt& diag  = Dnnz(OpType, SideType, isite)[lrow];
-                        PetscInt& odiag = Onnz(OpType, SideType, isite)[lrow];
+                        PetscInt& diag  = Dnnz(OpType, SideType, isite,lrow);
+                        PetscInt& odiag = Onnz(OpType, SideType, isite,lrow);
                         for(size_t l=0; l<nz_L; ++l){
                             for(size_t r=0; r<nz_R; ++r)
                             {
@@ -304,32 +305,30 @@ PetscErrorCode MatKronEyeConstruct(
                 }
             }
         }
+    }
 
-        /*  Call the preallocation for all matrices */
-        for(Side_t SideType: SideTypes){
-            for(Op_t OpType: BasicOpTypes){
-                for(PetscInt isite = 0; isite < NumSites_LR[SideType]; ++isite){
-                    ierr = MatMPIAIJSetPreallocation(
-                            MatOut_ZP[OpType][isite+SiteShifts_LR[SideType]],
-                            -1, Dnnz(OpType,SideType,isite).data(),
-                            -1, Onnz(OpType,SideType,isite).data()); CHKERRQ(ierr);
-                    /* Note: Preallocation for seq not required as long as mpiaij(mkl) matrices are specified */
-                }
+    /*  Call the preallocation for all matrices */
+    for(Side_t SideType: SideTypes){
+        for(Op_t OpType: BasicOpTypes){
+            for(PetscInt isite = 0; isite < NumSites_LR[SideType]; ++isite){
+                ierr = MatMPIAIJSetPreallocation(
+                        MatOut_ZP[OpType][isite+SiteShifts_LR[SideType]],
+                        0, &Dnnz(OpType,SideType,isite,0),
+                        0, &Onnz(OpType,SideType,isite,0)); CHKERRQ(ierr);
+                /* Note: Preallocation for seq not required as long as mpiaij(mkl) matrices are specified */
             }
         }
-
-        #undef Dnnz
-        #undef Onnz
     }
 
     /*************************
         MATRIX CONSTRUCTION
      *************************/
-    {
-        /* Allocate static workspace for idx */
-        PetscInt *idx;
-        ierr = PetscCalloc1(MaxElementsPerRow, &idx); CHKERRQ(ierr);
 
+    /* Allocate static workspace for idx */
+    PetscInt *idx;
+    ierr = PetscCalloc1(MaxElementsPerRow+1, &idx); CHKERRQ(ierr);
+
+    {
         KronBlocksIterator     KIter(KronBlocks,    rstart, rstart+lrows); /* Iterates through component subspaces and final block */
         std::vector<PetscInt> fws_O_Sp_LR, col_NStatesR_LR;
          /* Iterate through all basis states belonging to local rows */
@@ -446,13 +445,15 @@ PetscErrorCode MatKronEyeConstruct(
                 }
             }
         }
-
-        ierr = PetscFree(idx); CHKERRQ(ierr);
     }
+
+    /*  Assemble all output block matrices */
+    ierr = MatEnsureAssembled_MultipleMatGroups({BlockOut.Sz(), BlockOut.Sp()}); CHKERRQ(ierr);
 
     for(PetscInt i=0; i<2*TotSites; ++i){
         ierr = MatDestroy(SubMatArray[i]); CHKERRQ(ierr);
     }
+    ierr = PetscFree(idx); CHKERRQ(ierr);
     ierr = PetscFree(SubMatArray); CHKERRQ(ierr);
     ierr = ISDestroy(&isrow_L); CHKERRQ(ierr);
     ierr = ISDestroy(&isrow_R); CHKERRQ(ierr);
@@ -460,12 +461,12 @@ PetscErrorCode MatKronEyeConstruct(
     ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
     ierr = PetscFree(ReqRowsL); CHKERRQ(ierr);
     ierr = PetscFree(ReqRowsR); CHKERRQ(ierr);
+    ierr = PetscFree(D_NNZ_all); CHKERRQ(ierr);
+    ierr = PetscFree(O_NNZ_all); CHKERRQ(ierr);
     #undef p_SubMat
     #undef SubMat
-
-    /*  Assemble all output block matrices */
-    ierr = MatEnsureAssembled_MultipleMatGroups({BlockOut.Sz(), BlockOut.Sp()}); CHKERRQ(ierr);
-
+    #undef Dnnz
+    #undef Onnz
     return ierr;
 }
 
