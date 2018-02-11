@@ -75,11 +75,15 @@ PetscErrorCode MatKronEyeConstruct(
         PetscInt M,N, locrows, loccols, Istart, Cstart, lcols=cend-cstart;
         ierr = MatGetSize(matin, &M, &N); CHKERRQ(ierr);
         ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
-        if(locrows!=lrows) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for locrows. Expected %d. Got %d.", locrows, lrows);
-        if(Istart!=rstart) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for Istart. Expected %d. Got %d.",  Istart, rstart);
+        if(locrows!=lrows) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, lrows, M, N);
+        if(Istart!=rstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, rstart, M, N);
         ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
-        if(loccols!=lcols) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for loccols. Expected %d. Got %d.", loccols, lcols);
-        if(Cstart!=cstart) SETERRQ2(PETSC_COMM_SELF, 1, "Incorrect guess for Cstart. Expected %d. Got %d.",  Cstart, cstart);
+        if(loccols!=lcols) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, lcols, M, N);
+        if(Cstart!=cstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, cstart, M, N);
     }
 
     const PetscInt TotSites = BlockOut.NumSites();
