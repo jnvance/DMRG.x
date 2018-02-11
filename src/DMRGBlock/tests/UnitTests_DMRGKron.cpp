@@ -15,17 +15,32 @@ PETSC_EXTERN PetscErrorCode CheckRow(const Mat& A, const char* label, const Pets
     const std::vector<PetscScalar>& v);
 PETSC_EXTERN const char hborder[];
 
-
 #define PrintHeader(COMM,TEXT)  PetscPrintf((COMM), "%s\n%s\n%s\n", hborder, (TEXT), hborder)
+
+static PetscBool verbose = PETSC_FALSE;
+
+/** Combines two aritificially-created blocks and tests their contents */
+PetscErrorCode TestKron01();
+
+/** Combines small two single-site blocks together */
+PetscErrorCode TestKron02();
 
 int main(int argc, char **argv)
 {
     PetscErrorCode  ierr = 0;
-    PetscMPIInt     nprocs, rank;
-    MPI_Comm&       comm = PETSC_COMM_WORLD;
-
-    /*  Initialize MPI  */
     ierr = SlepcInitialize(&argc, &argv, (char*)0, help); CHKERRQ(ierr);
+    ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
+    // ierr = TestKron01(); CHKERRQ(ierr);
+    ierr = TestKron02(); CHKERRQ(ierr);
+    ierr = SlepcFinalize(); CHKERRQ(ierr);
+    return(0);
+}
+
+PetscErrorCode TestKron01()
+{
+    PetscErrorCode  ierr = 0;
+    MPI_Comm&       comm = PETSC_COMM_WORLD;
+    PetscMPIInt     nprocs, rank;
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
@@ -82,7 +97,7 @@ int main(int argc, char **argv)
     /* Calculate the Kronecker product of the blocks */
     ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
 
-    if(false){
+    if(verbose){
         ierr = MatPeek(BlockOut.Sz(0), "BlockOut.Sz(0)"); CHKERRQ(ierr);
         ierr = MatPeek(BlockOut.Sz(1), "BlockOut.Sz(1)"); CHKERRQ(ierr);
         ierr = MatPeek(BlockOut.Sz(2), "BlockOut.Sz(2)"); CHKERRQ(ierr);
@@ -233,6 +248,29 @@ int main(int argc, char **argv)
     ierr = LeftBlock.Destroy(); CHKERRQ(ierr);
     ierr = BlockOut.Destroy(); CHKERRQ(ierr);
 
-    ierr = SlepcFinalize(); CHKERRQ(ierr);
-    return ierr;
+    return(0);
+}
+
+
+PetscErrorCode TestKron02()
+{
+
+    PetscErrorCode  ierr = 0;
+    MPI_Comm&       comm = PETSC_COMM_WORLD;
+    PetscMPIInt     nprocs, rank;
+    ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
+    ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
+
+    Block_SpinOneHalf RightBlock, LeftBlock, BlockOut;
+
+    ierr = LeftBlock.Initialize(PETSC_COMM_WORLD, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+    ierr = RightBlock.Initialize(PETSC_COMM_WORLD, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+
+    ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+
+    ierr = RightBlock.Destroy(); CHKERRQ(ierr);
+    ierr = LeftBlock.Destroy(); CHKERRQ(ierr);
+    ierr = BlockOut.Destroy(); CHKERRQ(ierr);
+
+    return(0);
 }

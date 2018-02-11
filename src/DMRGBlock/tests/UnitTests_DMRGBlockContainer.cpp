@@ -17,7 +17,7 @@ PetscErrorCode Test()
     ierr = DMRG.Warmup(10); CHKERRQ(ierr);
 
     /* Peek at the last created envblock */
-    ierr = MatPeek(DMRG.SysBlock(4).Sz(0),"DMRG.SysBlock(4).Sz[0]"); CHKERRQ(ierr);
+    ierr = MatPeek(DMRG.EnvBlock().Sz(0),"DMRG.EnvBlock().Sz(0)"); CHKERRQ(ierr);
 
     return ierr;
 }
