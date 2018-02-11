@@ -84,13 +84,23 @@ PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscIn
 {
     PetscErrorCode ierr = 0;
 
+#if 1
+    /* The petsc way */
     PetscInt Nsize = N;
     PetscInt Lrows = PETSC_DECIDE;
     ierr = PetscSplitOwnership(comm, &Lrows, &Nsize); CHKERRQ(ierr);
-
     Istart = 0;
     ierr = MPI_Exscan(&Lrows, &Istart, 1, MPIU_INT, MPI_SUM, comm); CHKERRQ(ierr);
     locrows = Lrows;
+#else
+    /* Calculate predictively */
+    PetscMPIInt nprocs,rank;
+    ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
+    ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
+    const PetscInt remrows = N % nprocs;
+    locrows = N / nprocs + PetscInt(rank < remrows);
+    Istart =  N / nprocs * rank + (rank < remrows ? rank : remrows);
+#endif
 
     return ierr;
 }
