@@ -21,7 +21,7 @@ PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& d
     SETERRQ4(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "On row %d, index %d out of bounds [%d,%d) ",\
         (row), (col), (cstart), (cend));
 
-PetscErrorCode Block_SpinOneHalf::Initialize(
+PetscErrorCode Block::SpinOneHalf::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
     const PetscInt& num_states_in)
@@ -54,7 +54,7 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     init = PETSC_TRUE;
 
     /** When creating a block for one site, the single-site operators are initialized using the default
-        values and matrix operators for spin-1/2 defined in Block_SpinOneHalf::loc_dim, Block_SpinOneHalf::loc_qn_list and Block_SpinOneHalf::loc_qn_size */
+        values and matrix operators for spin-1/2 defined in Block::SpinOneHalf::loc_dim, Block::SpinOneHalf::loc_qn_list and Block::SpinOneHalf::loc_qn_size */
     if (num_sites == 1)
     {
         /*  Create the spin operators for the single site  */
@@ -83,7 +83,7 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     return ierr;
 }
 
-PetscErrorCode Block_SpinOneHalf::Initialize(
+PetscErrorCode Block::SpinOneHalf::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
     const std::vector<PetscReal>& qn_list_in,
@@ -105,7 +105,7 @@ PetscErrorCode Block_SpinOneHalf::Initialize(
     return ierr;
 }
 
-PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
+PetscErrorCode Block::SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 {
     PetscErrorCode ierr = 0;
 
@@ -143,7 +143,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CheckOperators() const
+PetscErrorCode Block::SpinOneHalf::CheckOperators() const
 {
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
@@ -159,7 +159,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperators() const
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CheckSectors() const
+PetscErrorCode Block::SpinOneHalf::CheckSectors() const
 {
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
@@ -180,7 +180,7 @@ PetscErrorCode Block_SpinOneHalf::CheckSectors() const
 }
 
 
-PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
+PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
 {
     PetscErrorCode ierr = 0;
 
@@ -261,7 +261,7 @@ PetscErrorCode Block_SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, con
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CheckOperatorBlocks() const
+PetscErrorCode Block::SpinOneHalf::CheckOperatorBlocks() const
 {
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
@@ -283,7 +283,7 @@ PetscErrorCode Block_SpinOneHalf::CheckOperatorBlocks() const
 }
 
 
-PetscErrorCode Block_SpinOneHalf::CreateSm()
+PetscErrorCode Block::SpinOneHalf::CreateSm()
 {
     PetscErrorCode ierr = 0;
 
@@ -299,7 +299,7 @@ PetscErrorCode Block_SpinOneHalf::CreateSm()
 }
 
 
-PetscErrorCode Block_SpinOneHalf::DestroySm()
+PetscErrorCode Block::SpinOneHalf::DestroySm()
 {
     PetscErrorCode ierr = 0;
     if(!init_Sm) SETERRQ1(mpi_comm, 1, "%s was called but Sm was not yet initialized. ",__FUNCTION__);
@@ -313,7 +313,7 @@ PetscErrorCode Block_SpinOneHalf::DestroySm()
 }
 
 
-PetscErrorCode Block_SpinOneHalf::Destroy()
+PetscErrorCode Block::SpinOneHalf::Destroy()
 {
     PetscErrorCode ierr = 0;
     if (PetscUnlikely(!init)) return 0;

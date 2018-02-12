@@ -3,8 +3,7 @@
 
 /**
     @defgroup   DMRGKron   DMRGKron
-    @brief      Implementation of the Block_SpinOneHalf class which contains the data and methods
-                for a block of spin sites
+    @brief      Implementation of the Kronecker product routines
     @addtogroup DMRGKron
     @{ */
 
@@ -26,8 +25,8 @@ class KronBlocks_t
 public:
 
     KronBlocks_t(
-        const Block_SpinOneHalf& LeftBlock,
-        const Block_SpinOneHalf& RightBlock
+        const Block::SpinOneHalf& LeftBlock,
+        const Block::SpinOneHalf& RightBlock
         )
     {
         /** Generate the array of KronBlocks */
@@ -134,9 +133,9 @@ private:
 
 /** Calculates a new block combining two spin-1/2 blocks */
 PetscErrorCode KronEye_Explicit(
-    const Block_SpinOneHalf& LeftBlock,
-    const Block_SpinOneHalf& RightBlock,
-    Block_SpinOneHalf& BlockOut,
+    const Block::SpinOneHalf& LeftBlock,
+    const Block::SpinOneHalf& RightBlock,
+    Block::SpinOneHalf& BlockOut,
     PetscBool BuildHamiltonian
     );
 
