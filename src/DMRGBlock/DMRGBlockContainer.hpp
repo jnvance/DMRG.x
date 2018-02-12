@@ -194,8 +194,8 @@ private:
         if(!mpi_rank && verbose) printf("flg=%s\n", flg?"TRUE":"FALSE");
 
         /* (Block) Add one site to each block */
-        ierr  =          KronEye_Explicit(SysBlock, AddSite, SysBlockOut, PETSC_FALSE); CHKERRQ(ierr);
-        if(!flg){ ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockOut, PETSC_FALSE); CHKERRQ(ierr); }
+        ierr  =          KronEye_Explicit(SysBlock, AddSite, SysBlockOut); CHKERRQ(ierr);
+        if(!flg){ ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockOut); CHKERRQ(ierr); }
 
         /* Prepare the Hamiltonian taking both enlarged blocks together */
 

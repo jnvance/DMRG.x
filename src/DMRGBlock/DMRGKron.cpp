@@ -474,27 +474,18 @@ PetscErrorCode MatKronEyeConstruct(
 PetscErrorCode KronEye_Explicit(
     const Block::SpinOneHalf& LeftBlock,
     const Block::SpinOneHalf& RightBlock,
-    Block::SpinOneHalf& BlockOut,
-    PetscBool BuildHamiltonian
+    Block::SpinOneHalf& BlockOut
     )
 {
     PetscErrorCode ierr = 0;
 
-    if(BuildHamiltonian) SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Implemented only for BuildHamiltonian=false.");
-
-    /*  Extract MPI Information through allocated matrices
-     *  NOTE: This call assumes that the Sz operator at the 0th site
-     *  of the left block has been allocated.
-     *  TODO: Change the way we obtain mpi_comm
-     */
-    MPI_Comm mpi_comm = LeftBlock.MPIComm(); /* TODO: Verify that both blocks have the same communicator */
+    MPI_Comm mpi_comm = LeftBlock.MPIComm();
+    if(mpi_comm != RightBlock.MPIComm()) SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Input blocks must have the same communicator.");
     PetscMPIInt mpi_rank, mpi_size;
-    // ierr = PetscObjectGetComm((PetscObject)LeftBlock.Sz[0], &mpi_comm); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
     ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
 
-    /*  For checking the accuracy of the routine
-        TODO: Remove later */
+    /*  For checking the accuracy of the routine. TODO: Remove later */
     #if DMRG_KRON_TESTING
         PRINT_RANK_BEGIN()
         std::cout << "***** Kron_Explicit *****" << std::endl;
@@ -572,13 +563,11 @@ PetscErrorCode KronEye_Explicit(
     PetscInt nstates_left  = LeftBlock.Magnetization.NumStates();
     PetscInt nstates_right = RightBlock.Magnetization.NumStates();
     PetscInt nstates_out   = nstates_left * nstates_right;
-    PetscInt KronBlocks_nstates = 0;
-    for (auto tup: KronBlocks.data()) KronBlocks_nstates += std::get<3>(tup);
+    PetscInt KronBlocks_nstates = KronBlocks.NumStates();
     if(PetscUnlikely(KronBlocks_nstates != nstates_out))
         SETERRQ2(mpi_comm, 1, "Mismatch in number of states. Expected %lu. Got %d.", KronBlocks_nstates, nstates_out);
 
-    /*  Some quantum numbers that appear multiple times need to be grouped into a single quantum number block
-        NOTE: This assumes that KronBlocks has been sorted */
+    /*  Some quantum numbers that appear multiple times need to be grouped into a single quantum number block */
     std::vector<PetscReal>  QN_List;
     std::vector<PetscInt>   QN_Size;
     PetscReal QN_last = 0;

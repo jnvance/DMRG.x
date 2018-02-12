@@ -135,8 +135,7 @@ private:
 PetscErrorCode KronEye_Explicit(
     const Block::SpinOneHalf& LeftBlock,
     const Block::SpinOneHalf& RightBlock,
-    Block::SpinOneHalf& BlockOut,
-    PetscBool BuildHamiltonian
+    Block::SpinOneHalf& BlockOut
     );
 
 /** Iterates through a range of basis states represented in the KronBlocks object */
