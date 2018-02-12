@@ -11,19 +11,19 @@
     @{
  */
 
+/** A single interaction term on a one-dimensional lattice */
+struct HamiltonianTerm
+{
+    PetscScalar a;      /**< Constant coefficient */
+    Op_t        Iop;    /**< The operator type for the left side */
+    PetscInt    Isite;  /**< The index of the site for the left side */
+    Op_t        Jop;    /**< The operator type for the right side */
+    PetscInt    Jsite;  /**< The index of the site for the right side */
+};
+
 /** Implementation of Hamiltonian classes */
 namespace Hamiltonian
 {
-
-    /** A single interaction term on a one-dimensional lattice */
-    struct HamiltonianTerm
-    {
-        PetscScalar a;      /**< Constant coefficient */
-        Op_t        Iop;    /**< The operator type for the left side */
-        PetscInt    Isite;  /**< The index of the site for the left side */
-        Op_t        Jop;    /**< The operator type for the right side */
-        PetscInt    Jsite;  /**< The index of the site for the right side */
-    };
 
     /** Implements the Hamiltonian for the J1-J2 XY model on the square lattice */
     class J1J2XYModel_SquareLattice
