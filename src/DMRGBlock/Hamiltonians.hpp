@@ -12,7 +12,7 @@
  */
 
 /** Implementation of Hamiltonian classes */
-namespace Hamiltonian
+namespace Hamiltonians
 {
     /** A single interaction term on a one-dimensional lattice */
     struct Term

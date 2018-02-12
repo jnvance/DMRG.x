@@ -3,7 +3,7 @@
 /** Encodes the 2d coordinate on the square lattice to the 1d coordinate on the s-shaped snake */
 #define SSNAKE_2D_1D(ix,jy,Lx,Ly) (((ix)*(Ly)+jy)*(1-((ix)%2)) + ((ix+1)*(Ly) - (jy+1))*((ix)%2))
 
-std::vector<PetscInt> Hamiltonian::J1J2XYModel_SquareLattice::GetNearestNeighbors(
+std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNearestNeighbors(
     const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
     ) const
 {
@@ -23,7 +23,7 @@ std::vector<PetscInt> Hamiltonian::J1J2XYModel_SquareLattice::GetNearestNeighbor
     return nn;
 }
 
-std::vector<PetscInt> Hamiltonian::J1J2XYModel_SquareLattice::GetNextNearestNeighbors(
+std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNextNearestNeighbors(
     const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
     ) const
 {
@@ -45,10 +45,10 @@ std::vector<PetscInt> Hamiltonian::J1J2XYModel_SquareLattice::GetNextNearestNeig
     return nnn;
 }
 
-std::vector< Hamiltonian::Term > Hamiltonian::J1J2XYModel_SquareLattice::H(const PetscInt& nsites_in) const
+std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(const PetscInt& nsites_in) const
 {
     PetscInt ns = (nsites_in == PETSC_DEFAULT) ? Lx*Ly : nsites_in;
-    std::vector< Hamiltonian::Term > Terms(0);
+    std::vector< Hamiltonians::Term > Terms(0);
     Terms.reserve(ns*4*2); /* Assume the maximum when all sites have all 4 interactions and 2 terms each */
     for (PetscInt is = 0; is < ns; ++is)
     {
