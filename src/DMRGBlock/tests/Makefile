@@ -9,7 +9,7 @@ UnitTests_DMRGBlock_DEPS = UnitTests_Misc.o \
 	../DMRGBlock.o ../DMRGKron.o ../QuantumNumbers.o ../MiscTools.o \
 	../../linalg_tools.o
 
-UnitTests_DMRGBlockContainer_DEPS = ${UnitTests_DMRGBlock_DEPS}
+UnitTests_DMRGBlockContainer_DEPS = ${UnitTests_DMRGBlock_DEPS} ../Hamiltonians.o
 
 UnitTests_DMRGKron_DEPS = ${UnitTests_DMRGBlock_DEPS}
 
