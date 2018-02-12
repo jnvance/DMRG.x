@@ -77,7 +77,7 @@ PetscErrorCode Test_InitAndCopy()
 {
     PetscErrorCode ierr = 0;
 
-    Block_SpinOneHalf blk;
+    Block::SpinOneHalf blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
 
@@ -104,7 +104,7 @@ PetscErrorCode Test_InitAndCopy()
     }
 
     /* Copy to blk2 */
-    Block_SpinOneHalf blk2 = blk;
+    Block::SpinOneHalf blk2 = blk;
 
     ierr = MatPeek(blk2.Sz(0), "blk2.Sz(0)"); CHKERRQ(ierr);
     ierr = MatPeek(blk2.Sp(0), "blk2.Sp(0)"); CHKERRQ(ierr);
@@ -127,7 +127,7 @@ PetscErrorCode Test_MatCheckOperatorBlocks()
 {
     PetscErrorCode ierr = 0;
 
-    Block_SpinOneHalf blk;
+    Block::SpinOneHalf blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
 

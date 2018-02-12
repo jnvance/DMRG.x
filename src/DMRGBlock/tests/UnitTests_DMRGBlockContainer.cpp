@@ -12,7 +12,7 @@ PetscErrorCode Test()
 {
     PetscErrorCode ierr = 0;
 
-    DMRGBlockContainer<Block_SpinOneHalf, Hamiltonian::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
+    DMRGBlockContainer<Block::SpinOneHalf, Hamiltonian::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
 
     ierr = DMRG.Warmup(10); CHKERRQ(ierr);
 
