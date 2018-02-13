@@ -11,6 +11,7 @@
 #include <slepceps.h>
 
 #include "DMRGBlock.hpp"
+#include "Hamiltonians.hpp"
 
 /** Storage for information on resulting blocks of quantum numbers stored as a tuple for quick sorting.
     - 0th entry:  PetscReal - Quantum number
@@ -26,20 +27,51 @@ public:
 
     KronBlocks_t(
         const Block::SpinOneHalf& LeftBlock,
-        const Block::SpinOneHalf& RightBlock
+        const Block::SpinOneHalf& RightBlock,
+        const std::vector<PetscReal>& QNSectors = {}
         )
     {
-        /** Generate the array of KronBlocks */
-        for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL){
-            for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR){
-                KronBlocks.push_back(std::make_tuple(
-                    LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR,
-                    LeftBlock.Magnetization.Sizes()[IL] * RightBlock.Magnetization.Sizes()[IR]));
+        /** Generate the array of KronBlocks keeping all QNs */
+        if(QNSectors.size() == 0)
+        {
+            for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL){
+                for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR){
+                    KronBlocks.push_back(std::make_tuple(
+                        LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR], IL, IR,
+                        LeftBlock.Magnetization.Sizes()[IL] * RightBlock.Magnetization.Sizes()[IR]));
+                }
+            }
+            /*  Sort by descending quantum numbers */
+            std::stable_sort(KronBlocks.begin(), KronBlocks.end(), DescendingQN);
+        }
+        /** Generate the array of KronBlocks keeping only specified QN (single value) */
+        else if (QNSectors.size() == 1)
+        {
+            for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL){
+                for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR){
+                    PetscReal QN = LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR];
+                    if(QN == QNSectors[0])
+                        KronBlocks.push_back(std::make_tuple(
+                            QN, IL, IR,
+                            LeftBlock.Magnetization.Sizes()[IL] * RightBlock.Magnetization.Sizes()[IR]));
+                }
             }
         }
-
-        /*  Sort by descending quantum numbers */
-        std::stable_sort(KronBlocks.begin(), KronBlocks.end(), DescendingQN);
+        /** Generate the array of KronBlocks keeping only specified QNs */
+        else
+        {
+            /* Convert QNSectors into a set */
+            std::set< PetscReal > QNSectorsSet(QNSectors.begin(), QNSectors.end());
+            for (size_t IL = 0; IL < LeftBlock.Magnetization.List().size(); ++IL){
+                for (size_t IR = 0; IR < RightBlock.Magnetization.List().size(); ++IR){
+                    PetscReal QN = LeftBlock.Magnetization.List()[IL] + RightBlock.Magnetization.List()[IR];
+                    if(QNSectorsSet.find(QN) != QNSectorsSet.end())
+                        KronBlocks.push_back(std::make_tuple(
+                            QN, IL, IR,
+                            LeftBlock.Magnetization.Sizes()[IL] * RightBlock.Magnetization.Sizes()[IR]));
+                }
+            }
+        }
 
         /* Fill-in size and offset data from the sorted blocks */
         num_blocks = KronBlocks.size();
@@ -133,9 +165,25 @@ private:
 
 /** Calculates a new block combining two spin-1/2 blocks */
 PetscErrorCode KronEye_Explicit(
-    const Block::SpinOneHalf& LeftBlock,
-    const Block::SpinOneHalf& RightBlock,
-    Block::SpinOneHalf& BlockOut
+    const Block::SpinOneHalf& LeftBlock,    /**< [in]   left block of sites */
+    const Block::SpinOneHalf& RightBlock,   /**< [in]   right block of sites */
+    Block::SpinOneHalf& BlockOut            /**< [out]  combined block */
+    );
+
+/** Calculates the sum of the Kronecker product of operators on two blocks following the terms of a Hamiltonian.
+
+    This routine treats the right block in inverted order. For example, given a left block of 5 sites and a right block
+    of 3 sites, the interpretation of the output block is as follows:
+
+        L0 L1 L2 L3 L4 R2 R1 R0
+
+    */
+PetscErrorCode KronSum_Explicit(
+    const Block::SpinOneHalf& LeftBlock,            /**< [in]   left block of sites */
+    const Block::SpinOneHalf& RightBlock,           /**< [in]   right block of sites */
+    const std::vector< Hamiltonians::Term >& Terms, /**< [in]   indicates the Kronecker product terms to be constructed */
+    const std::vector<PetscReal>& QNSectors,        /**< [in]   list of quantum number sectors for keeping selected states */
+    Mat& MatOut                                     /**< [out]  resultant matrix */
     );
 
 /** Iterates through a range of basis states represented in the KronBlocks object */
