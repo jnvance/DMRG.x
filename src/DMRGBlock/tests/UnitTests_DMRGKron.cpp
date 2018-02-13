@@ -95,7 +95,7 @@ PetscErrorCode TestKron01()
     SetRow(RightBlock.Sp(1),3, {          });
 
     /* Calculate the Kronecker product of the blocks */
-    ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+    ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut); CHKERRQ(ierr);
 
     if(verbose){
         ierr = MatPeek(BlockOut.Sz(0), "BlockOut.Sz(0)"); CHKERRQ(ierr);
@@ -266,7 +266,7 @@ PetscErrorCode TestKron02()
     ierr = LeftBlock.Initialize(PETSC_COMM_WORLD, 1, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = RightBlock.Initialize(PETSC_COMM_WORLD, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
-    ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut, PETSC_FALSE); CHKERRQ(ierr);
+    ierr = KronEye_Explicit(LeftBlock, RightBlock, BlockOut); CHKERRQ(ierr);
 
     ierr = RightBlock.Destroy(); CHKERRQ(ierr);
     ierr = LeftBlock.Destroy(); CHKERRQ(ierr);
