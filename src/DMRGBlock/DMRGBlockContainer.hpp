@@ -189,20 +189,40 @@ private:
         PetscErrorCode ierr;
 
         /* Check whether the system and environment blocks are the same */
+        Mat H = nullptr; /* Hamiltonian matrix */
         const PetscBool flg = PetscBool(&SysBlock==&EnvBlock);
 
         if(!mpi_rank && verbose) printf("flg=%s\n", flg?"TRUE":"FALSE");
 
         /* (Block) Add one site to each block */
-        ierr  =          KronEye_Explicit(SysBlock, AddSite, SysBlockOut); CHKERRQ(ierr);
-        if(!flg){ ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockOut); CHKERRQ(ierr); }
+        Block SysBlockEnl, EnvBlockEnl;
+        ierr = KronEye_Explicit(SysBlock, AddSite, SysBlockEnl); CHKERRQ(ierr);
+        if(!flg){
+            ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockEnl); CHKERRQ(ierr);
+        }
 
         /* Prepare the Hamiltonian taking both enlarged blocks together */
+        PetscInt NumSitesTotal = SysBlockEnl.NumSites() + EnvBlockEnl.NumSites();
+        const std::vector< Hamiltonians::Term > Terms = Ham.H(NumSitesTotal);
+        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, {0});
+        ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
+
+
+
+
+#if 1
+        if(!mpi_rank) printf(" H(%d)\n", NumSitesTotal);
+        for(const Hamiltonians::Term& term: Terms)
+        {
+            if(!mpi_rank) printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
+                (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+        }
+#endif
 
 
         /* Solve for the ground state */
 
-
+        ierr = MatDestroy(&H); CHKERRQ(ierr);
         /* Calculate the reduced density matrices */
 
 
@@ -216,7 +236,9 @@ private:
 
 
         /* (Block) Initialize the new blocks
-            TODO: Write an initializer for DMRGBlock that uses uninitialized matrices <?> */
+            copy enlarged blocks to out blocks but overwrite the matrices */
+        SysBlockOut = SysBlockEnl;
+        EnvBlockOut = EnvBlockEnl;
 
         return(0);
     }

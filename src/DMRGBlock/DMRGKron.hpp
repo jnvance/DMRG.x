@@ -28,8 +28,10 @@ public:
     KronBlocks_t(
         const Block::SpinOneHalf& LeftBlock,
         const Block::SpinOneHalf& RightBlock,
-        const std::vector<PetscReal>& QNSectors = {}
-        )
+        const std::vector<PetscReal>& QNSectors = {} /**< [in] list of quantum number sectors for keeping selected states */
+        ):
+        LeftBlock(LeftBlock),
+        RightBlock(RightBlock)
     {
         /** Generate the array of KronBlocks keeping all QNs */
         if(QNSectors.size() == 0)
@@ -98,9 +100,16 @@ public:
 
     }
 
+    /** Returns the total number blocks */
     size_t size() const { return KronBlocks.size(); }
+
+    /** Returns a const reference to the KronBlocks object */
     const std::vector<KronBlock_t>& data() const { return KronBlocks; }
+
+    /** Returns the KronBlock for specified index */
     KronBlock_t data(size_t idx) const { return KronBlocks[idx]; }
+
+    /** Returns the KronBlock for specified index */
     KronBlock_t operator[](size_t idx) const { return KronBlocks[idx]; }
 
     /** Returns the list of quantum numbers */
@@ -137,22 +146,40 @@ public:
     /** Returns the total number of states */
     PetscInt NumStates() const { return num_states; }
 
+    /** Constructs the explicit sum of Kronecker products of matrices from the blocks */
+    PetscErrorCode KronSumConstruct(
+        const std::vector< Hamiltonians::Term >& Terms, /**< [in]   indicates the Kronecker product terms to be constructed */
+        Mat& MatOut                                     /**< [out]  resultant matrix */
+        );
+
 private:
 
     /** Storage for kronblocks */
     std::vector<KronBlock_t> KronBlocks;
 
+    /** (Redundant) storage for quantum numbers */
     std::vector<PetscReal> kb_list;
 
+    /** (Redundant) storage for sizes of each quantum number block */
     std::vector<PetscInt> kb_size;
 
+    /** Storage for offsets or starting elements of each block */
     std::vector<PetscInt> kb_offset;
 
+    /** Kronecker product mapping from (L,R) block to the corresponding index */
     std::map< std::tuple<PetscInt,PetscInt>, PetscInt > kb_map;
 
+    /** The number of blocks stored */
     PetscInt num_blocks = 0;
 
+    /** The total number of states stored */
     PetscInt num_states = 0;
+
+    /** Reference to the left block object */
+    const Block::SpinOneHalf& LeftBlock;
+
+    /** Reference to the right block object */
+    const Block::SpinOneHalf& RightBlock;
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)
@@ -178,13 +205,6 @@ PetscErrorCode KronEye_Explicit(
         L0 L1 L2 L3 L4 R2 R1 R0
 
     */
-PetscErrorCode KronSum_Explicit(
-    const Block::SpinOneHalf& LeftBlock,            /**< [in]   left block of sites */
-    const Block::SpinOneHalf& RightBlock,           /**< [in]   right block of sites */
-    const std::vector< Hamiltonians::Term >& Terms, /**< [in]   indicates the Kronecker product terms to be constructed */
-    const std::vector<PetscReal>& QNSectors,        /**< [in]   list of quantum number sectors for keeping selected states */
-    Mat& MatOut                                     /**< [out]  resultant matrix */
-    );
 
 /** Iterates through a range of basis states represented in the KronBlocks object */
 class KronBlocksIterator

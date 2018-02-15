@@ -43,6 +43,7 @@ PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMatGroups(
     const std::vector<MatOption>& options,
     const std::vector<PetscBool>& flgs);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMatGroups(const std::vector<std::vector<Mat>>& matgroups);
+PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 
 static const PetscScalar one = 1.0;
 
@@ -613,4 +614,111 @@ PetscErrorCode KronEye_Explicit(
     ierr = MatKronEyeConstruct(LeftBlock, RightBlock, KronBlocks, BlockOut);  CHKERRQ(ierr);
 
     return ierr;
+}
+
+
+PetscErrorCode KronBlocks_t::KronSumConstruct(
+    const std::vector< Hamiltonians::Term >& Terms,
+    Mat& MatOut
+    )
+{
+    PetscErrorCode ierr = 0;
+
+    MPI_Comm mpi_comm = PETSC_COMM_WORLD; // LeftBlock.MPIComm();
+    PetscMPIInt mpi_rank, mpi_size;
+    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
+    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
+
+    /*  Count the input and total number of sites */
+    PetscInt nsites_left  = LeftBlock.NumSites();
+    PetscInt nsites_right = RightBlock.NumSites();
+    PetscInt nsites_out   = nsites_left + nsites_right;
+
+    /*  Check that the maximum site index in Terms is less than the number of sites in the blocks */
+    PetscInt Max_Isite = 0;
+    for(const Hamiltonians::Term& term: Terms){
+        Max_Isite = ( term.Isite > Max_Isite ) ? term.Isite : Max_Isite;
+        Max_Isite = ( term.Jsite > Max_Isite ) ? term.Jsite : Max_Isite;
+    }
+    if(Max_Isite >= nsites_out) SETERRQ2(mpi_comm, 1, "Maximum site index from Terms (%d) has to be "
+        "less than the total number of sites in the blocks (%d).", Max_Isite, nsites_out);
+
+    /*  Check the validity of input blocks */
+    ierr = LeftBlock.CheckOperators(); CHKERRQ(ierr);
+    ierr = LeftBlock.CheckSectors(); CHKERRQ(ierr);
+    ierr = LeftBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
+    ierr = RightBlock.CheckOperators(); CHKERRQ(ierr);
+    ierr = RightBlock.CheckSectors(); CHKERRQ(ierr);
+    ierr = RightBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
+
+    /*  Classify the terms according to whether an intra-block or inter-block product will be performed */
+    std::vector< Hamiltonians::Term > TermsLL, TermsRR; /* Intra-block */
+    std::vector< Hamiltonians::Term > TermsLR; /* Inter-block */
+    for( const Hamiltonians::Term& term: Terms ){
+        if      ((0 <= term.Isite && term.Isite < nsites_left) && (0 <= term.Jsite && term.Jsite < nsites_left)){
+            TermsLL.push_back(term);
+        }
+        else if ((0 <= term.Isite && term.Isite < nsites_left) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){
+            TermsLR.push_back(term);
+        }
+        else if ((nsites_left <= term.Isite && term.Isite < nsites_out) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){
+            TermsRR.push_back(term);
+        }
+        else {
+            SETERRQ4(mpi_comm, 1, "Invalid term: Isite=%d Jsite=%d for nsites_left=%d and nsites_right=%d.",
+                term.Isite, term.Jsite, nsites_left, nsites_right);
+        }
+    }
+
+#if DMRG_KRON_TESTING
+        if(!mpi_rank) {
+            printf(" nsites_left=%d nsites_right=%d nsites_out=%d\n", nsites_left, nsites_right, nsites_out);
+            printf(" TermsLL\n");
+            for(const Hamiltonians::Term& term: TermsLL)
+            {
+                printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
+                    (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+            }
+            printf(" TermsLR\n");
+            for(const Hamiltonians::Term& term: TermsLR)
+            {
+                printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
+                    (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+            }
+            printf(" TermsRR\n");
+            for(const Hamiltonians::Term& term: TermsRR)
+            {
+                printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
+                    (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+            }
+        }
+#endif
+
+    /*  Initialize the output matrix with the correct dimensions */
+    ierr = MatDestroy(&MatOut); CHKERRQ(ierr);
+    ierr = InitSingleSiteOperator(mpi_comm, num_states, &MatOut); CHKERRQ(ierr);
+    /*  Include other parameters or setup options here */
+
+    const PetscInt rstart = MatOut->rmap->rstart;
+    const PetscInt lrows  = MatOut->rmap->n;
+    const PetscInt cstart = MatOut->cmap->rstart;
+    const PetscInt cend   = MatOut->cmap->rend;
+
+    /*  Verify that the row and column mapping match what is expected */
+    {
+        PetscInt M,N, locrows, loccols, Istart, Cstart, lcols=cend-cstart;
+        ierr = MatGetSize(MatOut, &M, &N); CHKERRQ(ierr);
+        ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
+        if(locrows!=lrows) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, lrows, M, N);
+        if(Istart!=rstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, rstart, M, N);
+        ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
+        if(loccols!=lcols) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, lcols, M, N);
+        if(Cstart!=cstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, cstart, M, N);
+    }
+
+    return(0);
 }
