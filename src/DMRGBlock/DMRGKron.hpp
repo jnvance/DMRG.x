@@ -33,6 +33,13 @@ public:
         LeftBlock(LeftBlock),
         RightBlock(RightBlock)
     {
+        /* Fill in mpi information */
+        mpi_comm = LeftBlock.MPIComm();
+        if(mpi_comm != RightBlock.MPIComm())
+            throw std::runtime_error("Left and right blocks must have the same communicator.");
+        MPI_Comm_rank(mpi_comm, &mpi_rank);
+        MPI_Comm_size(mpi_comm, &mpi_size);
+
         /** Generate the array of KronBlocks keeping all QNs */
         if(QNSectors.size() == 0)
         {
@@ -153,6 +160,9 @@ public:
         );
 
 private:
+
+    MPI_Comm mpi_comm = PETSC_COMM_SELF;
+    PetscMPIInt mpi_rank, mpi_size;
 
     /** Storage for kronblocks */
     std::vector<KronBlock_t> KronBlocks;

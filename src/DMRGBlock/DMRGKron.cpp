@@ -624,11 +624,6 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
 {
     PetscErrorCode ierr = 0;
 
-    MPI_Comm mpi_comm = PETSC_COMM_WORLD; // LeftBlock.MPIComm();
-    PetscMPIInt mpi_rank, mpi_size;
-    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
-    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
-
     /*  Count the input and total number of sites */
     PetscInt nsites_left  = LeftBlock.NumSites();
     PetscInt nsites_right = RightBlock.NumSites();
