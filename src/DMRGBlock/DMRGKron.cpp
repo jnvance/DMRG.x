@@ -751,5 +751,12 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
             "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, cstart, M, N);
     }
 
+    /*  Destroy Sm in advance to avoid clashes with modifications in Sp */
+    if(CreateSmL){
+        ierr = LeftBlock.DestroySm(); CHKERRQ(ierr);
+    }
+    if(CreateSmR){
+        ierr = RightBlock.DestroySm(); CHKERRQ(ierr);
+    }
     return(0);
 }
