@@ -37,8 +37,8 @@ public:
         mpi_comm = LeftBlock.MPIComm();
         if(mpi_comm != RightBlock.MPIComm())
             throw std::runtime_error("Left and right blocks must have the same communicator.");
-        MPI_Comm_rank(mpi_comm, &mpi_rank);
-        MPI_Comm_size(mpi_comm, &mpi_size);
+        if(MPI_Comm_rank(mpi_comm, &mpi_rank)) throw std::runtime_error("MPI Error.");
+        if(MPI_Comm_size(mpi_comm, &mpi_size)) throw std::runtime_error("MPI Error.");
 
         /** Generate the array of KronBlocks keeping all QNs */
         if(QNSectors.size() == 0)
