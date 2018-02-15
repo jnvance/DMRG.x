@@ -26,8 +26,8 @@ class KronBlocks_t
 public:
 
     KronBlocks_t(
-        const Block::SpinOneHalf& LeftBlock,
-        const Block::SpinOneHalf& RightBlock,
+        Block::SpinOneHalf& LeftBlock,
+        Block::SpinOneHalf& RightBlock,
         const std::vector<PetscReal>& QNSectors = {} /**< [in] list of quantum number sectors for keeping selected states */
         ):
         LeftBlock(LeftBlock),
@@ -176,10 +176,10 @@ private:
     PetscInt num_states = 0;
 
     /** Reference to the left block object */
-    const Block::SpinOneHalf& LeftBlock;
+    Block::SpinOneHalf& LeftBlock;
 
     /** Reference to the right block object */
-    const Block::SpinOneHalf& RightBlock;
+    Block::SpinOneHalf& RightBlock;
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)
@@ -192,8 +192,8 @@ private:
 
 /** Calculates a new block combining two spin-1/2 blocks */
 PetscErrorCode KronEye_Explicit(
-    const Block::SpinOneHalf& LeftBlock,    /**< [in]   left block of sites */
-    const Block::SpinOneHalf& RightBlock,   /**< [in]   right block of sites */
+    Block::SpinOneHalf& LeftBlock,          /**< [in]   left block of sites */
+    Block::SpinOneHalf& RightBlock,         /**< [in]   right block of sites */
     Block::SpinOneHalf& BlockOut            /**< [out]  combined block */
     );
 

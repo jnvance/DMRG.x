@@ -168,8 +168,8 @@ private:
         during the block enlargement procedure */
     Block SingleSite;
 
-    /** Const reference to SingleSite which prevents editing its contents */
-    const Block& AddSite = SingleSite;
+    /** Reference to the block of site/s added during enlargement */
+    Block& AddSite = SingleSite;
 
     /** Adds one site to BlockIn producing BlockOut */
     PetscErrorCode EnlargeBlock(
@@ -179,8 +179,8 @@ private:
         );
 
     PetscErrorCode SingleDMRGStep(
-        const Block& SysBlock,      /**< [in] the old system (left) block */
-        const Block& EnvBlock,      /**< [in] the old environment (right) block */
+        Block& SysBlock,            /**< [in] the old system (left) block */
+        Block& EnvBlock,            /**< [in] the old environment (right) block */
         const PetscInt& MStates,    /**< [in] the maximum number of states to keep */
         Block& SysBlockOut,         /**< [out] the new system (left) block */
         Block& EnvBlockOut          /**< [out] the new environment (right) block */

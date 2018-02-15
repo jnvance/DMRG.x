@@ -49,8 +49,8 @@ static const PetscScalar one = 1.0;
 
 /** Constructs the Kronecker product matrices explicitly. */
 PetscErrorCode MatKronEyeConstruct(
-    const Block::SpinOneHalf& LeftBlock,
-    const Block::SpinOneHalf& RightBlock,
+    Block::SpinOneHalf& LeftBlock,
+    Block::SpinOneHalf& RightBlock,
     const KronBlocks_t& KronBlocks,
     Block::SpinOneHalf& BlockOut
     )
@@ -473,8 +473,8 @@ PetscErrorCode MatKronEyeConstruct(
 
 
 PetscErrorCode KronEye_Explicit(
-    const Block::SpinOneHalf& LeftBlock,
-    const Block::SpinOneHalf& RightBlock,
+    Block::SpinOneHalf& LeftBlock,
+    Block::SpinOneHalf& RightBlock,
     Block::SpinOneHalf& BlockOut
     )
 {
@@ -678,6 +678,27 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     for (Hamiltonians::Term& term: TermsRR){
         term.Isite = nsites_out - 1 - term.Isite;
         term.Jsite = nsites_out - 1 - term.Jsite;
+    }
+
+    /*  Check whether there is any need to create the Sm matrices */
+    PetscBool CreateSmL = PETSC_FALSE, CreateSmR = PETSC_FALSE;
+    for( const Hamiltonians::Term& term: TermsLL){
+        if(term.Iop == OpSm || term.Jop == OpSm) { CreateSmL = PETSC_TRUE; break; }
+    }
+    for( const Hamiltonians::Term& term: TermsRR){
+        if(term.Iop == OpSm || term.Jop == OpSm) { CreateSmR = PETSC_TRUE; break; }
+    }
+    if(!CreateSmL) for( const Hamiltonians::Term& term: TermsLR){
+        if(term.Iop == OpSm) { CreateSmL = PETSC_TRUE; break; }
+    }
+    if(!CreateSmR) for( const Hamiltonians::Term& term: TermsLR){
+        if(term.Jop == OpSm) { CreateSmR = PETSC_TRUE; break; }
+    }
+    if(CreateSmL){
+        ierr = LeftBlock.CreateSm(); CHKERRQ(ierr);
+    }
+    if(CreateSmR){
+        ierr = RightBlock.CreateSm(); CHKERRQ(ierr);
     }
 
 #if DMRG_KRON_TESTING
