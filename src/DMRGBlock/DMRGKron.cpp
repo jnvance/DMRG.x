@@ -670,6 +670,16 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         }
     }
 
+    /*  REFLECTION SYMMETRY: Reverse the sequence of sites in the right block so that
+        new sites are always located at the interface */
+    for (Hamiltonians::Term& term: TermsLR){
+        term.Jsite = nsites_out - 1 - term.Jsite;
+    }
+    for (Hamiltonians::Term& term: TermsRR){
+        term.Isite = nsites_out - 1 - term.Isite;
+        term.Jsite = nsites_out - 1 - term.Jsite;
+    }
+
 #if DMRG_KRON_TESTING
         if(!mpi_rank) {
             printf(" nsites_left=%d nsites_right=%d nsites_out=%d\n", nsites_left, nsites_right, nsites_out);
