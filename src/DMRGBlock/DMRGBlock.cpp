@@ -268,6 +268,7 @@ PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, co
         SETERRQ(mpi_comm, PETSC_ERR_SUP, "Implemented only for MATMPIAIJ.");
     }
 
+    ierr = PetscInfo(0, "Operator matrix check satisfied.\n"); CHKERRQ(ierr);
     return ierr;
 }
 
