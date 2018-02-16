@@ -180,9 +180,16 @@ namespace Block {
 
         /** Checks the block indexing in the matrix operator op_t on site isite.
             @pre Implemented only for MPIAIJ matrices */
-        PetscErrorCode MatCheckOperatorBlocks(
+        PetscErrorCode MatOpCheckOperatorBlocks(
             const Op_t& op_t,       /**< [in] operator type */
             const PetscInt& isite   /**< [in] site index */
+            ) const;
+
+        /** Checks the block indexing in the matrix operator op_t on specified matrix matin.
+            @pre Implemented only for MPIAIJ matrices */
+        PetscErrorCode MatCheckOperatorBlocks(
+            const Op_t& op_t,       /**< [in] operator type */
+            const Mat& matin        /**< [in] matrix to be checked */
             ) const;
 
         /** Checks whether all matrix blocks follow the correct sector indices using MatCheckOperatorBlocks() */

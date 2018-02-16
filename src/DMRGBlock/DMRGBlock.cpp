@@ -180,7 +180,7 @@ PetscErrorCode Block::SpinOneHalf::CheckSectors() const
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
+PetscErrorCode Block::SpinOneHalf::MatOpCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
 {
     PetscErrorCode ierr = 0;
 
@@ -195,6 +195,17 @@ PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, co
         default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
         /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
     }
+
+    ierr = MatCheckOperatorBlocks(OpType, matin); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+
+PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, const Mat& matin) const
+{
+    PetscErrorCode ierr = 0;
+
     /* Ensure that the matrix is assembled */
     ierr = MatEnsureAssembled(matin); CHKERRQ(ierr);
 
@@ -271,12 +282,12 @@ PetscErrorCode Block::SpinOneHalf::CheckOperatorBlocks() const
 
     /* Check operator blocks of Sz matrices */
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = MatCheckOperatorBlocks(OpSz, isite); CHKERRQ(ierr);
+        ierr = MatOpCheckOperatorBlocks(OpSz, isite); CHKERRQ(ierr);
     }
 
     /* Check operator blocks of Sp matrices */
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = MatCheckOperatorBlocks(OpSp, isite); CHKERRQ(ierr);
+        ierr = MatOpCheckOperatorBlocks(OpSp, isite); CHKERRQ(ierr);
     }
 
     return ierr;
