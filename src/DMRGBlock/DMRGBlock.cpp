@@ -217,6 +217,12 @@ PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, co
     PetscInt lrows  = matin->rmap->n;
     PetscInt cstart = matin->cmap->rstart;
     PetscInt nrows  = matin->rmap->N;
+    PetscInt ncols  = matin->cmap->N;
+
+    /*  Check the matrix size */
+    const PetscInt magNumStates = Magnetization.NumStates();
+    if(magNumStates != nrows) SETERRQ2(mpi_comm,1,"Incorrect number of rows. Expected %d. Got %d.", magNumStates, nrows);
+    if(magNumStates != nrows) SETERRQ2(mpi_comm,1,"Incorrect number of cols. Expected %d. Got %d.", magNumStates, ncols);
 
     /* Ensure that empty processes do nothing */
     if(!(0 <= rstart && rstart < nrows)) return ierr;
