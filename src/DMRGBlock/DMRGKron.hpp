@@ -197,6 +197,21 @@ private:
         return (std::get<0>(a)) > (std::get<0>(b));
     }
 
+    /** Calculates the Kronecker product of a set of matrices with the identity and adds it to */
+    PetscErrorCode MatKronEyeAdd(
+        const std::vector< Mat >& Matrices,
+        const Side_t& SideType,
+        Mat& MatOut
+        );
+
+    /** Verifies that the assumtpion of intra-block terms to follow Sz form is valid.
+        Model-specific check: Since all possible terms of the Hamiltonian take the form of
+        Sz-Sz or Sp-Sm with operators on the same block, then the resulting product should be of Sz-type. */
+    PetscErrorCode VerifySzAssumption(
+        const std::vector< Mat >& Matrices,
+        const Side_t& SideType
+        );
+
 };
 
 

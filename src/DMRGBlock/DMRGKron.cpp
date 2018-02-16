@@ -617,6 +617,50 @@ PetscErrorCode KronEye_Explicit(
 }
 
 
+typedef struct {
+    PetscInt rstart;
+    PetscInt lrows;
+    PetscInt cstart;
+    PetscInt cend;
+
+    /* Temporarily stores the global rows of L and R needed for the local rows of O */
+    std::set<PetscInt> SetRowsL, SetRowsR;
+
+    /*  Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
+    std::unordered_map<PetscInt,PetscInt> MapRowsL, MapRowsR;
+
+} KronSumCtx;
+
+
+PetscErrorCode KronBlocks_t::VerifySzAssumption(
+    const std::vector< Mat >& Matrices,
+    const Side_t& SideType
+    )
+{
+    PetscErrorCode ierr = 0;
+    for(const Mat& mat: Matrices){
+        if (SideType == SideLeft){
+            ierr = LeftBlock.MatCheckOperatorBlocks(OpSz, mat); CHKERRQ(ierr);
+        } else if (SideType == SideRight){
+            ierr = RightBlock.MatCheckOperatorBlocks(OpSz, mat); CHKERRQ(ierr);
+        }
+    }
+    return(0);
+}
+
+
+PetscErrorCode KronBlocks_t::MatKronEyeAdd(
+    const std::vector< Mat >& Matrices,
+    const Side_t& SideType,
+    Mat& MatOut
+    )
+{
+    PetscErrorCode ierr = 0;
+
+    return ierr;
+}
+
+
 PetscErrorCode KronBlocks_t::KronSumConstruct(
     const std::vector< Hamiltonians::Term >& Terms,
     Mat& MatOut
@@ -696,7 +740,7 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         ierr = RightBlock.CreateSm(); CHKERRQ(ierr);
     }
 
-#if DMRG_KRON_TESTING
+    #if DMRG_KRON_TESTING
         if(!mpi_rank) {
             printf(" nsites_left=%d nsites_right=%d nsites_out=%d\n", nsites_left, nsites_right, nsites_out);
             printf(" TermsLL\n");
@@ -718,17 +762,18 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
                     (OpString.find(term.Jop)->second).c_str(), term.Jsite );
             }
         }
-#endif
+    #endif
 
     /*  Initialize the output matrix with the correct dimensions */
     ierr = MatDestroy(&MatOut); CHKERRQ(ierr);
     ierr = InitSingleSiteOperator(mpi_comm, num_states, &MatOut); CHKERRQ(ierr);
     /*  Include other parameters or setup options here */
 
-    const PetscInt rstart = MatOut->rmap->rstart;
-    const PetscInt lrows  = MatOut->rmap->n;
-    const PetscInt cstart = MatOut->cmap->rstart;
-    const PetscInt cend   = MatOut->cmap->rend;
+    KronSumCtx ctx;
+    const PetscInt rstart = ctx.rstart = MatOut->rmap->rstart;
+    const PetscInt lrows = ctx.lrows  = MatOut->rmap->n;
+    const PetscInt cstart = ctx.cstart = MatOut->cmap->rstart;
+    const PetscInt cend = ctx.cend   = MatOut->cmap->rend;
 
     /*  Verify that the row and column mapping match what is expected */
     {
@@ -744,6 +789,41 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
             "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, lcols, M, N);
         if(Cstart!=cstart) SETERRQ4(PETSC_COMM_SELF, 1,
             "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, cstart, M, N);
+    }
+
+    /*  For each of the intra-block terms, perform the associated matrix multiplications of operators
+        residing on the same blocks */
+    {
+        std::vector< Mat > OpProdLL(TermsLL.size()), OpProdRR(TermsRR.size());
+
+        #define GetBlockMat(BLOCK,OP,ISITE)\
+            (OP==OpSp ? BLOCK.Sp(ISITE) : (OP==OpSm ? BLOCK.Sm(ISITE) : (OP==OpSz ? BLOCK.Sz(ISITE) : NULL)))
+
+        /* Left intra-block */
+        for(size_t it = 0; it < TermsLL.size(); ++it)
+        {
+            const Mat& A = GetBlockMat(LeftBlock,TermsLL[it].Iop,TermsLL[it].Isite);
+            const Mat& B = GetBlockMat(LeftBlock,TermsLL[it].Jop,TermsLL[it].Jsite);
+            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdLL.data()+it); CHKERRQ(ierr);
+            ierr = MatScale(OpProdLL[it], TermsLL[it].a); CHKERRQ(ierr);
+        }
+        ierr = VerifySzAssumption(OpProdLL, SideLeft); CHKERRQ(ierr);
+        ierr = MatKronEyeAdd(OpProdLL, SideLeft, MatOut); CHKERRQ(ierr);
+        for (Mat& mat: OpProdLL){ ierr = MatDestroy(&mat); CHKERRQ(ierr); }
+
+        /* Right intra-block */
+        for(size_t it = 0; it < TermsRR.size(); ++it)
+        {
+            const Mat& A = GetBlockMat(RightBlock,TermsRR[it].Iop,TermsRR[it].Isite);
+            const Mat& B = GetBlockMat(RightBlock,TermsRR[it].Jop,TermsRR[it].Jsite);
+            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdRR.data()+it); CHKERRQ(ierr);
+            ierr = MatScale(OpProdRR[it], TermsRR[it].a); CHKERRQ(ierr);
+        }
+        ierr = VerifySzAssumption(OpProdRR, SideRight); CHKERRQ(ierr);
+        ierr = MatKronEyeAdd(OpProdRR, SideRight, MatOut); CHKERRQ(ierr);
+        for (Mat& mat: OpProdRR){ ierr = MatDestroy(&mat); CHKERRQ(ierr); }
+
+        #undef GetBlockMat
     }
 
     /*  Destroy Sm in advance to avoid clashes with modifications in Sp */
