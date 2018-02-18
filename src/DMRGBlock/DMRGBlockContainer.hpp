@@ -55,6 +55,7 @@ public:
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
+        ierr = SetFromOptions(); assert(!ierr);
     }
 
     /** Destroys all created blocks */
@@ -64,6 +65,14 @@ public:
         ierr = SingleSite.Destroy(); assert(!ierr);
         for(Block blk: sys_blocks) { ierr = blk.Destroy(); assert(!ierr); }
         for(Block blk: env_blocks) { ierr = blk.Destroy(); assert(!ierr); }
+    }
+
+    /** Get parameters from command line options */
+    PetscErrorCode SetFromOptions()
+    {
+        PetscErrorCode ierr;
+        ierr = Ham.SetFromOptions(); CHKERRQ(ierr);
+        return(0);
     }
 
     /** Performs the warmup stage of DMRG.

@@ -37,19 +37,25 @@ namespace Hamiltonians
 
     public:
 
-        /** Constructor that takes in command line options */
+        /** Constructor */
         J1J2XYModel_SquareLattice()
         {
-            /* Get values from command line options */
-            PetscErrorCode ierr;
-            ierr = PetscOptionsGetReal(NULL,NULL,"-J1",&J1,NULL); assert(!ierr);
-            ierr = PetscOptionsGetReal(NULL,NULL,"-J2",&J2,NULL); assert(!ierr);
-            ierr = PetscOptionsGetInt(NULL,NULL,"-Lx",&Lx,NULL); assert(!ierr);
-            ierr = PetscOptionsGetInt(NULL,NULL,"-Ly",&Ly,NULL); assert(!ierr);
-            ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
 
+        }
+
+        PetscErrorCode SetFromOptions()
+        {
+            PetscErrorCode ierr;
+            /* Get values from command line options */
+            ierr = PetscOptionsGetReal(NULL,NULL,"-J1",&J1,NULL); CHKERRQ(ierr);
+            ierr = PetscOptionsGetReal(NULL,NULL,"-J2",&J2,NULL); CHKERRQ(ierr);
+            ierr = PetscOptionsGetInt(NULL,NULL,"-Lx",&Lx,NULL); CHKERRQ(ierr);
+            ierr = PetscOptionsGetInt(NULL,NULL,"-Ly",&Ly,NULL); CHKERRQ(ierr);
+            ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
             /* TODO: Also get boundary conditions from command line */
 
+            set_from_options = PETSC_TRUE;
+            return(0);
         }
 
         /** Returns the number of sites in the square lattice */
@@ -61,6 +67,10 @@ namespace Hamiltonians
             ) const;
 
     private:
+
+        /** Set from options */
+        PetscBool set_from_options = PETSC_FALSE;
+
         /** Coupling strength for nearest-neighbor interactions */
         PetscScalar J1 = 1.0;
 
