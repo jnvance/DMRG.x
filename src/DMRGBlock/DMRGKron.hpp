@@ -33,6 +33,9 @@ public:
         LeftBlock(LeftBlock),
         RightBlock(RightBlock)
     {
+        /* Require blocks to be initialized */
+        if(!LeftBlock.Initialized()) throw std::runtime_error("Left input block not initialized.");
+        if(!RightBlock.Initialized()) throw std::runtime_error("Right input block not initialized.");
         /* Fill in mpi information */
         mpi_comm = LeftBlock.MPIComm();
         if(mpi_comm != RightBlock.MPIComm())

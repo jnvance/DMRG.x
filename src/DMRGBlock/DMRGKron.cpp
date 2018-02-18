@@ -480,6 +480,10 @@ PetscErrorCode KronEye_Explicit(
 {
     PetscErrorCode ierr = 0;
 
+    /*  Require input blocks to be initialized */
+    if(!LeftBlock.Initialized()) SETERRQ(PETSC_COMM_SELF,1,"Left input block not initialized.");
+    if(!RightBlock.Initialized()) SETERRQ(PETSC_COMM_SELF,1,"Right input block not initialized.");
+
     MPI_Comm mpi_comm = LeftBlock.MPIComm();
     if(mpi_comm != RightBlock.MPIComm()) SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "Input blocks must have the same communicator.");
     PetscMPIInt mpi_rank, mpi_size;

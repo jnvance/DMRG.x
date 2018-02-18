@@ -208,6 +208,8 @@ private:
         ierr = KronEye_Explicit(SysBlock, AddSite, SysBlockEnl); CHKERRQ(ierr);
         if(!flg){
             ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockEnl); CHKERRQ(ierr);
+        } else {
+            EnvBlockEnl = SysBlockEnl;
         }
 
         /* Prepare the Hamiltonian taking both enlarged blocks together */
@@ -246,8 +248,13 @@ private:
 
         /* (Block) Initialize the new blocks
             copy enlarged blocks to out blocks but overwrite the matrices */
+        ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
+        ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
+
         SysBlockOut = SysBlockEnl;
-        EnvBlockOut = EnvBlockEnl;
+        if(!flg){
+            EnvBlockOut = EnvBlockEnl;
+        }
 
         return(0);
     }
