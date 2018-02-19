@@ -37,6 +37,9 @@ public:
         ierr = MPI_Comm_size(mpi_comm, &mpi_size); assert(!ierr);
         ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); assert(!ierr);
 
+        /*  Initialize Hamiltonian object */
+        ierr = Ham.SetFromOptions(); assert(!ierr);
+
         /*  Initialize SingleSite which is used as added site */
         ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
 
@@ -55,7 +58,6 @@ public:
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
-        ierr = SetFromOptions(); assert(!ierr);
     }
 
     /** Destroys all created blocks */
