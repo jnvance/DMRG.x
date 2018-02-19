@@ -621,21 +621,6 @@ PetscErrorCode KronEye_Explicit(
 }
 
 
-typedef struct {
-    PetscInt rstart;
-    PetscInt lrows;
-    PetscInt cstart;
-    PetscInt cend;
-
-    /* Temporarily stores the global rows of L and R needed for the local rows of O */
-    std::set<PetscInt> SetRowsL, SetRowsR;
-
-    /*  Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
-    std::unordered_map<PetscInt,PetscInt> MapRowsL, MapRowsR;
-
-} KronSumCtx;
-
-
 PetscErrorCode KronBlocks_t::VerifySzAssumption(
     const std::vector< Mat >& Matrices,
     const Side_t& SideType
