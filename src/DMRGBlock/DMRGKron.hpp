@@ -23,6 +23,9 @@ typedef std::tuple<PetscReal, PetscInt, PetscInt, PetscInt> KronBlock_t;
 /** A container of ordered KronBlock_t objects representing a Kronecker product structure */
 class KronBlocks_t
 {
+
+friend class KronBlocksIterator;
+
 public:
 
     KronBlocks_t(
@@ -348,8 +351,25 @@ public:
     /** Gets the block index for the left side */
     PetscInt BlockIdxLeft() const {return std::get<1>(KronBlocks.data()[blockidx_]);}
 
+    /** Gets the local index for the left side */
+    PetscInt LocIdxLeft() const { return LocIdx() / NumStatesRight(); }
+
+    /** Gets the number of states for the right block */
+    PetscInt NumStatesRight() const { return KronBlocks.RightBlock.Magnetization.Sizes()[BlockIdxRight()]; }
+
     /** Gets the block index for the right side */
     PetscInt BlockIdxRight() const {return std::get<2>(KronBlocks.data()[blockidx_]);}
+
+    /** Gets the local index for the right side */
+    PetscInt LocIdxRight() const { return LocIdx() % NumStatesRight(); }
+
+    PetscInt GlobalIdxLeft() const {
+        return KronBlocks.LeftBlock.Magnetization.BlockIdxToGlobalIdx(BlockIdxLeft(), LocIdxLeft());
+    }
+
+    PetscInt GlobalIdxRight() const {
+        return KronBlocks.RightBlock.Magnetization.BlockIdxToGlobalIdx(BlockIdxRight(), LocIdxRight());
+    }
 
     /** Gets the update state of the block index from the previous increment */
     PetscBool UpdatedBlock() const {return updated_block; }

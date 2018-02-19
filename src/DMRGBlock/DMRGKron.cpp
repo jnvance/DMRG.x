@@ -109,16 +109,8 @@ PetscErrorCode MatKronEyeConstruct(
 
         for( ; KIter.Loop(); ++KIter)
         {
-            const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
-            const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
-            const PetscInt Row_NumStates_R = RightBlock.Magnetization.Sizes()[Row_BlockIdx_R];
-            const PetscInt Row_LocIdx_L = KIter.LocIdx() / Row_NumStates_R;
-            const PetscInt Row_LocIdx_R = KIter.LocIdx() % Row_NumStates_R;
-            const PetscInt Row_L = LeftBlock.Magnetization.BlockIdxToGlobalIdx(Row_BlockIdx_L, Row_LocIdx_L);
-            const PetscInt Row_R = RightBlock.Magnetization.BlockIdxToGlobalIdx(Row_BlockIdx_R, Row_LocIdx_R);
-
-            SetRowsL.insert(Row_L);
-            SetRowsR.insert(Row_R);
+            SetRowsL.insert(KIter.GlobalIdxLeft());
+            SetRowsR.insert(KIter.GlobalIdxRight());
         }
 
         /*  Store the results from the sets into the corresponding map where the key represents the global row while
@@ -200,11 +192,11 @@ PetscErrorCode MatKronEyeConstruct(
             const PetscInt lrow = KIter.Steps();
             const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
-            const PetscInt Row_NumStates_R = RightBlock.Magnetization.Sizes()[Row_BlockIdx_R];
-            const PetscInt Row_LocIdx_L = KIter.LocIdx() / Row_NumStates_R;
-            const PetscInt Row_LocIdx_R = KIter.LocIdx() % Row_NumStates_R;
-            const PetscInt Row_L = LeftBlock.Magnetization.BlockIdxToGlobalIdx(Row_BlockIdx_L, Row_LocIdx_L);
-            const PetscInt Row_R = RightBlock.Magnetization.BlockIdxToGlobalIdx(Row_BlockIdx_R, Row_LocIdx_R);
+            const PetscInt Row_NumStates_R = KIter.NumStatesRight();
+            const PetscInt Row_LocIdx_L = KIter.LocIdxLeft();
+            const PetscInt Row_LocIdx_R = KIter.LocIdxRight();
+            const PetscInt Row_L = KIter.GlobalIdxLeft();
+            const PetscInt Row_R = KIter.GlobalIdxRight();
             const PetscInt LocRow_L = MapRowsL[Row_L];
             const PetscInt LocRow_R = MapRowsR[Row_R];
 
@@ -340,16 +332,13 @@ PetscErrorCode MatKronEyeConstruct(
             /* Index of the block in the Kronecker-product block */
             const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
-            const PetscInt Row_NumStates_R = RightBlock.Magnetization.Sizes()[Row_BlockIdx_R];
+            const PetscInt Row_NumStates_R = KIter.NumStatesRight();
             /* Local index of the row in the Kronecker-product block */
-            const PetscInt Row_LocIdx_L = KIter.LocIdx() / Row_NumStates_R;
-            const PetscInt Row_LocIdx_R = KIter.LocIdx() % Row_NumStates_R;
-            /* MPI row indices of the left and right blocks */
-            const PetscInt Row_L = LeftBlock.Magnetization.BlockIdxToGlobalIdx(Row_BlockIdx_L, Row_LocIdx_L);
-            const PetscInt Row_R = RightBlock.Magnetization.BlockIdxToGlobalIdx(Row_BlockIdx_R, Row_LocIdx_R);
-            /* Corresponding indices in the sequential submatrices */
-            const PetscInt LocRow_L = MapRowsL[Row_L];
-            const PetscInt LocRow_R = MapRowsR[Row_R];
+            const PetscInt Row_LocIdx_L = KIter.LocIdxLeft();
+            const PetscInt Row_LocIdx_R = KIter.LocIdxRight();
+            /* Corresponding indices in the sequential submatrices depending on MPI row indices */
+            const PetscInt LocRow_L = MapRowsL[KIter.GlobalIdxLeft()];
+            const PetscInt LocRow_R = MapRowsR[KIter.GlobalIdxRight()];
 
             PetscBool flg[2];
             PetscInt nz_L, nz_R, col_NStatesR;
