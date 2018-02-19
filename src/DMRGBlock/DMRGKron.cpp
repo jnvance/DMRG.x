@@ -93,10 +93,9 @@ PetscErrorCode MatKronEyeConstruct(
     /*  Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
     std::unordered_map<PetscInt,PetscInt> MapRowsL, MapRowsR;
 
-    /*  PETSc-compatible arrays which store the values of the global indices of the rows which will be
-        stored into local submatrices */
-    PetscInt *ReqRowsL, *ReqRowsR;
-    size_t NReqRowsL, NReqRowsR;
+    /*  Vectors which store the values of the global indices of the rows which will be stored into local submatrices */
+    std::vector<PetscInt> ReqRowsL, ReqRowsR;
+    PetscInt NReqRowsL, NReqRowsR;
 
     /**************************
         SUBMATRIX COLLECTION
@@ -119,8 +118,8 @@ PetscErrorCode MatKronEyeConstruct(
         NReqRowsR = SetRowsR.size();
 
         /*  Allocate enough space and store the required rows into a standard array for generating an index set */
-        ierr = PetscCalloc1(NReqRowsL, &ReqRowsL); CHKERRQ(ierr);
-        ierr = PetscCalloc1(NReqRowsR, &ReqRowsR); CHKERRQ(ierr);
+        ReqRowsL.resize(NReqRowsL);
+        ReqRowsR.resize(NReqRowsR);
         /*  Dump the set values into the array for local->global lookup and into the map for global->local lookup */
         {
             size_t idx = 0;
@@ -146,8 +145,8 @@ PetscErrorCode MatKronEyeConstruct(
     /*  Generate the index sets needed to get the rows and columns */
     IS isrow_L, isrow_R, iscol_L, iscol_R;
     /*  Get only some required rows */
-    ierr = ISCreateGeneral(mpi_comm, NReqRowsL, ReqRowsL, PETSC_USE_POINTER, &isrow_L); CHKERRQ(ierr);
-    ierr = ISCreateGeneral(mpi_comm, NReqRowsR, ReqRowsR, PETSC_USE_POINTER, &isrow_R); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(mpi_comm, NReqRowsL, ReqRowsL.data(), PETSC_USE_POINTER, &isrow_L); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(mpi_comm, NReqRowsR, ReqRowsR.data(), PETSC_USE_POINTER, &isrow_R); CHKERRQ(ierr);
     /*  Get all columns in each required row */
     ierr = ISCreateStride(mpi_comm, LeftBlock.NumStates(), 0, 1, &iscol_L); CHKERRQ(ierr);
     ierr = ISCreateStride(mpi_comm, RightBlock.NumStates(), 0, 1, &iscol_R); CHKERRQ(ierr);
@@ -171,9 +170,7 @@ PetscErrorCode MatKronEyeConstruct(
      *******************/
     /*  Array of vectors containing the number of elements in the diagonal and off-diagonal
         blocks of Sz and Sp matrices on each site */
-    PetscInt *D_NNZ_all, *O_NNZ_all;
-    ierr = PetscCalloc1(2*TotSites*lrows, &D_NNZ_all); CHKERRQ(ierr);
-    ierr = PetscCalloc1(2*TotSites*lrows, &O_NNZ_all); CHKERRQ(ierr);
+    std::vector<PetscInt> D_NNZ_all(2*TotSites*lrows), O_NNZ_all(2*TotSites*lrows);
     #define Dnnz(OPTYPE,SIDETYPE,ISITE,LROW) (D_NNZ_all[ ((ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE))*lrows + LROW ])
     #define Onnz(OPTYPE,SIDETYPE,ISITE,LROW) (O_NNZ_all[ ((ISITE + (SiteShifts_LR [SIDETYPE]) )*2+(OPTYPE))*lrows + LROW ])
 
@@ -449,10 +446,6 @@ PetscErrorCode MatKronEyeConstruct(
     ierr = ISDestroy(&isrow_R); CHKERRQ(ierr);
     ierr = ISDestroy(&iscol_L); CHKERRQ(ierr);
     ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
-    ierr = PetscFree(ReqRowsL); CHKERRQ(ierr);
-    ierr = PetscFree(ReqRowsR); CHKERRQ(ierr);
-    ierr = PetscFree(D_NNZ_all); CHKERRQ(ierr);
-    ierr = PetscFree(O_NNZ_all); CHKERRQ(ierr);
     #undef p_SubMat
     #undef SubMat
     #undef Dnnz
