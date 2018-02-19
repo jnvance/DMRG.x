@@ -77,6 +77,8 @@ public:
         return(0);
     }
 
+    #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
+
     /** Performs the warmup stage of DMRG.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
         of sites. All created system blocks and only the last environment block are stored all of which will
@@ -88,13 +90,18 @@ public:
         PetscErrorCode ierr = 0;
 
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
+
+        if(!mpi_rank && verbose) printf("WARMUP\n");
+
         /* Continuously enlarge the system block until it reaches half the total system size */
+
         while(sys_ninit < num_sites/2)
         {
-            if(!mpi_rank && verbose) printf("sys_ninit = %d  env_ninit = %d\n", sys_ninit, env_ninit);
+            if(!mpi_rank && verbose) PrintBlocks(sys_ninit,sys_ninit);
 
             Block env_temp;
-            ierr = SingleDMRGStep( sys_blocks[sys_ninit-1], env_blocks[0], MStates,
+            ierr = SingleDMRGStep(
+                sys_blocks[sys_ninit-1],  env_blocks[0], MStates,
                 sys_blocks[sys_ninit], env_temp); CHKERRQ(ierr);
             ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
             env_blocks[0] = env_temp;
@@ -102,11 +109,60 @@ public:
             ++sys_ninit;
         }
         warmed_up = PETSC_TRUE;
+        if(sys_ninit != num_sites/2)
+            SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %d. Got %d.",num_sites/2, sys_ninit);
+        /* Destroy environment block */
+        ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
 
-        if(!mpi_rank && verbose) printf("sys_ninit = %d   num_sites = %d\n", sys_ninit, num_sites);
+        if(!mpi_rank && verbose) printf("sys_ninit = %d   num_sites = %d\n\n", sys_ninit, num_sites);
 
         return ierr;
     }
+
+    PetscErrorCode Sweep(
+        const PetscInt& MStates,
+        const PetscInt& MinBlock = PETSC_DEFAULT
+        )
+    {
+        PetscErrorCode ierr;
+        if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
+
+        /*  TODO: Set a minimum number of blocks (min_block). Decide whether to set it statically or let
+            the number correspond to the least number of sites needed to exactly build MStates. */
+        PetscInt min_block = MinBlock==PETSC_DEFAULT ? 1 : MinBlock;
+        if(min_block < 1) SETERRQ1(mpi_comm,1,"MinBlock must at least be 1. Got %d.", min_block);
+
+        if(!mpi_rank && verbose) printf("SWEEP MStates=%d\n", MStates);
+
+        /*  Starting from the midpoint, perform a center to right sweep */
+        for(PetscInt iblock = num_sites/2; iblock < num_sites - min_block - 2; ++iblock)
+        {
+            const PetscInt  insys  = iblock-1,   inenv  = num_sites - iblock - 3;
+            const PetscInt  outsys = iblock,     outenv = num_sites - iblock - 2;
+            if(!mpi_rank && verbose) PrintBlocks(insys+1,inenv+1);
+            ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
+                                    sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
+        }
+
+        /*  Since we ASSUME REFLECTION SYMMETRY, the remainder of the sweep can be done as follows:
+            Starting from the right-most min_block, perform a right to left sweep up to the MIDPOINT */
+        for(PetscInt iblock = min_block; iblock < num_sites/2; ++iblock)
+        {
+            const PetscInt  insys  = num_sites - iblock - 3,    inenv  = iblock-1;
+            const PetscInt  outsys = num_sites - iblock - 2,    outenv = iblock;
+            if(!mpi_rank && verbose) PrintBlocks(insys+1,inenv+1);
+            ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
+                                    sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
+        }
+
+        /*  FIXME: Does this count as a complete sweep? */
+
+        /*  NOTE: If we do not assume REFLECTION SYMMETRY, then the sweeps should be center to right,
+            right to left, then left to center */
+
+        return(0);
+    };
+
 
     /** Destroys the container object */
     PetscErrorCode Destroy();
