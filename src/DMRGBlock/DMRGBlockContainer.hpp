@@ -259,8 +259,6 @@ private:
         Mat H = nullptr; /* Hamiltonian matrix */
         const PetscBool flg = PetscBool(&SysBlock==&EnvBlock);
 
-        if(!mpi_rank && verbose) printf("flg=%s\n", flg?"TRUE":"FALSE");
-
         /* (Block) Add one site to each block */
         Block SysBlockEnl, EnvBlockEnl;
         ierr = KronEye_Explicit(SysBlock, AddSite, SysBlockEnl); CHKERRQ(ierr);
@@ -279,7 +277,7 @@ private:
 
 
 
-#if 1
+#if 0
         if(!mpi_rank) printf(" H(%d)\n", NumSitesTotal);
         for(const Hamiltonians::Term& term: Terms)
         {
