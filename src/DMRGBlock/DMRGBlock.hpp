@@ -163,6 +163,7 @@ namespace Block {
 
         Mat Sm(const PetscInt& Isite) const {
             if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
+            if(!init_Sm) throw std::runtime_error("Sm matrices were not initialized on this block.");
             return SmData[Isite];
         }
 
