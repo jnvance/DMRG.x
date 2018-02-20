@@ -218,31 +218,46 @@ private:
         const Side_t& SideType
         );
 
+    /** A single term of the KronSum.
+        If one matrix is set to null, then that matrix is interpreted as an identity */
     typedef struct {
-
-        /**  Mapping for global rows to local storage rows, which are the same for any operator in
-        each of the left and right basis */
-        std::map<PetscInt,PetscInt> MapRowsL, MapRowsR;
-        /**  Number of required rows of the left and right blocks */
-        size_t NReqRowsL, NReqRowsR;
-        /**  List of required rows of the left and right blocks */
-        std::vector<PetscInt> ReqRowsL, ReqRowsR;
-    } SubMatCtx;
+        PetscScalar a;
+        Mat A;
+        Mat B;
+    } KronSumTerm;
 
     typedef struct {
-        PetscInt rstart=0;  /**< Starting local row */
+        PetscInt rstart=0;  /**< Starting index of local rows */
+        PetscInt rend=0;    /**< Index after last of local rows, exclusive */
         PetscInt lrows=0;   /**< Number of local rows */
-        PetscInt cstart=0;  /**< Starting local column */
-        PetscInt cend=0;    /**< Ending of local columns, exclusive */
+        PetscInt cstart=0;  /**< Starting index of local columns */
+        PetscInt cend=0;    /**< Index after last of local columns, exclusive */
+        PetscInt lcols=0;   /**< Number of local columns */
 
-        /** Temporarily stores the global rows of L and R needed for the local rows of O */
-        std::set<PetscInt> SetRowsL, SetRowsR;
+        /** Number of required rows of the left and right blocks */
+        PetscInt NReqRowsL, NReqRowsR;
 
-        /**  Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
-        std::unordered_map<PetscInt,PetscInt> MapRowsL, MapRowsR;
+        /** List of required rows of the left and right blocks */
+        std::vector< PetscInt > ReqRowsL, ReqRowsR;
+
+        /** Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
+        std::unordered_map< PetscInt, PetscInt > MapRowsL, MapRowsR;
+
+        /** Lists down all the terms of the KronSum with Mat entries filled with local submatrices */
+        std::vector< KronSumTerm > Terms;
+
+        /** List of unique submatrices to be destroyed later */
+        std::vector< Mat > LocalSubMats;
+
 
     } KronSumCtx;
 
+    PetscErrorCode KronSumPrepare(
+        const std::vector< Hamiltonians::Term >& TermsLL,
+        const std::vector< Hamiltonians::Term >& TermsRR,
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        KronSumCtx& SubMat
+        );
 };
 
 

@@ -620,18 +620,6 @@ PetscErrorCode KronBlocks_t::VerifySzAssumption(
 }
 
 
-PetscErrorCode KronBlocks_t::MatKronEyeAdd(
-    const std::vector< Mat >& Matrices,
-    const Side_t& SideType,
-    Mat& MatOut
-    )
-{
-    PetscErrorCode ierr = 0;
-
-    return ierr;
-}
-
-
 PetscErrorCode KronBlocks_t::KronSumConstruct(
     const std::vector< Hamiltonians::Term >& Terms,
     Mat& MatOut
@@ -738,65 +726,37 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     /*  Initialize the output matrix with the correct dimensions */
     ierr = MatDestroy(&MatOut); CHKERRQ(ierr);
     ierr = InitSingleSiteOperator(mpi_comm, num_states, &MatOut); CHKERRQ(ierr);
-    /*  Include other parameters or setup options here */
 
     KronSumCtx ctx;
-    const PetscInt rstart = ctx.rstart = MatOut->rmap->rstart;
-    const PetscInt lrows = ctx.lrows  = MatOut->rmap->n;
-    const PetscInt cstart = ctx.cstart = MatOut->cmap->rstart;
-    const PetscInt cend = ctx.cend   = MatOut->cmap->rend;
+    ctx.rstart = MatOut->rmap->rstart;
+    ctx.rend   = MatOut->rmap->rend;
+    ctx.lrows  = MatOut->rmap->n;
+    ctx.cstart = MatOut->cmap->rstart;
+    ctx.cend   = MatOut->cmap->rend;
+    ctx.lcols  = MatOut->cmap->n;
 
     /*  Verify that the row and column mapping match what is expected */
     {
-        PetscInt M,N, locrows, loccols, Istart, Cstart, lcols=cend-cstart;
+        PetscInt M,N, locrows, loccols, Istart, Cstart;
         ierr = MatGetSize(MatOut, &M, &N); CHKERRQ(ierr);
         ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
-        if(locrows!=lrows) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, lrows, M, N);
-        if(Istart!=rstart) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, rstart, M, N);
+        if(locrows!=ctx.lrows) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, ctx.lrows, M, N);
+        if(Istart!=ctx.rstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, ctx.rstart, M, N);
         ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
-        if(loccols!=lcols) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, lcols, M, N);
-        if(Cstart!=cstart) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, cstart, M, N);
+        if(loccols!=ctx.lcols) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, ctx.lcols, M, N);
+        if(Cstart!=ctx.cstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
     }
 
-    /*  For each of the intra-block terms, perform the associated matrix multiplications of operators
-        residing on the same blocks */
-    {
-        std::vector< Mat > OpProdLL(TermsLL.size()), OpProdRR(TermsRR.size());
+    ierr = KronSumPrepare(TermsLL, TermsRR, TermsLR, ctx); CHKERRQ(ierr);
 
-        #define GetBlockMat(BLOCK,OP,ISITE)\
-            (OP==OpSp ? BLOCK.Sp(ISITE) : (OP==OpSm ? BLOCK.Sm(ISITE) : (OP==OpSz ? BLOCK.Sz(ISITE) : NULL)))
-
-        /* Left intra-block */
-        for(size_t it = 0; it < TermsLL.size(); ++it)
-        {
-            const Mat& A = GetBlockMat(LeftBlock,TermsLL[it].Iop,TermsLL[it].Isite);
-            const Mat& B = GetBlockMat(LeftBlock,TermsLL[it].Jop,TermsLL[it].Jsite);
-            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdLL.data()+it); CHKERRQ(ierr);
-            ierr = MatScale(OpProdLL[it], TermsLL[it].a); CHKERRQ(ierr);
-        }
-        ierr = VerifySzAssumption(OpProdLL, SideLeft); CHKERRQ(ierr);
-        ierr = MatKronEyeAdd(OpProdLL, SideLeft, MatOut); CHKERRQ(ierr);
-        for (Mat& mat: OpProdLL){ ierr = MatDestroy(&mat); CHKERRQ(ierr); }
-
-        /* Right intra-block */
-        for(size_t it = 0; it < TermsRR.size(); ++it)
-        {
-            const Mat& A = GetBlockMat(RightBlock,TermsRR[it].Iop,TermsRR[it].Isite);
-            const Mat& B = GetBlockMat(RightBlock,TermsRR[it].Jop,TermsRR[it].Jsite);
-            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdRR.data()+it); CHKERRQ(ierr);
-            ierr = MatScale(OpProdRR[it], TermsRR[it].a); CHKERRQ(ierr);
-        }
-        ierr = VerifySzAssumption(OpProdRR, SideRight); CHKERRQ(ierr);
-        ierr = MatKronEyeAdd(OpProdRR, SideRight, MatOut); CHKERRQ(ierr);
-        for (Mat& mat: OpProdRR){ ierr = MatDestroy(&mat); CHKERRQ(ierr); }
-
-        #undef GetBlockMat
+    /*  Destroy local submatrices in context */
+    for(Mat& mat: ctx.LocalSubMats){
+        ierr = MatDestroy(&mat); CHKERRQ(ierr);
     }
-
     /*  Destroy Sm in advance to avoid clashes with modifications in Sp */
     if(CreateSmL){
         ierr = LeftBlock.DestroySm(); CHKERRQ(ierr);
@@ -806,3 +766,131 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     }
     return(0);
 }
+
+#define GetBlockMat(BLOCK,OP,ISITE)\
+            ((OP)==OpSp ? (BLOCK).Sp(ISITE) : ((OP)==OpSm ? (BLOCK).Sm(ISITE) : ((OP)==OpSz ? (BLOCK).Sz(ISITE) : NULL)))
+
+#define GetBlockMatFromTuple(BLOCK,TUPLE)\
+            GetBlockMat((BLOCK), std::get<0>(TUPLE), std::get<1>(TUPLE))
+
+PetscErrorCode KronBlocks_t::KronSumPrepare(
+    const std::vector< Hamiltonians::Term >& TermsLL,
+    const std::vector< Hamiltonians::Term >& TermsRR,
+    const std::vector< Hamiltonians::Term >& TermsLR,
+    KronSumCtx& ctx
+    )
+{
+    PetscErrorCode ierr;
+    /*  For each of the intra-block terms, perform the associated matrix multiplications of operators
+        residing on the same blocks */
+    std::vector< Mat > OpProdLL(TermsLL.size()), OpProdRR(TermsRR.size());
+    {
+        /* Left intra-block */
+        for(size_t it = 0; it < TermsLL.size(); ++it)
+        {
+            const Mat& A = GetBlockMat(LeftBlock,TermsLL[it].Iop,TermsLL[it].Isite);
+            const Mat& B = GetBlockMat(LeftBlock,TermsLL[it].Jop,TermsLL[it].Jsite);
+            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdLL.data()+it); CHKERRQ(ierr);
+            ierr = MatScale(OpProdLL[it], TermsLL[it].a); CHKERRQ(ierr);
+        }
+        ierr = VerifySzAssumption(OpProdLL, SideLeft); CHKERRQ(ierr);
+        /* Right intra-block */
+        for(size_t it = 0; it < TermsRR.size(); ++it)
+        {
+            const Mat& A = GetBlockMat(RightBlock,TermsRR[it].Iop,TermsRR[it].Isite);
+            const Mat& B = GetBlockMat(RightBlock,TermsRR[it].Jop,TermsRR[it].Jsite);
+            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdRR.data()+it); CHKERRQ(ierr);
+            ierr = MatScale(OpProdRR[it], TermsRR[it].a); CHKERRQ(ierr);
+        }
+        ierr = VerifySzAssumption(OpProdRR, SideRight); CHKERRQ(ierr);
+    }
+    /*  Determine the local rows to be collected from each of the left and right block */
+    {
+        KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
+        std::set<PetscInt> SetRowsL, SetRowsR;
+        for( ; KIter.Loop(); ++KIter)
+        {
+            SetRowsL.insert(KIter.GlobalIdxLeft());
+            SetRowsR.insert(KIter.GlobalIdxRight());
+        }
+        ctx.NReqRowsL = SetRowsL.size();
+        ctx.NReqRowsR = SetRowsR.size();
+        ctx.ReqRowsL.resize(ctx.NReqRowsL);
+        ctx.ReqRowsR.resize(ctx.NReqRowsR);
+        size_t idx = 0;
+        for(PetscInt row: SetRowsL){
+            ctx.ReqRowsL[idx] = row;
+            ctx.MapRowsL[row] = idx++;
+        }
+        idx = 0;
+        for(PetscInt row: SetRowsR){
+            ctx.ReqRowsR[idx] = row;
+            ctx.MapRowsR[row] = idx++;
+        }
+    }
+    /*  Generate the index sets needed to get the rows and columns */
+    IS isrow_L, isrow_R, iscol_L, iscol_R;
+    /*  Get only some required rows */
+    ierr = ISCreateGeneral(mpi_comm, ctx.NReqRowsL, ctx.ReqRowsL.data(), PETSC_USE_POINTER, &isrow_L); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(mpi_comm, ctx.NReqRowsR, ctx.ReqRowsR.data(), PETSC_USE_POINTER, &isrow_R); CHKERRQ(ierr);
+    /*  Get all columns in each required row */
+    ierr = ISCreateStride(mpi_comm, LeftBlock.NumStates(), 0, 1, &iscol_L); CHKERRQ(ierr);
+    ierr = ISCreateStride(mpi_comm, RightBlock.NumStates(), 0, 1, &iscol_R); CHKERRQ(ierr);
+    /*  Perform submatrix collection and append to ctx.Terms */
+    const PetscInt NumTerms = TermsLL.size() + TermsRR.size() + TermsLR.size();
+    ctx.Terms.reserve(NumTerms);
+    /*  LL terms */
+    for(const Mat& mat: OpProdLL){
+        Mat *A;
+        ierr = MatCreateSubMatrices(mat, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &A); CHKERRQ(ierr);
+        ctx.Terms.push_back({1.0,*A,nullptr});
+        ctx.LocalSubMats.push_back(*A);
+    }
+    /*  RR terms */
+    for(const Mat& mat: OpProdRR){
+        Mat *B;
+        ierr = MatCreateSubMatrices(mat, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &B); CHKERRQ(ierr);
+        ctx.Terms.push_back({1.0,nullptr,*B});
+        ctx.LocalSubMats.push_back(*B);
+    }
+    /*  Create a mapping for the matrices needed in the L-R block:
+        from global matrix operator to local submatrix */
+    std::map< std::tuple< PetscInt, PetscInt >, Mat> OpLeft;
+    std::map< std::tuple< PetscInt, PetscInt >, Mat> OpRight;
+    for (const Hamiltonians::Term& term: TermsLR){
+        OpLeft[  std::make_tuple(term.Iop, term.Isite) ] = nullptr;
+        OpRight[ std::make_tuple(term.Jop, term.Jsite) ] = nullptr;
+    }
+    /*  For each of the operators in OpLeft and OpRight, get the submatrix of locally needed rows */
+    for (auto& Op: OpLeft){
+        const Mat mat = GetBlockMatFromTuple(LeftBlock, Op.first);
+        Mat *submat;
+        ierr = MatCreateSubMatrices(mat, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &submat); CHKERRQ(ierr);
+        Op.second = submat[0];
+        ctx.LocalSubMats.push_back(submat[0]);
+    }
+    for (auto& Op: OpRight){
+        const Mat mat = GetBlockMatFromTuple(RightBlock, Op.first);
+        Mat *submat;
+        ierr = MatCreateSubMatrices(mat, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &submat); CHKERRQ(ierr);
+        Op.second = submat[0];
+        ctx.LocalSubMats.push_back(submat[0]);
+    }
+    /*  Generate the terms */
+    for (const Hamiltonians::Term& term: TermsLR){
+        const Mat A = OpLeft.at(std::make_tuple(term.Iop, term.Isite));
+        const Mat B = OpRight.at(std::make_tuple(term.Jop, term.Jsite));
+        ctx.Terms.push_back({1.0, A, B});
+    }
+    ierr = ISDestroy(&isrow_L); CHKERRQ(ierr);
+    ierr = ISDestroy(&isrow_R); CHKERRQ(ierr);
+    ierr = ISDestroy(&iscol_L); CHKERRQ(ierr);
+    ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
+    /*  Destroy LL and RR matrices */
+    for (Mat& mat: OpProdLL){ ierr = MatDestroy(&mat); CHKERRQ(ierr); }
+    for (Mat& mat: OpProdRR){ ierr = MatDestroy(&mat); CHKERRQ(ierr); }
+    return(0);
+}
+
+#undef GetBlockMat
+#undef GetBlockMatFromTuple
