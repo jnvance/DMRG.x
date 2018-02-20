@@ -15,9 +15,9 @@ PetscErrorCode Test()
     DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
 
     ierr = DMRG.Warmup(10); CHKERRQ(ierr);
-
-    /* Peek at the last created envblock */
-    ierr = MatPeek(DMRG.EnvBlock().Sz(0),"DMRG.EnvBlock().Sz(0)"); CHKERRQ(ierr);
+    ierr = DMRG.Sweep(20); CHKERRQ(ierr);
+    ierr = DMRG.Sweep(30); CHKERRQ(ierr);
+    ierr = DMRG.Sweep(40); CHKERRQ(ierr);
 
     return ierr;
 }
