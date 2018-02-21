@@ -11,14 +11,16 @@ std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNearestNeighbo
     /* Above */
     if(((0 <= jy) && (jy < (Ly-1))) || ((jy == (Ly-1)) && (BCy == PeriodicBC)))
     {
-        const PetscInt nn1d = SSNAKE_2D_1D(ix,(jy+1)%Ly,Lx,Ly);
-        if(nn1d < nsites_in) nn.push_back(nn1d);
+        const PetscInt jy_above = (jy+1)%Ly;
+        const PetscInt nn1d = SSNAKE_2D_1D(ix,jy_above,Lx,Ly);
+        if(nn1d < nsites_in && jy_above != jy) nn.push_back(nn1d);
     }
     /* Right */
     if(((0 <= ix) && (ix < (Lx-1))) || ((ix == (Lx-1)) && (BCx == PeriodicBC)))
     {
-        const PetscInt nn1d = SSNAKE_2D_1D((ix+1)%Lx,jy,Lx,Ly);
-        if(nn1d < nsites_in) nn.push_back(nn1d);
+        const PetscInt ix_right = (ix+1)%Lx;
+        const PetscInt nn1d = SSNAKE_2D_1D(ix_right,jy,Lx,Ly);
+        if(nn1d < nsites_in && ix_right != ix) nn.push_back(nn1d);
     }
     return nn;
 }
@@ -55,26 +57,34 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
         const PetscInt ix = is / Ly;
         const PetscInt jy = (is % Ly)*(1 - 2 * (ix % 2)) + (Ly - 1)*(ix % 2);
         /* Get nearest neighbors */
-        const std::vector<PetscInt> nn = GetNearestNeighbors(ix,jy,ns);
-        for(const PetscInt& in: nn)
+        if(J1 != 0.0)
         {
-            /* Ensure that 1d block indices are ordered */
-            PetscInt ia = (in < is) ? in : is;
-            PetscInt ib = (in > is) ? in : is;
-            /* Append the terms into the Hamiltonian */
-            Terms.push_back({ J1, OpSp, ia, OpSm, ib }); /* J1 S^+_ia S^-_ib */
-            Terms.push_back({ J1, OpSm, ia, OpSp, ib }); /* J1 S^-_ia S^+_ib */
+            const std::vector<PetscInt> nn = GetNearestNeighbors(ix,jy,ns);
+            for(const PetscInt& in: nn)
+            {
+                /* Ensure that 1d block indices are ordered */
+                PetscInt ia = (in < is) ? in : is;
+                PetscInt ib = (in > is) ? in : is;
+                /* Append the terms into the Hamiltonian */
+                Terms.push_back({ J1, OpSp, ia, OpSm, ib }); /* J1 S^+_ia S^-_ib */
+                Terms.push_back({ J1, OpSm, ia, OpSp, ib }); /* J1 S^-_ia S^+_ib */
+            }
         }
         /* Get next-nearest neighbors */
-        const std::vector<PetscInt> nnn = GetNextNearestNeighbors(ix,jy,ns);
-        for(const PetscInt& in: nnn)
+        /* FIXME: Verify that on a one-dimensional chain, there are no next-nearest neighbors */
+        /* When J2==0 do not generate any terms */
+        if(J2 != 0.0 && Lx > 1 && Ly > 1)
         {
-            /* Ensure that 1d block indices are ordered */
-            PetscInt il = (in < is) ? in : is;
-            PetscInt ir = (in > is) ? in : is;
-            /* Append the terms into the Hamiltonian */
-            Terms.push_back({ J2, OpSp, il, OpSm, ir }); /* J2 S^+_ia S^-_ib */
-            Terms.push_back({ J2, OpSm, il, OpSp, ir }); /* J2 S^-_ia S^+_ib */
+            const std::vector<PetscInt> nnn = GetNextNearestNeighbors(ix,jy,ns);
+            for(const PetscInt& in: nnn)
+            {
+                /* Ensure that 1d block indices are ordered */
+                PetscInt il = (in < is) ? in : is;
+                PetscInt ir = (in > is) ? in : is;
+                /* Append the terms into the Hamiltonian */
+                Terms.push_back({ J2, OpSp, il, OpSm, ir }); /* J2 S^+_ia S^-_ib */
+                Terms.push_back({ J2, OpSm, il, OpSp, ir }); /* J2 S^-_ia S^+_ib */
+            }
         }
     }
     return Terms;
