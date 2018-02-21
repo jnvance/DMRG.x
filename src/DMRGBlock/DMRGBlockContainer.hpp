@@ -271,20 +271,28 @@ private:
         /* Prepare the Hamiltonian taking both enlarged blocks together */
         PetscInt NumSitesTotal = SysBlockEnl.NumSites() + EnvBlockEnl.NumSites();
         const std::vector< Hamiltonians::Term > Terms = Ham.H(NumSitesTotal);
+
+        /* Set the QN sectors as an option */
         KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, {0});
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
 
-
-
-
-#if 0
-        if(!mpi_rank) printf(" H(%d)\n", NumSitesTotal);
-        for(const Hamiltonians::Term& term: Terms)
+    #if 1
         {
-            if(!mpi_rank) printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
-                (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+            PetscBool flg = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-print_H",&flg,NULL); CHKERRQ(ierr);
+            if(flg){ ierr = MatPeek(H,"H"); CHKERRQ(ierr); }
+            flg = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_terms",&flg,NULL); CHKERRQ(ierr);
+            if(flg){
+                if(!mpi_rank) printf(" H(%d)\n", NumSitesTotal);
+                for(const Hamiltonians::Term& term: Terms)
+                {
+                    if(!mpi_rank) printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
+                        (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+                }
+            }
         }
-#endif
+    #endif
 
 
         /* Solve for the ground state */
