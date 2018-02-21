@@ -21,7 +21,8 @@ typedef enum
 {
     OpSm = -1,  /**< \f$ S^- \f$ operator */
     OpSz = 0,   /**< \f$ S^z \f$ operator */
-    OpSp = +1   /**< \f$ S^+ \f$ operator */
+    OpSp = +1,  /**< \f$ S^+ \f$ operator */
+    OpEye= +2   /**< Identity operator */
 } Op_t;
 
 /** Lists down the names for each operator */
