@@ -782,27 +782,42 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
 {
     PetscErrorCode ierr;
     /*  For each of the intra-block terms, perform the associated matrix multiplications of operators
-        residing on the same blocks */
-    std::vector< Mat > OpProdLL(TermsLL.size()), OpProdRR(TermsRR.size());
+        residing on the same blocks and sum the block's terms */
+    Mat OpProdSumLL, OpProdSumRR;
     {
         /* Left intra-block */
         for(size_t it = 0; it < TermsLL.size(); ++it)
         {
+            Mat C = nullptr;
             const Mat& A = GetBlockMat(LeftBlock,TermsLL[it].Iop,TermsLL[it].Isite);
             const Mat& B = GetBlockMat(LeftBlock,TermsLL[it].Jop,TermsLL[it].Jsite);
-            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdLL.data()+it); CHKERRQ(ierr);
-            ierr = MatScale(OpProdLL[it], TermsLL[it].a); CHKERRQ(ierr);
+            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &C); CHKERRQ(ierr);
+            ierr = MatScale(C, TermsLL[it].a); CHKERRQ(ierr);
+            if(it==0){
+                OpProdSumLL = C;
+            } else {
+                ierr = MatAXPY(OpProdSumLL, PetscScalar(1.0), C, DIFFERENT_NONZERO_PATTERN); CHKERRQ(ierr);
+                ierr = MatDestroy(&C); CHKERRQ(ierr);
+            }
         }
-        ierr = VerifySzAssumption(OpProdLL, SideLeft); CHKERRQ(ierr);
+        ierr = VerifySzAssumption({OpProdSumLL}, SideLeft); CHKERRQ(ierr);
+
         /* Right intra-block */
         for(size_t it = 0; it < TermsRR.size(); ++it)
         {
+            Mat C = nullptr;
             const Mat& A = GetBlockMat(RightBlock,TermsRR[it].Iop,TermsRR[it].Isite);
             const Mat& B = GetBlockMat(RightBlock,TermsRR[it].Jop,TermsRR[it].Jsite);
-            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, OpProdRR.data()+it); CHKERRQ(ierr);
-            ierr = MatScale(OpProdRR[it], TermsRR[it].a); CHKERRQ(ierr);
+            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &C); CHKERRQ(ierr);
+            ierr = MatScale(C, TermsRR[it].a); CHKERRQ(ierr);
+            if(it==0){
+                OpProdSumRR = C;
+            } else {
+                ierr = MatAXPY(OpProdSumRR, PetscScalar(1.0), C, DIFFERENT_NONZERO_PATTERN); CHKERRQ(ierr);
+                ierr = MatDestroy(&C); CHKERRQ(ierr);
+            }
         }
-        ierr = VerifySzAssumption(OpProdRR, SideRight); CHKERRQ(ierr);
+        ierr = VerifySzAssumption({OpProdSumRR}, SideRight); CHKERRQ(ierr);
     }
     /*  Determine the local rows to be collected from each of the left and right block */
     {
@@ -836,24 +851,27 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     /*  Get all columns in each required row */
     ierr = ISCreateStride(mpi_comm, LeftBlock.NumStates(), 0, 1, &iscol_L); CHKERRQ(ierr);
     ierr = ISCreateStride(mpi_comm, RightBlock.NumStates(), 0, 1, &iscol_R); CHKERRQ(ierr);
-    /*  Perform submatrix collection and append to ctx.Terms */
+
+    /*  Perform submatrix collection and append to ctx.Terms and also fill LocalSubMats to ensure that
+        local submatrices are tracked and deleted after usage */
     const PetscInt NumTerms = TermsLL.size() + TermsRR.size() + TermsLR.size();
     ctx.Terms.reserve(NumTerms);
     /*  LL terms */
-    for(const Mat& mat: OpProdLL){
+    {
         Mat *A;
-        ierr = MatCreateSubMatrices(mat, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &A); CHKERRQ(ierr);
-        ctx.Terms.push_back({1.0,*A,nullptr});
+        ierr = MatCreateSubMatrices(OpProdSumLL, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &A); CHKERRQ(ierr);
+        ctx.Terms.push_back({1.0,OpSz,*A,OpEye,nullptr});
         ctx.LocalSubMats.push_back(*A);
     }
     /*  RR terms */
-    for(const Mat& mat: OpProdRR){
+    {
         Mat *B;
-        ierr = MatCreateSubMatrices(mat, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &B); CHKERRQ(ierr);
-        ctx.Terms.push_back({1.0,nullptr,*B});
+        ierr = MatCreateSubMatrices(OpProdSumRR, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &B); CHKERRQ(ierr);
+        ctx.Terms.push_back({1.0,OpEye,nullptr,OpSz,*B});
         ctx.LocalSubMats.push_back(*B);
     }
-    /*  Create a mapping for the matrices needed in the L-R block:
+    /*  LR terms
+        Create a mapping for the matrices needed in the L-R block:
         from global matrix operator to local submatrix */
     std::map< std::tuple< PetscInt, PetscInt >, Mat> OpLeft;
     std::map< std::tuple< PetscInt, PetscInt >, Mat> OpRight;

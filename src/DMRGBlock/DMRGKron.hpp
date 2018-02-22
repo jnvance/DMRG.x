@@ -222,7 +222,9 @@ private:
         If one matrix is set to null, then that matrix is interpreted as an identity */
     typedef struct {
         PetscScalar a;
+        Op_t OpTypeA;
         Mat A;
+        Op_t OpTypeB;
         Mat B;
     } KronSumTerm;
 
@@ -258,6 +260,17 @@ private:
         const std::vector< Hamiltonians::Term >& TermsLR,
         KronSumCtx& SubMat
         );
+
+    PetscErrorCode KronSumPreallocate(
+        KronSumCtx& ctx,
+        Mat& MatOut
+        );
+
+    PetscErrorCode KronSumFillMatrix(
+        KronSumCtx& ctx,
+        Mat& MatOut
+        );
+
 };
 
 
@@ -343,6 +356,19 @@ public:
         }
         return kb_offset[BlockIdx_out];
     }
+
+    /** Gets the size of the block with a shift */
+    PetscInt BlockSize(
+        const PetscInt& BlockShift  /**< [in]  Shift in quantum number associated to the operator */
+        ) const
+    {
+        PetscInt BlockIdx_out = blockidx_ + BlockShift;
+        if(BlockIdx_out < 0 || BlockIdx_out >= num_states){
+            return -1;
+        }
+        return kb_size[BlockIdx_out];
+    }
+
 
     /** Determines whether the end of the range has not yet been reached */
     bool Loop() const {return idx_ < iend_;}
