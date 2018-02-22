@@ -53,7 +53,12 @@ namespace Hamiltonians
             ierr = PetscOptionsGetInt(NULL,NULL,"-Ly",&Ly,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
             /* TODO: Also get boundary conditions from command line */
-
+            PetscBool BCopen = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-BCopen",&BCopen,NULL); CHKERRQ(ierr);
+            if(BCopen) { BCx=OpenBC; BCy=OpenBC; }
+            PetscBool BCperiodic = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-BCperiodic",&BCperiodic,NULL); CHKERRQ(ierr);
+            if(BCperiodic) { BCx=PeriodicBC; BCy=PeriodicBC; }
             set_from_options = PETSC_TRUE;
             return(0);
         }
