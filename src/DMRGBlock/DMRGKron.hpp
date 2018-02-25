@@ -235,6 +235,8 @@ private:
         PetscInt cstart=0;  /**< Starting index of local columns */
         PetscInt cend=0;    /**< Index after last of local columns, exclusive */
         PetscInt lcols=0;   /**< Number of local columns */
+        PetscInt Nrows=0;   /**< Total number of rows */
+        PetscInt Ncols=0;   /**< Total number of columns */
 
         /** Number of required rows of the left and right blocks */
         PetscInt NReqRowsL, NReqRowsR;
@@ -251,7 +253,17 @@ private:
         /** List of unique submatrices to be destroyed later */
         std::vector< Mat > LocalSubMats;
 
+        /** Preallocation data of the output matrix for local diagonal rows */
+        PetscInt *Dnnz;
 
+        /** Preallocation data of the output matrix for local off-diagonal diagonal rows */
+        PetscInt *Onnz;
+
+        /** Maximum number of elements across all local rows of MatOut */
+        PetscInt MaxElementsPerRow;
+
+        /** Predicted maximum number of elements on each local row */
+        std::vector< PetscInt > Maxnnz;
     } KronSumCtx;
 
     PetscErrorCode KronSumPrepare(
