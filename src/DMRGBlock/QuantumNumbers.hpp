@@ -95,7 +95,10 @@ public:
     PetscInt Sizes(const PetscInt& idx) const
     {
         assert(initialized);
-        return qn_size[idx];
+        if(0 <= idx && idx < num_sectors)
+            return qn_size[idx];
+        else
+            return -1;
     }
 
     /** Returns the total number of states */
