@@ -11,8 +11,11 @@
 #include <petscmat.h>
 #include <vector>
 #include <map>
-
 #include "DMRGKron.hpp"
+
+#if defined(PETSC_USE_DEBUG)
+#include <iostream>
+#endif
 
 /** Provides an alias of Side_t to follow the Sys-Env convention */
 typedef enum
@@ -113,8 +116,10 @@ public:
             SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %d. Got %d.",num_sites/2, sys_ninit);
         /* Destroy environment block */
         ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
+        env_ninit = 0;
 
-        if(!mpi_rank && verbose) printf("sys_ninit = %d   num_sites = %d\n\n", sys_ninit, num_sites);
+        if(verbose) PetscPrintf(mpi_comm, "Initialized system blocks: %d\n"
+            "Total number of sites: %d\n\n", sys_ninit, num_sites);
 
         return ierr;
     }
@@ -274,9 +279,79 @@ private:
 
         /* Set the QN sectors as an option */
         KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, {0});
+
+        #if defined(PETSC_USE_DEBUG)
+        {
+            PetscBool flg = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_kron",&flg,NULL); CHKERRQ(ierr);
+            if(flg && !mpi_rank){
+                std::cout << "***** Kron_Explicit *****" << std::endl;
+                std::cout << "SysBlockEnl  qn_list:   ";
+                for(auto i: SysBlockEnl.Magnetization.List()) std::cout << i << "   ";
+                std::cout << std::endl;
+
+                std::cout << "SysBlockEnl  qn_size:   ";
+                for(auto i: SysBlockEnl.Magnetization.Sizes()) std::cout << i << "   ";
+                std::cout << std::endl;
+
+                std::cout << "SysBlockEnl  qn_offset: ";
+                for(auto i: SysBlockEnl.Magnetization.Offsets()) std::cout << i << "   ";
+                std::cout << std::endl;
+
+                std::cout << std::endl;
+
+                std::cout << "EnvBlockEnl qn_list:   ";
+                for(auto i: EnvBlockEnl.Magnetization.List()) std::cout << i << "   ";
+                std::cout << std::endl;
+
+                std::cout << "EnvBlockEnl qn_size:   ";
+                for(auto i: EnvBlockEnl.Magnetization.Sizes()) std::cout << i << "   ";
+                std::cout << std::endl;
+
+                std::cout << "EnvBlockEnl qn_offset: ";
+                for(auto i: EnvBlockEnl.Magnetization.Offsets()) std::cout << i << "   ";
+                std::cout << std::endl;
+
+                PetscInt i = 0;
+                std::cout << "KronBlocks: \n";
+                for(KronBlock_t kb: KronBlocks.data())
+                {
+                    std::cout << "( "
+                        << std::get<0>(kb) << ", "
+                        << std::get<1>(kb) << ", "
+                        << std::get<2>(kb) << ", "
+                        << std::get<3>(kb) << ", "
+                        << KronBlocks.Offsets()[i++] <<" )\n";
+                }
+                std::cout << "*************************" << std::endl;
+            }
+            if(flg){
+                if(!mpi_rank){std::cout << "***** SysBlockEnl *****" << std::endl;}
+                for(const Mat& mat: SysBlockEnl.Sz())
+                {
+                    MatPeek(mat,"Sz");
+                }
+                for(const Mat& mat: SysBlockEnl.Sp())
+                {
+                    MatPeek(mat,"Sp");
+                }
+                if(!mpi_rank){std::cout << "***** EnvBlockEnl *****" << std::endl;}
+                for(const Mat& mat: EnvBlockEnl.Sz())
+                {
+                    MatPeek(mat,"Sz");
+                }
+                for(const Mat& mat: EnvBlockEnl.Sp())
+                {
+                    MatPeek(mat,"Sp");
+                }
+                if(!mpi_rank){std::cout << "***********************" << std::endl;}
+            }
+        }
+        #endif
+
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
 
-    #if 1
+        #if defined(PETSC_USE_DEBUG)
         {
             PetscBool flg = PETSC_FALSE;
             ierr = PetscOptionsGetBool(NULL,NULL,"-print_H",&flg,NULL); CHKERRQ(ierr);
@@ -292,7 +367,7 @@ private:
                 }
             }
         }
-    #endif
+        #endif
 
 
         /* Solve for the ground state */
