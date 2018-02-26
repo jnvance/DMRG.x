@@ -61,6 +61,7 @@ public:
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
     }
 
     /** Destroys all created blocks */
@@ -207,6 +208,9 @@ private:
     /** Tells whether the object was initialized using Initialize() */
     PetscBool   warmed_up = PETSC_FALSE;
 
+    /** Tells whether no quantum number symmetries will be implemented */
+    PetscBool   no_symm = PETSC_FALSE;
+
     /** Total number of sites */
     PetscInt    num_sites;
 
@@ -278,7 +282,11 @@ private:
         const std::vector< Hamiltonians::Term > Terms = Ham.H(NumSitesTotal);
 
         /* Set the QN sectors as an option */
-        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, {0});
+        std::vector<PetscReal> QNSectors = {0};
+        if(no_symm) {
+            QNSectors = {};
+        }
+        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, QNSectors);
 
         #if defined(PETSC_USE_DEBUG)
         {
