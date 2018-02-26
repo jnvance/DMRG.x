@@ -942,8 +942,6 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
             const PetscInt lrow = KIter.Steps();
             const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
-            const PetscInt Row_LocIdx_L = KIter.LocIdxLeft();
-            const PetscInt Row_LocIdx_R = KIter.LocIdxRight();
             const PetscInt Row_L = KIter.GlobalIdxLeft();
             const PetscInt Row_R = KIter.GlobalIdxRight();
             const PetscInt LocRow_L = ctx.MapRowsL[Row_L];
@@ -1063,9 +1061,6 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             const PetscInt Irow = KIter.Steps() + ctx.rstart;
             const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
-            const PetscInt Row_NumStates_R = KIter.NumStatesRight();
-            const PetscInt Row_LocIdx_L = KIter.LocIdxLeft();
-            const PetscInt Row_LocIdx_R = KIter.LocIdxRight();
             const PetscInt Row_L = KIter.GlobalIdxLeft();
             const PetscInt Row_R = KIter.GlobalIdxRight();
             const PetscInt LocRow_L = ctx.MapRowsL.at(Row_L);
