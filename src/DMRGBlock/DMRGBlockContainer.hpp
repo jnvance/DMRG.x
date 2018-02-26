@@ -369,13 +369,45 @@ private:
         }
         #endif
 
-
         /* Solve for the ground state */
 
+        #if defined(PETSC_USE_COMPLEX)
+            SETERRQ(mpi_comm,PETSC_ERR_SUP,"This function is only implemented for scalar-type=real.");
+        #endif
+
+        Vec gsv_r, gsv_i;
+        PetscScalar gse_r, gse_i;
+        ierr = MatCreateVecs(H, &gsv_r, nullptr); CHKERRQ(ierr);
+        ierr = MatCreateVecs(H, &gsv_i, nullptr); CHKERRQ(ierr);
+        {
+            EPS eps;
+            ierr = EPSCreate(mpi_comm, &eps); CHKERRQ(ierr);
+            ierr = EPSSetOperators(eps, H, nullptr); CHKERRQ(ierr);
+            ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
+            ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL); CHKERRQ(ierr);
+            ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
+            ierr = EPSSolve(eps); CHKERRQ(ierr);
+            ierr = EPSGetEigenpair(eps, 0, &gse_r, &gse_i, gsv_r, gsv_i); CHKERRQ(ierr);
+            ierr = EPSDestroy(&eps); CHKERRQ(ierr);
+        }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+
+        #if defined(PETSC_USE_DEBUG)
+        {
+            PetscBool flg = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_gs",&flg,NULL); CHKERRQ(ierr);
+            if(flg){
+                ierr = PetscPrintf(mpi_comm, "\n Ground State Energy: %g + %gj\n", gse_r, gse_i); CHKERRQ(ierr);
+                ierr = VecPeek(gsv_r, " gsv_r"); CHKERRQ(ierr);
+            }
+        }
+        #endif
+
         /* Calculate the reduced density matrices */
 
 
+        ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
+        ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
         /* (Block) Get the eigendecomposition of the reduced density matrices */
 
 
