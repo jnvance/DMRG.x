@@ -131,6 +131,38 @@ public:
     /** Returns the offsets for each quantum number block */
     std::vector<PetscInt> Offsets() const { return kb_offset; }
 
+    /** Returns the offsets for a given index */
+    PetscInt Offsets(const PetscInt& idx ) const {
+        assert(idx >= 0 && idx < num_blocks + 1);
+        return kb_offset[idx];
+    }
+
+    /** Returns the left quantum number index (KronBlocks 1st endtry) for a given KronBlock index */
+    PetscReal QN(const PetscInt& idx) const {
+        return std::get<0>(KronBlocks[idx]);
+    }
+
+    /** Returns the left quantum number index (KronBlocks 1st endtry) for a given KronBlock index */
+    PetscInt LeftIdx(const PetscInt& idx) const {
+        return std::get<1>(KronBlocks[idx]);
+    }
+
+    /** Returns the left quantum number index (KronBlocks 1st endtry) for a given KronBlock index */
+    PetscInt RightIdx(const PetscInt& idx) const {
+        return std::get<2>(KronBlocks[idx]);
+    }
+
+    /** Returns the number of basis states for a given KronBlock index */
+    PetscInt Sizes(const PetscInt& idx) const {
+        return std::get<3>(KronBlocks[idx]);
+    }
+
+    /** Returns a const reference to the left block object */
+    const Block::SpinOneHalf& LeftBlockRef() const { return LeftBlock; }
+
+    /** Returns a const reference to the right block object */
+    const Block::SpinOneHalf& RightBlockRef() const { return RightBlock; }
+
     /** Returns the offsets for the KronBlock corresponding to a pair of left and right block indices */
     PetscInt Offsets(const PetscInt& lidx, const PetscInt& ridx) const {
         PetscInt idx = Map(lidx, ridx);
