@@ -439,6 +439,9 @@ private:
         PetscReal       TruncErr_L, TruncErr_R;
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
 
+        if(!mpi_rank && verbose) printf("  Left  Block Truncation Error: %g\n", TruncErr_L);
+        if(!mpi_rank && verbose) printf("  Right Block Truncation Error: %g\n", TruncErr_R);
+
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
 
@@ -456,9 +459,7 @@ private:
         if(!flg){
             EnvBlockOut = EnvBlockEnl;
         }
-
-
-
+        if(!mpi_rank && verbose) printf("\n");
         return(0);
     }
 
@@ -664,10 +665,14 @@ private:
 
             /*  TODO: Calculate the truncation error */
             TruncErr_L = 1.0;
+            for(const Eigen_t &eig: eigen_L) TruncErr_L -= (eig.eigval > 0) * eig.eigval;
             TruncErr_R = 1.0;
-            // for( eigen_L)
-
+            for(const Eigen_t &eig: eigen_R) TruncErr_R -= (eig.eigval > 0) * eig.eigval;
         }
+
+        /*  Broadcast the truncation errors to all processes */
+        ierr = MPI_Bcast(&TruncErr_L, 1, MPIU_SCALAR, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Bcast(&TruncErr_R, 1, MPIU_SCALAR, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
 
         ierr = MatAssemblyBegin(RotMatT_L, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
         ierr = MatAssemblyBegin(RotMatT_R, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
@@ -766,7 +771,6 @@ private:
         std::vector< PetscInt> qnsize = BlockRef.Magnetization.Sizes();
         std::vector< PetscInt>::iterator it = std::max_element(qnsize.begin(), qnsize.end());
         PetscInt max_qnsize = PetscInt(*it);
-        printf("  max_qnsize:  %d\n", max_qnsize);
         PetscInt *idx;
         ierr = PetscCalloc1(max_qnsize+1, &idx); CHKERRQ(ierr);
 
