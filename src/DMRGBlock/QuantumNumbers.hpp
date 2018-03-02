@@ -84,6 +84,16 @@ public:
         return qn_offset;
     }
 
+    /** Returns the offsets for the quantum number block with a specified index */
+    PetscInt Offsets(const PetscInt& idx) const
+    {
+        assert(initialized);
+        if(0 <= idx && idx < num_sectors)
+            return qn_offset[idx];
+        else
+            return -1;
+    }
+
     /** Returns the number of basis states in each quantum number block */
     std::vector<PetscInt> Sizes() const
     {
