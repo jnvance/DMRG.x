@@ -29,13 +29,16 @@ Block_t;
 struct Eigen_t
 {
     PetscScalar eigval; /**< Eigenvalue */
-    EPS         eps;    /**< EPS object */
+    PetscInt    seqIdx; /**< Index of the EPS and matrix objects in the vector sequence */
     PetscInt    epsIdx; /**< Index in the EPS object */
     PetscInt    blkIdx; /**< Index in the block's magnetization sectors */
 };
 
-/** Comparison operator for sorting Eigen_t objects (implementation) */
-bool greater(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e2.eigval; }
+/** Comparison operator for sorting Eigen_t objects by decreasing eigenvalues */
+bool greater_eigval(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e2.eigval; }
+
+/** Comparison operator for sorting Eigen_t objects by increasing blkIdx */
+bool less_blkIdx(const Eigen_t &e1, const Eigen_t &e2) { return e1.blkIdx < e2.blkIdx; }
 
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
@@ -424,32 +427,25 @@ private:
         }
         #endif
 
-        Mat RotMat_L, RotMat_R;
-        QuantumNumbers QN_L, QN_R;
-        PetscReal TruncErr_L, TruncErr_R;
-        if(no_symm)
-        {
+        if(no_symm){
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
             SETERRQ(mpi_comm,PETSC_ERR_SUP,"Unsupported option: no_symm.");
         }
-        else
-        {
-            /* Calculate the reduced density matrices in block-diagonal form */
-            ierr = GetTruncation(KronBlocks, gsv_r, MStates,
-                RotMat_L, QN_L, TruncErr_L, RotMat_R, QN_R, TruncErr_R); CHKERRQ(ierr);
-        }
+
+        /*  Calculate the reduced density matrices in block-diagonal form, and from this we can calculate the
+            (transposed) rotation matrix */
+        Mat             RotMatT_L, RotMatT_R;
+        QuantumNumbers  QN_L, QN_R;
+        PetscReal       TruncErr_L, TruncErr_R;
+        ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
 
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
 
-        /* (Block) Get the eigendecomposition of the reduced density matrices */
+        /*  Initialize the new blocks and copy the new blocks */
 
-
-        /* (Block) Sort the eigenvalues and initialize the quantum number list and sizes */
-
-
-        /* (Block) Calculate the rotation matrices */
-
+        ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
+        ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
 
         /* (Block) Initialize the new blocks
             copy enlarged blocks to out blocks but overwrite the matrices */
@@ -461,6 +457,8 @@ private:
             EnvBlockOut = EnvBlockEnl;
         }
 
+
+
         return(0);
     }
 
@@ -468,10 +466,10 @@ private:
         const KronBlocks_t& KronBlocks,
         const Vec& gsv_r,
         const PetscInt& MStates,
-        Mat& RotMat_L,
+        Mat& RotMatT_L,
         QuantumNumbers& QN_L,
         PetscReal& TruncErr_L,
-        Mat& RotMat_R,
+        Mat& RotMatT_R,
         QuantumNumbers& QN_R,
         PetscReal& TruncErr_R
         )
@@ -504,8 +502,10 @@ private:
         }
         #endif
 
-        /*  Prepare rotation matrices on comm_world */
-
+        std::vector< Eigen_t > eigen_L, eigen_R;        /* Container for eigenvalues of the RDMs */
+        std::vector< EPS > eps_list_L, eps_list_R;      /* Container for EPS objects */
+        std::vector< Mat > rdmd_list_L, rdmd_list_R;    /* Container for block diagonals of RMDs */
+        std::vector< Vec > rdmd_vecs_L, rdmd_vecs_R;    /* Container for the corresponding vectors */
 
         /*  Do eigendecomposition on root process  */
         if(!mpi_rank)
@@ -524,9 +524,6 @@ private:
             ierr = VecGetArray(gsv_r_loc, &v); CHKERRQ(ierr);
 
             /*  Loop through the L-R pairs forming the target sector in KronBlocks */
-            std::vector< Eigen_t > eigen_L, eigen_R;
-            std::vector< EPS > eps_list;
-            std::vector< Mat > rdmd_list_L, rdmd_list_R;
             for(PetscInt idx = 0; idx < KronBlocks.size(); ++idx)
             {
                 const PetscInt Istart = KronBlocks.Offsets(idx);
@@ -563,8 +560,9 @@ private:
                 }
 
                 /*  Solve the full eigenspectrum of the reduced density matrices */
-                ierr = EigRDM_BlockDiag(rdmd_L, Idx_L, eigen_L, eps_list); CHKERRQ(ierr);
-                ierr = EigRDM_BlockDiag(rdmd_R, Idx_R, eigen_R, eps_list); CHKERRQ(ierr);
+                EPS eps_L, eps_R;
+                ierr = EigRDM_BlockDiag(rdmd_L, idx, Idx_L, eigen_L, eps_L); CHKERRQ(ierr);
+                ierr = EigRDM_BlockDiag(rdmd_R, idx, Idx_R, eigen_R, eps_R); CHKERRQ(ierr);
 
                 #if defined(PETSC_USE_DEBUG)
                 {
@@ -575,13 +573,22 @@ private:
                 }
                 #endif
 
+                eps_list_L.push_back(eps_L);
+                eps_list_R.push_back(eps_R);
                 rdmd_list_L.push_back(rdmd_L);
                 rdmd_list_R.push_back(rdmd_R);
+
+                /*  Prepare the vectors for getting the eigenvectors */
+                Vec v_L, v_R;
+                ierr = MatCreateVecs(rdmd_L, NULL, &v_L); CHKERRQ(ierr);
+                rdmd_vecs_L.push_back(v_L);
+                ierr = MatCreateVecs(rdmd_R, NULL, &v_R); CHKERRQ(ierr);
+                rdmd_vecs_R.push_back(v_R);
             }
 
             /*  Sort the eigenvalue lists in descending order */
-            std::stable_sort(eigen_L.begin(), eigen_L.end(), greater);
-            std::stable_sort(eigen_R.begin(), eigen_R.end(), greater);
+            std::stable_sort(eigen_L.begin(), eigen_L.end(), greater_eigval);
+            std::stable_sort(eigen_R.begin(), eigen_R.end(), greater_eigval);
 
             #if defined(PETSC_USE_DEBUG)
             {
@@ -594,26 +601,104 @@ private:
                     printf("   R: %g\n", eig.eigval);
                 }
                 printf("\n\n");
+
+                printf("\n\n");
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                printf("\n");
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                printf("\n\n");
+            }
+            #endif
+            ierr = VecRestoreArray(gsv_r_loc, &v); CHKERRQ(ierr);
+
+        }
+        /*  Broadcast the number of eigenstates from 0 to all processes */
+        PetscInt NEigenStates_L = eigen_L.size(); /* Number of eigenstates in the left block reduced density matrix */
+        PetscInt NEigenStates_R = eigen_R.size(); /* Number of eigenstates in the right block reduced density matrix */
+        ierr = MPI_Bcast(&NEigenStates_L, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Bcast(&NEigenStates_R, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+        /*  Decide how many states to retain */
+        const PetscInt m_L = PetscMin(MStates, NEigenStates_L);
+        const PetscInt m_R = PetscMin(MStates, NEigenStates_R);
+
+        /*  The number of states present in the enlarged blocks */
+        const PetscInt NStates_L = KronBlocks.LeftBlockRef().Magnetization.NumStates();
+        const PetscInt NStates_R = KronBlocks.RightBlockRef().Magnetization.NumStates();
+
+        /*  The rotation matrices take have the dimension m x NStates so that it is actually*/
+        ierr = MatCreate(mpi_comm, &RotMatT_L); CHKERRQ(ierr);
+        ierr = MatCreate(mpi_comm, &RotMatT_R); CHKERRQ(ierr);
+        ierr = MatSetSizes(RotMatT_L, PETSC_DECIDE, PETSC_DECIDE, m_L, NStates_L); CHKERRQ(ierr);
+        ierr = MatSetSizes(RotMatT_R, PETSC_DECIDE, PETSC_DECIDE, m_R, NStates_R); CHKERRQ(ierr);
+        ierr = MatSetFromOptions(RotMatT_L); CHKERRQ(ierr);
+        ierr = MatSetFromOptions(RotMatT_R); CHKERRQ(ierr);
+        ierr = MatSetUp(RotMatT_L); CHKERRQ(ierr);
+        ierr = MatSetUp(RotMatT_R); CHKERRQ(ierr);
+
+        #if defined(PETSC_USE_DEBUG)
+            if(!mpi_rank) printf("    m_L: %-d  m_R: %-d\n\n", m_L, m_R);
+        #endif
+
+        if(!mpi_rank)
+        {
+            /* Take only the first m states and sort in ascending order of blkIdx */
+            eigen_L.resize(m_L);
+            eigen_R.resize(m_R);
+            std::stable_sort(eigen_L.begin(), eigen_L.end(), less_blkIdx);
+            std::stable_sort(eigen_R.begin(), eigen_R.end(), less_blkIdx);
+
+            #if defined(PETSC_USE_DEBUG)
+            {
+                printf("\n\n");
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                printf("\n");
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                printf("\n\n");
             }
             #endif
 
-            /*  FIXME: Should we set the negative eigenvvalues to zero and remove them from the retained states?
-                Does it even matter? */
+            /*  Calculate the elements of the rotation matrices and the QN object */
+            ierr = FillRotation_BlockDiag(eigen_L, eps_list_L, rdmd_vecs_L, KronBlocks.LeftBlockRef(),  m_L, RotMatT_L); CHKERRQ(ierr);
+            ierr = FillRotation_BlockDiag(eigen_R, eps_list_R, rdmd_vecs_R, KronBlocks.RightBlockRef(), m_R, RotMatT_R); CHKERRQ(ierr);
 
-            /*  TODO: Calculate the elements of the rotation matrices and the QN object */
+            /*  TODO: Calculate the truncation error */
+            TruncErr_L = 1.0;
+            TruncErr_R = 1.0;
+            // for( eigen_L)
 
-            for(EPS& eps: eps_list){
-                ierr = EPSDestroy(&eps); CHKERRQ(ierr);
-            }
-            for(Mat mat: rdmd_list_L){
-                ierr = MatDestroy(&mat); CHKERRQ(ierr);
-            }
-            for(Mat mat: rdmd_list_R){
-                ierr = MatDestroy(&mat); CHKERRQ(ierr);
-            }
-            ierr = VecRestoreArray(gsv_r_loc, &v); CHKERRQ(ierr);
         }
 
+        ierr = MatAssemblyBegin(RotMatT_L, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyBegin(RotMatT_R, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(RotMatT_L, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+        ierr = MatAssemblyEnd(RotMatT_R, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+        #if defined(PETSC_USE_DEBUG)
+        {
+            ierr = MatPeek(RotMatT_L, "RotMatT_L"); CHKERRQ(ierr);
+            ierr = MatPeek(RotMatT_R, "RotMatT_R"); CHKERRQ(ierr);
+        }
+        #endif
+
+        for(EPS& eps: eps_list_L){
+            ierr = EPSDestroy(&eps); CHKERRQ(ierr);
+        }
+        for(EPS& eps: eps_list_R){
+            ierr = EPSDestroy(&eps); CHKERRQ(ierr);
+        }
+        for(Mat& mat: rdmd_list_L){
+            ierr = MatDestroy(&mat); CHKERRQ(ierr);
+        }
+        for(Mat& mat: rdmd_list_R){
+            ierr = MatDestroy(&mat); CHKERRQ(ierr);
+        }
+        for(Vec& vec: rdmd_vecs_L){
+            ierr = VecDestroy(&vec); CHKERRQ(ierr);
+        }
+        for(Vec& vec: rdmd_vecs_R){
+            ierr = VecDestroy(&vec); CHKERRQ(ierr);
+        }
         ierr = VecScatterDestroy(&ctx); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_r_loc); CHKERRQ(ierr);
 
@@ -622,9 +707,10 @@ private:
 
     PetscErrorCode EigRDM_BlockDiag(
         const Mat& matin,
+        const PetscInt& seqIdx,
         const PetscInt& blkIdx,
         std::vector< Eigen_t >& eigList,
-        std::vector< EPS >& epsList
+        EPS& eps
         )
     {
         PetscErrorCode ierr;
@@ -633,7 +719,6 @@ private:
         ierr = MatGetSize(matin, &Nrows, &Ncols); CHKERRQ(ierr);
         if(Nrows!=Ncols) SETERRQ2(PETSC_COMM_SELF,1,"Input must be square matrix. Got size %d x %d.", Nrows, Ncols);
 
-        EPS eps;
         ierr = EPSCreate(PETSC_COMM_SELF, &eps); CHKERRQ(ierr);
         ierr = EPSSetOperators(eps, matin, nullptr); CHKERRQ(ierr);
         ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
@@ -657,11 +742,66 @@ private:
             if(eigi != 0.0) SETERRQ1(PETSC_COMM_SELF,1,"Imaginary part of eigenvalue must be zero. "
                 "Got %g\n", eigi);
 
-            eigList.push_back({ eigr, eps, epsIdx, blkIdx });
+            eigList.push_back({ eigr, seqIdx, epsIdx, blkIdx });
         }
-        epsList.push_back(eps);
         return(0);
     }
+
+    PetscErrorCode FillRotation_BlockDiag(
+        const std::vector< Eigen_t >&   eigen_list,
+        const std::vector< EPS >&       eps_list,
+        const std::vector< Vec >&       rdmd_vecs,
+        const Block&                    BlockRef,
+        const PetscInt&                 m,
+        Mat&                            RotMatT
+        )
+    {
+        PetscErrorCode ierr;
+
+        #if defined(PETSC_USE_COMPLEX)
+            SETERRQ(mpi_comm,PETSC_ERR_SUP,"This function is only implemented for scalar-type=real.");
+        #endif
+
+        /*  Allocate space for column indices using the maximum size */
+        std::vector< PetscInt> qnsize = BlockRef.Magnetization.Sizes();
+        std::vector< PetscInt>::iterator it = std::max_element(qnsize.begin(), qnsize.end());
+        PetscInt max_qnsize = PetscInt(*it);
+        printf("  max_qnsize:  %d\n", max_qnsize);
+        PetscInt *idx;
+        ierr = PetscCalloc1(max_qnsize+1, &idx); CHKERRQ(ierr);
+
+        PetscScalar eigr, eigi, *vals;
+        PetscInt prev_blkIdx = -1;
+        PetscInt startIdx = 0;
+        PetscInt numStates = 0;
+        PetscInt rowCtr = 0;
+        for(const Eigen_t &eig: eigen_list)
+        {
+            /*  Retrieve the eigenpair from the Eigen_t object */
+            const PetscInt seqIdx = eig.seqIdx;
+            ierr = EPSGetEigenpair(eps_list[seqIdx], eig.epsIdx, &eigr, &eigi, rdmd_vecs[seqIdx], nullptr); CHKERRQ(ierr);
+            ierr = VecGetArray(rdmd_vecs[seqIdx], &vals); CHKERRQ(ierr);
+            /*  Verify that eigr is the same eigenvalue as eig.eigval */
+            if(eigr != eig.eigval) SETERRQ2(PETSC_COMM_SELF,1,"Incorrect eigenvalue. Expected %g. Got %g.", eig.eigval, eigr);
+
+            /*  Determine the block indices, updating only when the block index changes */
+            if(prev_blkIdx != eig.blkIdx){
+                startIdx = BlockRef.Magnetization.Offsets(eig.blkIdx); assert(startIdx!=-1);
+                numStates = BlockRef.Magnetization.Sizes(eig.blkIdx); assert(numStates!=-1);
+                for(PetscInt i = 0; i < numStates+1; ++i) idx[i] = startIdx + i;
+                prev_blkIdx = eig.blkIdx;
+            }
+
+            /*  Set the value of the rotation matrix to the values of the eigenvector from the root process */
+            ierr = MatSetValues(RotMatT, 1, &rowCtr, numStates, idx, vals, INSERT_VALUES); CHKERRQ(ierr);
+
+            ierr = VecRestoreArray(rdmd_vecs[seqIdx], &vals); CHKERRQ(ierr);
+            ++rowCtr;
+        }
+        ierr = PetscFree(idx); CHKERRQ(ierr);
+        return(0);
+    }
+
 };
 
 /**
