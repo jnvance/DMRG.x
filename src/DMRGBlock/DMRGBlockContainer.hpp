@@ -11,6 +11,7 @@
 #include <petscmat.h>
 #include <vector>
 #include <map>
+#include <set>
 #include "DMRGKron.hpp"
 
 #if defined(PETSC_USE_DEBUG)
@@ -447,18 +448,32 @@ private:
 
         /*  Initialize the new blocks and copy the new blocks */
 
-        ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
-        ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
-
         /* (Block) Initialize the new blocks
             copy enlarged blocks to out blocks but overwrite the matrices */
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
 
+        #if 0
+
+        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
+        ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
+        if(!flg){
+            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
+        }
+
+        #else
+
         SysBlockOut = SysBlockEnl;
         if(!flg){
             EnvBlockOut = EnvBlockEnl;
         }
+
+        #endif
+
+        ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
+        ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
+
         if(!mpi_rank && verbose) printf("\n");
         return(0);
     }
@@ -641,6 +656,9 @@ private:
             if(!mpi_rank) printf("    m_L: %-d  m_R: %-d\n\n", m_L, m_R);
         #endif
 
+        std::vector< PetscReal > qn_list_L, qn_list_R;
+        std::vector< PetscInt >  qn_size_L, qn_size_R;
+        PetscInt numBlocks_L, numBlocks_R;
         if(!mpi_rank)
         {
             /* Take only the first m states and sort in ascending order of blkIdx */
@@ -663,17 +681,55 @@ private:
             ierr = FillRotation_BlockDiag(eigen_L, eps_list_L, rdmd_vecs_L, KronBlocks.LeftBlockRef(),  m_L, RotMatT_L); CHKERRQ(ierr);
             ierr = FillRotation_BlockDiag(eigen_R, eps_list_R, rdmd_vecs_R, KronBlocks.RightBlockRef(), m_R, RotMatT_R); CHKERRQ(ierr);
 
-            /*  TODO: Calculate the truncation error */
+            /*  Calculate the truncation error */
             TruncErr_L = 1.0;
             for(const Eigen_t &eig: eigen_L) TruncErr_L -= (eig.eigval > 0) * eig.eigval;
             TruncErr_R = 1.0;
             for(const Eigen_t &eig: eigen_R) TruncErr_R -= (eig.eigval > 0) * eig.eigval;
+
+            /*  Calculate the quantum numbers lists */
+            {
+                std::map< PetscReal, PetscInt > BlockIdxs;
+                for(const Eigen_t &eig: eigen_L) BlockIdxs[ eig.blkIdx ] += 1;
+                for(const auto& idx: BlockIdxs) qn_list_L.push_back( KronBlocks.LeftBlockRef().Magnetization.List(idx.first) );
+                for(const auto& idx: BlockIdxs) qn_size_L.push_back( idx.second );
+                numBlocks_L = qn_list_L.size();
+            }
+
+            {
+                std::map< PetscReal, PetscInt > BlockIdxs;
+                for(const Eigen_t &eig: eigen_R) BlockIdxs[ eig.blkIdx ] += 1;
+                for(const auto& idx: BlockIdxs) qn_list_R.push_back( KronBlocks.RightBlockRef().Magnetization.List(idx.first) );
+                for(const auto& idx: BlockIdxs) qn_size_R.push_back( idx.second );
+                numBlocks_R = qn_list_R.size();
+            }
+
+            #if defined(PETSC_USE_DEBUG)
+                for(PetscInt i = 0; i < numBlocks_L; ++i) printf("    %g  %d\n", qn_list_L[i], qn_size_L[i]);
+                printf("\n");
+                for(PetscInt i = 0; i < numBlocks_R; ++i) printf("    %g  %d\n", qn_list_R[i], qn_size_R[i]);
+            #endif
         }
 
         /*  Broadcast the truncation errors to all processes */
         ierr = MPI_Bcast(&TruncErr_L, 1, MPIU_SCALAR, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
         ierr = MPI_Bcast(&TruncErr_R, 1, MPIU_SCALAR, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
 
+        /*  Broadcast the number of quantum blocks */
+        ierr = MPI_Bcast(&numBlocks_L, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Bcast(&numBlocks_R, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+        /*  Broadcast the information on quantum number blocks */
+        if(mpi_rank) qn_list_L.resize(numBlocks_L);
+        if(mpi_rank) qn_size_L.resize(numBlocks_L);
+        ierr = MPI_Bcast(qn_list_L.data(), numBlocks_L, MPIU_REAL, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Bcast(qn_size_L.data(), numBlocks_L, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        if(mpi_rank) qn_list_R.resize(numBlocks_R);
+        if(mpi_rank) qn_size_R.resize(numBlocks_R);
+        ierr = MPI_Bcast(qn_list_R.data(), numBlocks_R, MPIU_REAL, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Bcast(qn_size_R.data(), numBlocks_R, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+        /*  Assemble the rotation matrix */
         ierr = MatAssemblyBegin(RotMatT_L, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
         ierr = MatAssemblyBegin(RotMatT_R, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
         ierr = MatAssemblyEnd(RotMatT_L, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
@@ -685,6 +741,9 @@ private:
             ierr = MatPeek(RotMatT_R, "RotMatT_R"); CHKERRQ(ierr);
         }
         #endif
+
+        ierr = QN_L.Initialize(mpi_comm, qn_list_L, qn_size_L); CHKERRQ(ierr);
+        ierr = QN_R.Initialize(mpi_comm, qn_list_R, qn_size_R); CHKERRQ(ierr);
 
         for(EPS& eps: eps_list_L){
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
