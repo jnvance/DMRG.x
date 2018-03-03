@@ -409,9 +409,9 @@ private:
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
-        PetscInt TotNumSites = SysBlockEnl.NumSites()+EnvBlockEnl.NumSites();
         if(!mpi_rank && verbose) printf("  Energy:      %g\n", gse_r);
-        if(!mpi_rank && verbose) printf("  Energy/site: %g\n", gse_r/PetscScalar(TotNumSites));
+        if(!mpi_rank && verbose) printf("  NumSites:    %d\n", NumSitesTotal);
+        if(!mpi_rank && verbose) printf("  Energy/site: %g\n", gse_r/PetscScalar(NumSitesTotal));
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -502,7 +502,9 @@ private:
         ierr = VecScatterEnd(ctx, gsv_r, gsv_r_loc, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
 
         #if defined(PETSC_USE_DEBUG)
-        {
+        PetscBool flg = PETSC_FALSE;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-print_trunc",&flg,NULL); CHKERRQ(ierr);
+        if(flg){
             for(PetscMPIInt irank = 0; irank < mpi_size; ++irank){
                 if(irank==mpi_rank){std::cout << "[" << mpi_rank << "]<<" << std::endl;
 
@@ -529,7 +531,7 @@ private:
                 "Expected %d. Got %d.", KronBlocks.NumStates(), size);
 
             #if defined(PETSC_USE_DEBUG)
-                printf("\n\n");
+                if(flg) printf("\n\n");
             #endif
 
             PetscScalar *v;
@@ -577,7 +579,7 @@ private:
                 ierr = EigRDM_BlockDiag(rdmd_R, idx, Idx_R, eigen_R, eps_R); CHKERRQ(ierr);
 
                 #if defined(PETSC_USE_DEBUG)
-                {
+                if(flg){
                     printf(" KB QN: %-6g  Left :%3d  Right: %3d\n", KronBlocks.QN(idx), Idx_L, Idx_R)   ;
                     ierr = MatPeek(rdmd_L, "rdmd_L"); CHKERRQ(ierr);
                     ierr = MatPeek(rdmd_R, "rdmd_R"); CHKERRQ(ierr);
@@ -603,7 +605,7 @@ private:
             std::stable_sort(eigen_R.begin(), eigen_R.end(), greater_eigval);
 
             #if defined(PETSC_USE_DEBUG)
-            {
+            if(flg){
                 for(const Eigen_t& eig: eigen_L)
                 {
                     printf("   L: %g\n", eig.eigval);
@@ -649,7 +651,7 @@ private:
         ierr = MatSetUp(RotMatT_R); CHKERRQ(ierr);
 
         #if defined(PETSC_USE_DEBUG)
-            if(!mpi_rank) printf("    m_L: %-d  m_R: %-d\n\n", m_L, m_R);
+            if(flg && !mpi_rank) printf("    m_L: %-d  m_R: %-d\n\n", m_L, m_R);
         #endif
 
         std::vector< PetscReal > qn_list_L, qn_list_R;
@@ -664,7 +666,7 @@ private:
             std::stable_sort(eigen_R.begin(), eigen_R.end(), less_blkIdx);
 
             #if defined(PETSC_USE_DEBUG)
-            {
+            if(flg) {
                 printf("\n\n");
                 for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
                 printf("\n");
@@ -701,9 +703,11 @@ private:
             }
 
             #if defined(PETSC_USE_DEBUG)
+            if(flg){
                 for(PetscInt i = 0; i < numBlocks_L; ++i) printf("    %g  %d\n", qn_list_L[i], qn_size_L[i]);
                 printf("\n");
                 for(PetscInt i = 0; i < numBlocks_R; ++i) printf("    %g  %d\n", qn_list_R[i], qn_size_R[i]);
+            }
             #endif
         }
 
@@ -732,7 +736,7 @@ private:
         ierr = MatAssemblyEnd(RotMatT_R, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
 
         #if defined(PETSC_USE_DEBUG)
-        {
+        if(flg){
             ierr = MatPeek(RotMatT_L, "RotMatT_L"); CHKERRQ(ierr);
             ierr = MatPeek(RotMatT_R, "RotMatT_R"); CHKERRQ(ierr);
         }
