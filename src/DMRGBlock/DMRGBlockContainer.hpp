@@ -263,13 +263,6 @@ private:
     /** Reference to the block of site/s added during enlargement */
     Block& AddSite = SingleSite;
 
-    /** Adds one site to BlockIn producing BlockOut */
-    PetscErrorCode EnlargeBlock(
-        const Block_t& BlockType,   /**< [in] the source block type (`BlockSys` or `BlockEnv`) */
-        const PetscInt& BlockIdx,   /**< [in] the index of the source block */
-        Block& BlockOut             /**< [out] the output enlarged block */
-        );
-
     PetscErrorCode SingleDMRGStep(
         Block& SysBlock,            /**< [in] the old system (left) block */
         Block& EnvBlock,            /**< [in] the old environment (right) block */
