@@ -409,6 +409,9 @@ private:
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+        PetscInt TotNumSites = SysBlockEnl.NumSites()+EnvBlockEnl.NumSites();
+        if(!mpi_rank && verbose) printf("  Energy:      %g\n", gse_r);
+        if(!mpi_rank && verbose) printf("  Energy/site: %g\n", gse_r/PetscScalar(TotNumSites));
 
         #if defined(PETSC_USE_DEBUG)
         {
