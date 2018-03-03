@@ -12,14 +12,14 @@ PetscErrorCode QuantumNumbers::Initialize(
     const std::vector<PetscInt>& qn_size_in
     )
 {
-    mpi_comm = mpi_comm_in;
-
     /** @throw PETSC_ERR_ARG_WRONG Empty input list */
     if(qn_list_in.size()==0)
         SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Initialization error: Empty input list.");
     /** @throw PETSC_ERR_ARG_WRONG Input list sizes mismatch */
     if(qn_list_in.size()!=qn_size_in.size())
         SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Initialization error: Input list sizes mismatch.");
+
+    mpi_comm = mpi_comm_in;
 
     /** @remarks __TODO:__
             - Ensure that inputs are the same across entire communicator
