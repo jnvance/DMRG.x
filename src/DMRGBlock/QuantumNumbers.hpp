@@ -80,6 +80,16 @@ public:
         return qn_list;
     }
 
+    /** Returns the quantum number associated to the given index */
+    PetscReal List(const PetscInt& idx) const
+    {
+        assert(initialized);
+        if(0 <= idx && idx < num_sectors)
+            return qn_list[idx];
+        else
+            return -1;
+    }
+
     /** Returns the offsets for each quantum number block */
     std::vector<PetscInt> Offsets() const
     {
