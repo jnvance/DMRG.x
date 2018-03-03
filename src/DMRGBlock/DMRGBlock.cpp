@@ -105,6 +105,19 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     return ierr;
 }
 
+PetscErrorCode Block::SpinOneHalf::Initialize(
+    const PetscInt& num_sites_in,
+    const QuantumNumbers& qn_in)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = qn_in.CheckInitialized(); CHKERRQ(ierr);
+    ierr = Initialize(qn_in.MPIComm(), num_sites_in, qn_in.NumStates()); CHKERRQ(ierr);
+    Magnetization = qn_in;
+
+    return ierr;
+}
+
 PetscErrorCode Block::SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 {
     PetscErrorCode ierr = 0;

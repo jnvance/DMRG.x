@@ -122,7 +122,11 @@ namespace Block {
             const std::vector<PetscInt>& qn_size_in
             );
 
-
+        /** Initializes block object with an initialized quantum numbers object */
+        PetscErrorCode Initialize(
+            const PetscInt& num_sites_in,
+            const QuantumNumbers& qn_in
+            );
 
         /** Destroys all operator matrices and frees memory.
             @remarks __TODO:__ Consider interfacing this to the object desctructor */
