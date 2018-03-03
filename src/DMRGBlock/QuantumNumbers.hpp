@@ -63,6 +63,9 @@ public:
             return 0;
     }
 
+    /** Gets the communicator associated to the block */
+    MPI_Comm MPIComm() const { return mpi_comm; }
+
     /** Returns the number of quantum number sectors */
     PetscInt NumSectors() const
     {
