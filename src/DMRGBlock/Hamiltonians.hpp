@@ -49,6 +49,8 @@ namespace Hamiltonians
             /* Get values from command line options */
             ierr = PetscOptionsGetReal(NULL,NULL,"-J1",&J1,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetReal(NULL,NULL,"-J2",&J2,NULL); CHKERRQ(ierr);
+            ierr = PetscOptionsGetReal(NULL,NULL,"-Jz1",&Jz1,NULL); CHKERRQ(ierr);
+            ierr = PetscOptionsGetReal(NULL,NULL,"-Jz2",&Jz2,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetInt(NULL,NULL,"-Lx",&Lx,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetInt(NULL,NULL,"-Ly",&Ly,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
@@ -75,6 +77,12 @@ namespace Hamiltonians
 
         /** Set from options */
         PetscBool set_from_options = PETSC_FALSE;
+
+        /** Transverse anisotropy for nearest-neighbor interactions */
+        PetscScalar Jz1 = 0.0;
+
+        /** Transverse anisotropy for next-nearest-neighbor interactions */
+        PetscScalar Jz2 = 0.0;
 
         /** Coupling strength for nearest-neighbor interactions */
         PetscScalar J1 = 1.0;

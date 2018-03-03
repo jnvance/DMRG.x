@@ -57,7 +57,7 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
         const PetscInt ix = is / Ly;
         const PetscInt jy = (is % Ly)*(1 - 2 * (ix % 2)) + (Ly - 1)*(ix % 2);
         /* Get nearest neighbors */
-        if(J1 != 0.0)
+        if(J1 != 0.0 || Jz1 != 0.0)
         {
             const std::vector<PetscInt> nn = GetNearestNeighbors(ix,jy,ns);
             for(const PetscInt& in: nn)
@@ -66,14 +66,15 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
                 PetscInt ia = (in < is) ? in : is;
                 PetscInt ib = (in > is) ? in : is;
                 /* Append the terms into the Hamiltonian */
-                Terms.push_back({ J1, OpSp, ia, OpSm, ib }); /* J1 S^+_ia S^-_ib */
-                Terms.push_back({ J1, OpSm, ia, OpSp, ib }); /* J1 S^-_ia S^+_ib */
+                if(J1 != 0.0) Terms.push_back({ J1, OpSp, ia, OpSm, ib }); /* J1 S^+_ia S^-_ib */
+                if(J1 != 0.0) Terms.push_back({ J1, OpSm, ia, OpSp, ib }); /* J1 S^-_ia S^+_ib */
+                if(Jz1 != 0.0) Terms.push_back({ Jz1, OpSz, ia, OpSz, ib }); /* Jz1 S^z_ia S^z_ib */
             }
         }
         /* Get next-nearest neighbors */
         /* FIXME: Verify that on a one-dimensional chain, there are no next-nearest neighbors */
         /* When J2==0 do not generate any terms */
-        if(J2 != 0.0 && Lx > 1 && Ly > 1)
+        if((J2 != 0.0 && Jz2 != 0.0) && Lx > 1 && Ly > 1)
         {
             const std::vector<PetscInt> nnn = GetNextNearestNeighbors(ix,jy,ns);
             for(const PetscInt& in: nnn)
@@ -82,8 +83,9 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
                 PetscInt il = (in < is) ? in : is;
                 PetscInt ir = (in > is) ? in : is;
                 /* Append the terms into the Hamiltonian */
-                Terms.push_back({ J2, OpSp, il, OpSm, ir }); /* J2 S^+_ia S^-_ib */
-                Terms.push_back({ J2, OpSm, il, OpSp, ir }); /* J2 S^-_ia S^+_ib */
+                if(J2 != 0.0) Terms.push_back({ J2, OpSp, il, OpSm, ir }); /* J2 S^+_ia S^-_ib */
+                if(J2 != 0.0) Terms.push_back({ J2, OpSm, il, OpSp, ir }); /* J2 S^-_ia S^+_ib */
+                if(Jz2 != 0.0) Terms.push_back({ Jz2, OpSz, il, OpSz, ir }); /* J2 S^+_ia S^-_ib */
             }
         }
     }
