@@ -725,7 +725,16 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
 
     /*  Initialize the output matrix with the correct dimensions */
     ierr = MatDestroy(&MatOut); CHKERRQ(ierr);
-    ierr = InitSingleSiteOperator(mpi_comm, num_states, &MatOut); CHKERRQ(ierr);
+    ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
+    ierr = MatSetSizes(MatOut, PETSC_DECIDE, PETSC_DECIDE, num_states, num_states); CHKERRQ(ierr);
+    ierr = MatSetOptionsPrefix(MatOut, "H_"); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(MatOut); CHKERRQ(ierr);
+    ierr = MatSetUp(MatOut); CHKERRQ(ierr);
+
+    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ENTRIES          , PETSC_TRUE);
+    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ZERO_ROWS        , PETSC_TRUE);
+    ierr = MatSetOption(MatOut, MAT_IGNORE_OFF_PROC_ENTRIES      , PETSC_TRUE);
+    ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES          , PETSC_TRUE);
 
     KronSumCtx ctx;
     ctx.rstart = MatOut->rmap->rstart;
