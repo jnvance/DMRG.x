@@ -361,3 +361,65 @@ PetscErrorCode Block::SpinOneHalf::Destroy()
     init = PETSC_FALSE;
     return ierr;
 }
+
+
+PetscErrorCode Block::SpinOneHalf::RotateOperators(const SpinOneHalf& Source, const Mat& RotMatT)
+{
+    PetscErrorCode ierr = 0;
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
+
+    /*  Since we do not want to rotate the Sm operators separately */
+    if(init_Sm){ ierr = DestroySm(); CHKERRQ(ierr); }
+
+    /*  Verify the sizes */
+    const PetscInt NumStatesOrig = Source.NumStates();
+    const PetscInt NumSitesOrig = Source.NumSites();
+    PetscInt NRows_RT, NCols_RT;
+    ierr = MatGetSize(RotMatT, &NRows_RT, &NCols_RT); CHKERRQ(ierr);
+    if(NCols_RT != NumStatesOrig)
+        SETERRQ2(mpi_comm, 1, "RotMatT incorrect number of cols. Expected %d. Got %d.", NCols_RT, NumStatesOrig);
+    if(NRows_RT != num_states)
+        SETERRQ2(mpi_comm, 1, "RotMatT incorrect number of rows. Expected %d. Got %d.", NRows_RT, num_states);
+    if(NumSitesOrig != num_sites)
+        SETERRQ2(mpi_comm, 1, "RotMatT incorrect number of sites. Expected %d. Got %d.", NumSitesOrig, num_sites);
+
+    /*  Get the method from command line */
+    enum RotMethod { mmmmult=0, matptap=1 };
+    RotMethod method = mmmmult;
+
+    #if defined(PETSC_USE_COMPLEX)
+        if(method == matptap) SETERRQ(mpi_comm,1,"The method matptap cannot be used for complex scalars.");
+    #endif
+
+    Mat RotMat;
+    if( method==mmmmult || method==matptap){
+        ierr = MatHermitianTranspose(RotMatT, MAT_INITIAL_MATRIX, &RotMat); CHKERRQ(ierr);
+    } else {
+        SETERRQ(mpi_comm,1,"Not implemented.");
+    }
+
+    #if defined(PETSC_USE_DEBUG)
+    {
+        PetscBool flg = PETSC_FALSE;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-print_UUT", &flg, NULL); CHKERRQ(ierr);
+        if(flg){
+            Mat UUT;
+            ierr = MatMatMult(RotMat, RotMatT, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &UUT); CHKERRQ(ierr);
+            ierr = MatPeek(UUT,"UUT"); CHKERRQ(ierr);
+            ierr = MatDestroy(&UUT); CHKERRQ(ierr);
+        }
+    }
+    #endif
+
+    /*  Perform the rotation on all operators */
+    if( method==mmmmult) for(PetscInt isite = 0; isite < num_sites; ++isite)
+    {
+        ierr = MatMatMatMult(RotMatT, Source.Sp(isite), RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &SpData[isite]); CHKERRQ(ierr);
+        ierr = MatMatMatMult(RotMatT, Source.Sz(isite), RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &SzData[isite]); CHKERRQ(ierr);
+    } else {
+        SETERRQ(mpi_comm,1,"Not implemented.");
+    }
+    ierr = MatDestroy(&RotMat); CHKERRQ(ierr);
+    ierr = CheckOperatorBlocks(); CHKERRQ(ierr);
+    return(0);
+}

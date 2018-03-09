@@ -832,6 +832,19 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
         }
         ierr = VerifySzAssumption({OpProdSumRR}, SideRight); CHKERRQ(ierr);
     }
+
+    #if defined(PETSC_USE_DEBUG)
+    {
+        PetscBool flg = PETSC_FALSE;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_block",&flg,NULL); CHKERRQ(ierr);
+        if(flg)
+        {
+            ierr = MatPeek(OpProdSumLL, "OpProdSumLL"); CHKERRQ(ierr);
+            ierr = MatPeek(OpProdSumRR, "OpProdSumRR"); CHKERRQ(ierr);
+        }
+    }
+    #endif
+
     /*  Determine the local rows to be collected from each of the left and right block */
     {
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);

@@ -14,10 +14,14 @@ PetscErrorCode Test()
 
     DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
 
-    ierr = DMRG.Warmup(10); CHKERRQ(ierr);
-    ierr = DMRG.Sweep(20); CHKERRQ(ierr);
-    ierr = DMRG.Sweep(30); CHKERRQ(ierr);
-    ierr = DMRG.Sweep(40); CHKERRQ(ierr);
+    PetscInt num_sweeps = 1, mstates = 8;
+    ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsGetInt(NULL,NULL,"-num_sweeps",&num_sweeps,NULL); CHKERRQ(ierr);
+
+    ierr = DMRG.Warmup(mstates); CHKERRQ(ierr);
+    for(PetscInt isweep = 0; isweep < num_sweeps; ++isweep){
+        ierr = DMRG.Sweep(mstates); CHKERRQ(ierr);
+    }
 
     return ierr;
 }

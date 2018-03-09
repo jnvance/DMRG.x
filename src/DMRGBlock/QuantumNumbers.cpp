@@ -27,6 +27,17 @@ PetscErrorCode QuantumNumbers::Initialize(
             - Think about how to handle zero-sized quantum number blocks esp in the context of truncation
     */
     num_sectors = (PetscInt) qn_list_in.size();
+
+    /*  Ensure that qn_list_in is in descending order and unique */
+    {
+        PetscReal qn_prev = qn_list_in[0];
+        for(PetscInt i = 1; i < num_sectors; ++i)
+        {
+            if(qn_list_in[i] >= qn_prev) SETERRQ(PETSC_COMM_SELF,1,"qn_list_in must be sorted descending.");
+            qn_prev = qn_list_in[i];
+        }
+    }
+
     qn_list = qn_list_in;
     qn_size = qn_size_in;
     qn_offset.resize(num_sectors+1);

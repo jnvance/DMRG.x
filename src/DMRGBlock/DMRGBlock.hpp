@@ -211,6 +211,11 @@ namespace Block {
         /** Destroys the Sm matrices on the fly */
         PetscErrorCode DestroySm();
 
+        /** Rotates all operators from a source block using the given transposed rotation matrix */
+        PetscErrorCode RotateOperators(
+            const SpinOneHalf& Source,  /**< [in] Block containing the original operators */
+            const Mat& RotMatT          /**< [in] Transposed rotation matrix */
+            );
     };
 
 }

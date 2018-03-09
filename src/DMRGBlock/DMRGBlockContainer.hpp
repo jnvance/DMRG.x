@@ -38,7 +38,7 @@ struct Eigen_t
 /** Comparison operator for sorting Eigen_t objects by decreasing eigenvalues */
 bool greater_eigval(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e2.eigval; }
 
-/** Comparison operator for sorting Eigen_t objects by increasing blkIdx */
+/** Comparison operator for sorting Eigen_t objects by increasing blkIdx (decreasing qn's) */
 bool less_blkIdx(const Eigen_t &e1, const Eigen_t &e2) { return e1.blkIdx < e2.blkIdx; }
 
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
@@ -97,6 +97,7 @@ public:
         return(0);
     }
 
+    #define PrintLines() printf("=====================================\n")
     #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
 
     /** Performs the warmup stage of DMRG.
@@ -117,7 +118,10 @@ public:
 
         while(sys_ninit < num_sites/2)
         {
-            if(!mpi_rank && verbose) PrintBlocks(sys_ninit,sys_ninit);
+            if(!mpi_rank && verbose){
+                PrintLines();
+                PrintBlocks(sys_ninit,sys_ninit);
+            }
 
             Block env_temp;
             ierr = SingleDMRGStep(
@@ -172,7 +176,10 @@ public:
         {
             const PetscInt  insys  = num_sites - iblock - 3,    inenv  = iblock-1;
             const PetscInt  outsys = num_sites - iblock - 2,    outenv = iblock;
-            if(!mpi_rank && verbose) PrintBlocks(insys+1,inenv+1);
+            if(!mpi_rank && verbose){
+                PrintLines();
+                PrintBlocks(insys+1,inenv+1);
+            }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
@@ -285,6 +292,20 @@ private:
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
+
+        #if defined(PETSC_USE_DEBUG)
+        {
+            PetscBool flg = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-print_qn",&flg,NULL); CHKERRQ(ierr);
+            if(flg){
+                /* Print the enlarged system block's quantum numbers for each state */
+                ierr = PetscPrintf(mpi_comm,"  SysBlockEnl  "); CHKERRQ(ierr);
+                ierr = SysBlockEnl.Magnetization.PrintQNs(); CHKERRQ(ierr);
+                ierr = PetscPrintf(mpi_comm,"  EnvBlockEnl  "); CHKERRQ(ierr);
+                ierr = EnvBlockEnl.Magnetization.PrintQNs(); CHKERRQ(ierr);
+            }
+        }
+        #endif
 
         /* Prepare the Hamiltonian taking both enlarged blocks together */
         PetscInt NumSitesTotal = SysBlockEnl.NumSites() + EnvBlockEnl.NumSites();
@@ -409,9 +430,12 @@ private:
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
-        if(!mpi_rank && verbose) printf("  Energy:      %g\n", gse_r);
-        if(!mpi_rank && verbose) printf("  NumSites:    %d\n", NumSitesTotal);
-        if(!mpi_rank && verbose) printf("  Energy/site: %g\n", gse_r/PetscScalar(NumSitesTotal));
+        if(!mpi_rank && verbose)
+        {
+            printf("  NumSites:    %d\n", NumSitesTotal);
+            printf("  Energy:      %g\n", gse_r);
+            printf("  Energy/site: %g\n", gse_r/PetscScalar(NumSitesTotal));
+        }
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -435,6 +459,8 @@ private:
         QuantumNumbers  QN_L, QN_R;
         PetscReal       TruncErr_L, TruncErr_R;
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
+        /* TODO: Add an option to accept flg for redundant blocks */
+
 
         if(!mpi_rank && verbose) printf("  Left  Block Truncation Error: %g\n", TruncErr_L);
         if(!mpi_rank && verbose) printf("  Right Block Truncation Error: %g\n", TruncErr_R);
@@ -449,22 +475,39 @@ private:
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
 
-        #if 0
+        #if 1
+        {
+            ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
+            ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
+            ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
+            if(!flg){
+                ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
+                ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
+                ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
+            }
 
-        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
-        ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
-        if(!flg){
-            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
-            ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
-
         #else
-
-        SysBlockOut = SysBlockEnl;
-        if(!flg){
-            EnvBlockOut = EnvBlockEnl;
+        {
+            SysBlockOut = SysBlockEnl;
+            if(!flg){
+                EnvBlockOut = EnvBlockEnl;
+            }
         }
+        #endif
 
+        #if defined(PETSC_USE_DEBUG)
+        {
+            PetscBool flg = PETSC_FALSE;
+            ierr = PetscOptionsGetBool(NULL,NULL,"-print_qn",&flg,NULL); CHKERRQ(ierr);
+            if(flg){
+                /* Print the enlarged system block's quantum numbers for each state */
+                ierr = PetscPrintf(mpi_comm,"  SysBlockOut  "); CHKERRQ(ierr);
+                ierr = SysBlockOut.Magnetization.PrintQNs(); CHKERRQ(ierr);
+                ierr = PetscPrintf(mpi_comm,"  EnvBlockOut  "); CHKERRQ(ierr);
+                ierr = EnvBlockOut.Magnetization.PrintQNs(); CHKERRQ(ierr);
+            }
+        }
         #endif
 
         ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
@@ -504,7 +547,7 @@ private:
         #if defined(PETSC_USE_DEBUG)
         PetscBool flg = PETSC_FALSE;
         ierr = PetscOptionsGetBool(NULL,NULL,"-print_trunc",&flg,NULL); CHKERRQ(ierr);
-        if(flg){
+        if(false){
             for(PetscMPIInt irank = 0; irank < mpi_size; ++irank){
                 if(irank==mpi_rank){std::cout << "[" << mpi_rank << "]<<" << std::endl;
 
@@ -600,23 +643,23 @@ private:
                 rdmd_vecs_R.push_back(v_R);
             }
 
+            #if defined(PETSC_USE_DEBUG)
+            if(flg){
+                printf("\nBefore sorting\n");
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                printf("\n");
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                printf("\n\n");
+            }
+            #endif
+
             /*  Sort the eigenvalue lists in descending order */
             std::stable_sort(eigen_L.begin(), eigen_L.end(), greater_eigval);
             std::stable_sort(eigen_R.begin(), eigen_R.end(), greater_eigval);
 
             #if defined(PETSC_USE_DEBUG)
             if(flg){
-                for(const Eigen_t& eig: eigen_L)
-                {
-                    printf("   L: %g\n", eig.eigval);
-                }
-                for(const Eigen_t& eig: eigen_R)
-                {
-                    printf("   R: %g\n", eig.eigval);
-                }
-                printf("\n\n");
-
-                printf("\n\n");
+                printf("\nAfter sorting\n");
                 for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
                 printf("\n");
                 for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
@@ -788,6 +831,7 @@ private:
         ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
         ierr = EPSSetWhichEigenpairs(eps, EPS_LARGEST_REAL); CHKERRQ(ierr);
         ierr = EPSSetType(eps, EPSLAPACK);
+        ierr = EPSSetTolerances(eps, 1.0e-16, PETSC_DEFAULT); CHKERRQ(ierr);
         ierr = EPSSolve(eps); CHKERRQ(ierr);
 
         /*  Verify convergence */

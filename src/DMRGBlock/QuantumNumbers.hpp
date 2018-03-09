@@ -202,6 +202,24 @@ public:
         const PetscInt& LocIdx      /**< [in]  Local index in the block */
         ) const;
 
+    /** Prints out the full list of quantum numbers contained in the root process */
+    PetscErrorCode PrintQNs()
+    {
+        PetscErrorCode ierr;
+        PetscMPIInt mpi_rank;
+        ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
+        if(!mpi_rank)
+        {
+            printf("[ ");
+            for(PetscInt i = 0; i < num_sectors; ++i)
+            {
+                for(PetscInt j = 0; j < qn_size[i]; ++j) printf("%g ", qn_list[i]);
+            }
+            printf(" ]\n");
+        }
+        return(0);
+    }
+
 };
 
 
