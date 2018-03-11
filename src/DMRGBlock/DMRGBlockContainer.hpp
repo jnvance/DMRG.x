@@ -63,17 +63,9 @@ public:
         ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
 
         num_sites = Ham.NumSites();
-        num_sys_blocks = num_sites - 1;
 
         if((num_sites) < 2) throw std::runtime_error("There must be at least two total sites.");
         if((num_sites) % 2)  throw std::runtime_error("Total number of sites must be even.");
-
-        sys_blocks.resize(num_sys_blocks);
-        env_blocks.resize(num_env_blocks);
-
-        /*  Initialize the 0th system block and the environment with one site each  */
-        ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
-        ierr = env_blocks[env_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
@@ -109,13 +101,19 @@ public:
         )
     {
         PetscErrorCode ierr = 0;
-
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
-
         if(!mpi_rank && verbose) printf("WARMUP\n");
 
-        /* Continuously enlarge the system block until it reaches half the total system size */
+        /*  Initialize array of blocks */
+        num_sys_blocks = num_sites - 1;
+        sys_blocks.resize(num_sys_blocks);
+        env_blocks.resize(num_env_blocks);
 
+        /*  Initialize the 0th system block and the environment with one site each  */
+        ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+        ierr = env_blocks[env_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+
+        /* Continuously enlarge the system block until it reaches half the total system size */
         while(sys_ninit < num_sites/2)
         {
             if(!mpi_rank && verbose){
@@ -191,7 +189,6 @@ public:
 
         return(0);
     };
-
 
     /** Destroys the container object */
     PetscErrorCode Destroy();
