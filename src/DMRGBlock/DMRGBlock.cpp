@@ -411,6 +411,13 @@ PetscErrorCode Block::SpinOneHalf::RotateOperators(const SpinOneHalf& Source, co
     }
     #endif
 
+    /*  Destroy previously created operators */
+    for(PetscInt isite = 0; isite < num_sites; ++isite)
+    {
+        ierr = MatDestroy(&SpData[isite]); CHKERRQ(ierr);
+        ierr = MatDestroy(&SzData[isite]); CHKERRQ(ierr);
+    }
+
     /*  Perform the rotation on all operators */
     if( method==mmmmult) for(PetscInt isite = 0; isite < num_sites; ++isite)
     {
