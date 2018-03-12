@@ -298,9 +298,16 @@ private:
         std::vector< PetscInt > Maxnnz;
     } KronSumCtx;
 
-    PetscErrorCode KronSumPrepare(
+    PetscErrorCode KronSumPrepareTerms(
         const std::vector< Hamiltonians::Term >& TermsLL,
         const std::vector< Hamiltonians::Term >& TermsRR,
+        Mat& OpProdSumLL,
+        Mat& OpProdSumRR
+        );
+
+    PetscErrorCode KronSumPrepare(
+        const Mat& OpProdSumLL,
+        const Mat& OpProdSumRR,
         const std::vector< Hamiltonians::Term >& TermsLR,
         KronSumCtx& SubMat
         );

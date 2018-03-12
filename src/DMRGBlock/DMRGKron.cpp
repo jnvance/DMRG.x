@@ -762,11 +762,15 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
             "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
     }
 
-    ierr = KronSumPrepare(TermsLL, TermsRR, TermsLR, ctx); CHKERRQ(ierr);
+    Mat OpProdSumLL, OpProdSumRR;
+    ierr = KronSumPrepareTerms(TermsLL, TermsRR, OpProdSumLL, OpProdSumRR); CHKERRQ(ierr);
+    ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 
-    /*  Destroy local submatrices in context */
+    /*  Destroy local submatrices and temporary matrices */
+    ierr = MatDestroy(&OpProdSumLL); CHKERRQ(ierr);
+    ierr = MatDestroy(&OpProdSumRR); CHKERRQ(ierr);
     for(Mat& mat: ctx.LocalSubMats){
         ierr = MatDestroy(&mat); CHKERRQ(ierr);
     }
@@ -786,17 +790,16 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
 #define GetBlockMatFromTuple(BLOCK,TUPLE)\
             GetBlockMat((BLOCK), std::get<0>(TUPLE), std::get<1>(TUPLE))
 
-PetscErrorCode KronBlocks_t::KronSumPrepare(
+PetscErrorCode KronBlocks_t::KronSumPrepareTerms(
     const std::vector< Hamiltonians::Term >& TermsLL,
     const std::vector< Hamiltonians::Term >& TermsRR,
-    const std::vector< Hamiltonians::Term >& TermsLR,
-    KronSumCtx& ctx
+    Mat& OpProdSumLL,
+    Mat& OpProdSumRR
     )
 {
     PetscErrorCode ierr;
     /*  For each of the intra-block terms, perform the associated matrix multiplications of operators
         residing on the same blocks and sum the block's terms */
-    Mat OpProdSumLL, OpProdSumRR;
     {
         /* Left intra-block */
         for(size_t it = 0; it < TermsLL.size(); ++it)
@@ -845,6 +848,18 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     }
     #endif
 
+    return(0);
+}
+
+
+PetscErrorCode KronBlocks_t::KronSumPrepare(
+    const Mat& OpProdSumLL,
+    const Mat& OpProdSumRR,
+    const std::vector< Hamiltonians::Term >& TermsLR,
+    KronSumCtx& ctx
+    )
+{
+    PetscErrorCode ierr = 0;
     /*  Determine the local rows to be collected from each of the left and right block */
     {
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
@@ -880,7 +895,7 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
 
     /*  Perform submatrix collection and append to ctx.Terms and also fill LocalSubMats to ensure that
         local submatrices are tracked and deleted after usage */
-    const PetscInt NumTerms = TermsLL.size() + TermsRR.size() + TermsLR.size();
+    const PetscInt NumTerms = 2 + TermsLR.size();
     ctx.Terms.reserve(NumTerms);
     /*  LL terms */
     {
@@ -930,8 +945,6 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     ierr = ISDestroy(&isrow_R); CHKERRQ(ierr);
     ierr = ISDestroy(&iscol_L); CHKERRQ(ierr);
     ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
-    ierr = MatDestroy(&OpProdSumLL); CHKERRQ(ierr);
-    ierr = MatDestroy(&OpProdSumRR); CHKERRQ(ierr);
     /* Set to maximum value in case preallocation is not called */
     ctx.MaxElementsPerRow = ctx.Ncols;
     return(0);
