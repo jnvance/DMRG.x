@@ -54,7 +54,7 @@ namespace Block {
     private:
 
         /** MPI Communicator */
-        MPI_Comm        mpi_comm;
+        MPI_Comm        mpi_comm = PETSC_COMM_SELF;
 
         /** MPI rank in mpi_comm */
         PetscMPIInt     mpi_rank;
