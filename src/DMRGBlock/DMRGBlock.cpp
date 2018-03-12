@@ -80,6 +80,8 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     else
         SETERRQ1(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Invalid input num_sites_in > 0. Given %d.", num_sites_in);
 
+    ierr = InitSingleSiteOperator(mpi_comm, num_states, &H); CHKERRQ(ierr);
+
     return ierr;
 }
 
@@ -354,7 +356,7 @@ PetscErrorCode Block::SpinOneHalf::Destroy()
         ierr = MatDestroy(&SzData[isite]); CHKERRQ(ierr);
         ierr = MatDestroy(&SpData[isite]); CHKERRQ(ierr);
     }
-
+    ierr = MatDestroy(&H); CHKERRQ(ierr);
     if (init_Sm){
         ierr = DestroySm(); CHKERRQ(ierr);
     }
