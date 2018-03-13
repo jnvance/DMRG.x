@@ -329,6 +329,7 @@ private:
 PetscErrorCode KronEye_Explicit(
     Block::SpinOneHalf& LeftBlock,          /**< [in]   left block of sites */
     Block::SpinOneHalf& RightBlock,         /**< [in]   right block of sites */
+    const std::vector< Hamiltonians::Term >& Terms, /**< [in]   Hamiltonina terms */
     Block::SpinOneHalf& BlockOut            /**< [out]  combined block */
     );
 

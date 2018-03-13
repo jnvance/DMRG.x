@@ -457,6 +457,7 @@ PetscErrorCode MatKronEyeConstruct(
 PetscErrorCode KronEye_Explicit(
     Block::SpinOneHalf& LeftBlock,
     Block::SpinOneHalf& RightBlock,
+    const std::vector< Hamiltonians::Term >& Terms,
     Block::SpinOneHalf& BlockOut
     )
 {
@@ -599,6 +600,15 @@ PetscErrorCode KronEye_Explicit(
     /*  Expand the right-block states explicitly by padding identities to the left */
     ierr = MatKronEyeConstruct(LeftBlock, RightBlock, KronBlocks, BlockOut);  CHKERRQ(ierr);
 
+    /*  Fill in the Hamiltonian of the output block
+        This part assumes that the input terms include all terms of all sites involved */
+    for(const Hamiltonians::Term& term: Terms){
+        if(term.Iop >= nsites_out || term.Jop >= nsites_out)
+            SETERRQ3(mpi_comm,1,"Term indices must be less than %d. Got %d and %d.",nsites_out,term.Iop,term.Jop);
+    }
+
+    ierr = KronBlocks.KronSumConstruct(Terms, BlockOut.H); CHKERRQ(ierr);
+
     return ierr;
 }
 
@@ -699,8 +709,10 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         ierr = RightBlock.CreateSm(); CHKERRQ(ierr);
     }
 
-    #if DMRG_KRON_TESTING
-        if(!mpi_rank) {
+    #if defined(PETSC_USE_DEBUG)
+        PetscBool print_H_terms = PETSC_FALSE;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_terms",&print_H_terms,NULL); CHKERRQ(ierr);
+        if(!mpi_rank && print_H_terms) {
             printf(" nsites_left=%d nsites_right=%d nsites_out=%d\n", nsites_left, nsites_right, nsites_out);
             printf(" TermsLL\n");
             for(const Hamiltonians::Term& term: TermsLL)
@@ -762,15 +774,30 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
             "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
     }
 
-    Mat OpProdSumLL, OpProdSumRR;
-    ierr = KronSumPrepareTerms(TermsLL, TermsRR, OpProdSumLL, OpProdSumRR); CHKERRQ(ierr);
+    /* Use the Hamiltonian directly for OpProdSumLL/RR */
+    const Mat OpProdSumLL = LeftBlock.H;
+    const Mat OpProdSumRR = RightBlock.H;
+
+    #if defined(PETSC_USE_DEBUG)
+    PetscBool __flg = PETSC_FALSE;
+    ierr = PetscOptionsGetBool(NULL,NULL,"-print_OpProdSum",&__flg,NULL); CHKERRQ(ierr);
+    if(__flg){
+        ierr = MatPeek(OpProdSumLL, "OpProdSumLL"); CHKERRQ(ierr);
+        ierr = MatPeek(OpProdSumRR, "OpProdSumRR"); CHKERRQ(ierr);
+    }
+    #endif
+
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 
+    #if defined(PETSC_USE_DEBUG)
+    if(__flg){
+        ierr  = MatPeek(MatOut, "MatOut"); CHKERRQ(ierr);
+    }
+    #endif
+
     /*  Destroy local submatrices and temporary matrices */
-    ierr = MatDestroy(&OpProdSumLL); CHKERRQ(ierr);
-    ierr = MatDestroy(&OpProdSumRR); CHKERRQ(ierr);
     for(Mat& mat: ctx.LocalSubMats){
         ierr = MatDestroy(&mat); CHKERRQ(ierr);
     }
