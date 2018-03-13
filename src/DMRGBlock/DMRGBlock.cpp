@@ -61,6 +61,9 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
         ierr = MatSpinOneHalfSzCreate(mpi_comm, SzData[0]); CHKERRQ(ierr);
         ierr = MatSpinOneHalfSpCreate(mpi_comm, SpData[0]); CHKERRQ(ierr);
 
+        /*  Also initialize the single-site Hamiltonian which is defaulted to zero */
+        ierr = InitSingleSiteOperator(mpi_comm, num_states, &H); CHKERRQ(ierr);
+        ierr = MatEnsureAssembled(H); CHKERRQ(ierr);
         /*  Initialize the magnetization sectors using the defaults for one site */
         ierr = Magnetization.Initialize(mpi_comm, loc_qn_list, loc_qn_size); CHKERRQ(ierr);
 
@@ -79,8 +82,6 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     }
     else
         SETERRQ1(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Invalid input num_sites_in > 0. Given %d.", num_sites_in);
-
-    ierr = InitSingleSiteOperator(mpi_comm, num_states, &H); CHKERRQ(ierr);
 
     return ierr;
 }
@@ -421,10 +422,14 @@ PetscErrorCode Block::SpinOneHalf::RotateOperators(const SpinOneHalf& Source, co
     }
 
     /*  Perform the rotation on all operators */
-    if( method==mmmmult) for(PetscInt isite = 0; isite < num_sites; ++isite)
+    if( method==mmmmult)
     {
-        ierr = MatMatMatMult(RotMatT, Source.Sp(isite), RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &SpData[isite]); CHKERRQ(ierr);
-        ierr = MatMatMatMult(RotMatT, Source.Sz(isite), RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &SzData[isite]); CHKERRQ(ierr);
+        for(PetscInt isite = 0; isite < num_sites; ++isite)
+        {
+            ierr = MatMatMatMult(RotMatT, Source.Sp(isite), RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &SpData[isite]); CHKERRQ(ierr);
+            ierr = MatMatMatMult(RotMatT, Source.Sz(isite), RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &SzData[isite]); CHKERRQ(ierr);
+        }
+        ierr = MatMatMatMult(RotMatT, Source.H, RotMat, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &H); CHKERRQ(ierr);
     } else {
         SETERRQ(mpi_comm,1,"Not implemented.");
     }
