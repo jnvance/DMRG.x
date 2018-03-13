@@ -68,6 +68,10 @@ namespace Hamiltonians
         /** Returns the number of sites in the square lattice */
         PetscInt NumSites() const { return Lx*Ly; }
 
+        /** Returns the number of sites in a single cluster/column of the environment block as suggested by Liang and
+            Pang, 1994, for the square lattice */
+        PetscInt NumEnvSites() const { return Ly; }
+
         /** Returns the object used to construct the Hamiltonian using sites counted from the left side of the lattice */
         std::vector< Term > H(
             const PetscInt& nsites  /**< Number of sites involved in the interaction */
