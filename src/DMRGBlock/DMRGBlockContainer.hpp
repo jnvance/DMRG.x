@@ -107,23 +107,14 @@ public:
         /*  Initialize array of blocks */
         num_sys_blocks = num_sites - 1;
         sys_blocks.resize(num_sys_blocks);
-        env_blocks.resize(num_env_blocks);
 
-        /*  Initialize the 0th system block and the environment with one site each  */
+        /*  Initialize the 0th system block with one site  */
         ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
-        ierr = env_blocks[env_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
-        /*  Whether to perform a warmup with a small but exact environment block that fills the remainder of the lattice */
-        PetscBool warmup_env_small = PETSC_TRUE;
-        // ierr = PetscOptionsGetBool(NULL,NULL,"-warmup_env_small",&warmup_env_small,NULL); CHKERRQ(ierr);
-
-        /*  Create a list of small but exact environment blocks that will only be used and kept during warmup. */
-        if(warmup_env_small){
-
+        /*  Create a set of small but exact initial blocks */
+        {
             if(num_sites % 2) SETERRQ1(mpi_comm,1,"Total number of sites must be even. Got %d.", num_sites);
             if(AddSite.NumSites() != 1) SETERRQ1(mpi_comm,1,"Routine assumes an additional site of 1. Got %d.", AddSite.NumSites());
-            num_env_blocks = num_sites / 2 + 1;
-            env_blocks.resize(num_env_blocks);
 
             /*  Number of sites in a single cluster, whose multiples form a full lattice ensuring that the total size is even */
             PetscInt nsites_cluster = Ham.NumEnvSites();
@@ -132,19 +123,19 @@ public:
             /*  Prepare an exact representation of blocks of sites incremented up to the cluster size */
             if(!mpi_rank && verbose){
                 PrintLines();
-                printf(" Preparing initial environment blocks.\n");
+                printf(" Preparing initial blocks.\n");
             }
-            while(env_ninit < nsites_cluster){
-                PetscInt NumSitesTotal = env_blocks[env_ninit-1].NumSites() + AddSite.NumSites();
-                ierr = KronEye_Explicit(env_blocks[env_ninit-1], AddSite, Ham.H(NumSitesTotal), env_blocks[env_ninit]); CHKERRQ(ierr);
-                ++env_ninit;
+            while(sys_ninit < nsites_cluster){
+                PetscInt NumSitesTotal = sys_blocks[sys_ninit-1].NumSites() + AddSite.NumSites();
+                ierr = KronEye_Explicit(sys_blocks[sys_ninit-1], AddSite, Ham.H(NumSitesTotal), sys_blocks[sys_ninit]); CHKERRQ(ierr);
+                ++sys_ninit;
             }
 
             #if defined(PETSC_USE_DEBUG)
             {
-                if(!mpi_rank && verbose) printf("  env_ninit: %d\n", env_ninit);
-                for(PetscInt ienv = 0; ienv < env_ninit; ++ienv){
-                    if(!mpi_rank && verbose) printf("   > block %d, num_sites %d\n", ienv, env_blocks[ienv].NumSites());
+                if(!mpi_rank && verbose) printf("  sys_ninit: %d\n", sys_ninit);
+                for(PetscInt isys = 0; isys < sys_ninit; ++isys){
+                    if(!mpi_rank && verbose) printf("   > block %d, num_sites %d\n", isys, sys_blocks[isys].NumSites());
                 }
             }
             #endif
@@ -156,33 +147,34 @@ public:
                 PetscInt full_cluster = (((sys_ninit+2) / nsites_cluster)+1) * nsites_cluster;
                 PetscInt env_numsites = full_cluster - sys_ninit - 2;
 
-                /* Increment env_numsites until it reaches the highest number of env_blocks available */
-                PetscInt env_add = ((env_ninit - env_numsites) / nsites_cluster) * nsites_cluster;
+                /* Increment env_numsites up to the highest number of env_blocks available */
+                PetscInt env_add = ((sys_ninit - env_numsites) / nsites_cluster) * nsites_cluster;
                 env_numsites += env_add;
                 full_cluster += env_add;
 
+                if(env_numsites < 1 || env_numsites > sys_ninit)
+                    SETERRQ1(mpi_comm,1,"Incorrect number of sites. Got %d.", env_numsites);
+
                 if(!mpi_rank && verbose){
                     PrintLines();
-                    printf(" FullCluster: %d\n", full_cluster);
                     PrintBlocks(sys_ninit,env_numsites);
                 }
 
                 ierr = SingleDMRGStep(
-                    sys_blocks[sys_ninit-1],  env_blocks[env_numsites-1], MStates,
-                    sys_blocks[sys_ninit],    env_blocks[env_numsites]); CHKERRQ(ierr);
+                    sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], MStates,
+                    sys_blocks[sys_ninit],    sys_blocks[env_numsites]); CHKERRQ(ierr);
 
-                if(env_numsites+1 > env_ninit) ++env_ninit;
                 ++sys_ninit;
 
                 #if defined(PETSC_USE_DEBUG)
-                    if(!mpi_rank && verbose) printf("  sys_ninit: %-5d\n  env_ninit: %-5d\n", sys_ninit, env_ninit);
+                    if(!mpi_rank && verbose) printf("  Number of system blocks: %d\n", sys_ninit);
                 #endif
             }
         }
 
         if(sys_ninit != num_sites/2)
             SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %d. Got %d.",num_sites/2, sys_ninit);
-        /* Destroy environment blocks */
+        /* Destroy environment blocks (if any) */
         for(PetscInt ienv = 0; ienv < env_ninit; ++ienv){
             ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
         }
