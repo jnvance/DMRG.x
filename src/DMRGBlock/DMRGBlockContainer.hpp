@@ -110,37 +110,73 @@ public:
         env_blocks.resize(num_env_blocks);
 
         /*  Initialize the 0th system block and the environment with one site each  */
-        ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
-        ierr = env_blocks[env_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+        ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
+        ierr = env_blocks[env_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
-        /* Continuously enlarge the system block until it reaches half the total system size */
-        while(sys_ninit < num_sites/2)
-        {
-            if(!mpi_rank && verbose){
-                PrintLines();
-                PrintBlocks(sys_ninit,sys_ninit);
+        /*  Whether to perform a warmup with a small but exact environment block that fills the remainder of the lattice */
+        PetscBool warmup_env_small = PETSC_TRUE;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-warmup_env_small",&warmup_env_small,NULL); CHKERRQ(ierr);
+        PetscInt warmup_env_cols = 0;
+        ierr = PetscOptionsGetInt(NULL,NULL,"-warmup_num_env_cols",&warmup_env_cols,NULL); CHKERRQ(ierr);
+
+        /*  Create a list of small but exact environment blocks that will only be used and kept during warmup. */
+        if(warmup_env_small){
+            PetscInt num_env_blocks_small = PetscMax(2, Ham.NumEnvSites())+1;
+
+            if(warmup_env_cols < 0) SETERRQ1(mpi_comm, 1, "Additional number of environment cluster sites "
+                "must be non-negative. Got %d.", warmup_env_cols);
+            if(num_env_blocks_small < num_env_blocks) SETERRQ2(mpi_comm, 1, "Required number of environment blocks "
+                "must be at least %d. Got %d.", num_env_blocks, num_env_blocks_small);
+
+            num_env_blocks = num_env_blocks_small;
+            env_blocks.resize(num_env_blocks);
+            while(env_ninit < num_env_blocks){
+                PetscInt NumSitesTotal = env_blocks[env_ninit-1].NumSites() + AddSite.NumSites();
+                ierr = KronEye_Explicit(env_blocks[env_ninit-1], AddSite, Ham.H(NumSitesTotal), env_blocks[env_ninit]); CHKERRQ(ierr);
+                ++env_ninit;
             }
 
-            Block env_temp;
-            ierr = SingleDMRGStep(
-                sys_blocks[sys_ninit-1],  env_blocks[0], MStates,
-                sys_blocks[sys_ninit], env_temp); CHKERRQ(ierr);
-            ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
-            env_blocks[0] = env_temp;
+            #if defined(PETSC_USE_DEBUG) && 0
+            {
+                if(!mpi_rank) printf("  env_ninit: %d\n", env_ninit);
+                for(PetscInt ienv = 0; ienv < env_ninit; ++ienv){
+                    if(!mpi_rank) printf("   > block %d, num_sites %d\n", ienv, env_blocks[ienv].NumSites());
+                }
+            }
+            #endif
 
-            ++sys_ninit;
+            /* Continuously enlarge the system block until it reaches half the total system size */
+            while(sys_ninit < num_sites/2)
+            {
+                PetscInt env_numsites = num_env_blocks_small - ( sys_ninit + 2*AddSite.NumSites() ) % num_env_blocks_small;
+                env_numsites += (1-(env_numsites % 2)==(sys_ninit % 2));
+
+                if(!mpi_rank && verbose){
+                    PrintLines();
+                    PrintBlocks(sys_ninit,env_numsites);
+                }
+
+                Block env_temp;
+                ierr = SingleDMRGStep(
+                    sys_blocks[sys_ninit-1],  env_blocks[env_numsites-1], MStates,
+                    sys_blocks[sys_ninit], env_temp); CHKERRQ(ierr);
+                ierr = env_temp.Destroy(); CHKERRQ(ierr);
+
+                ++sys_ninit;
+            }
         }
-        warmed_up = PETSC_TRUE;
+
         if(sys_ninit != num_sites/2)
             SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %d. Got %d.",num_sites/2, sys_ninit);
-        /* Destroy environment block */
-        ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
+        /* Destroy environment blocks */
+        for(PetscInt ienv = 0; ienv < env_ninit; ++ienv){
+            ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
+        }
         env_ninit = 0;
-
+        warmed_up = PETSC_TRUE;
         if(verbose) PetscPrintf(mpi_comm, "Initialized system blocks: %d\n"
             "Total number of sites: %d\n\n", sys_ninit, num_sites);
-
-        return ierr;
+        return(0);
     }
 
     PetscErrorCode Sweep(
@@ -163,7 +199,10 @@ public:
         {
             const PetscInt  insys  = iblock-1,   inenv  = num_sites - iblock - 3;
             const PetscInt  outsys = iblock,     outenv = num_sites - iblock - 2;
-            if(!mpi_rank && verbose) PrintBlocks(insys+1,inenv+1);
+            if(!mpi_rank && verbose){
+                PrintLines();
+                PrintBlocks(insys+1,inenv+1);
+            }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
@@ -283,9 +322,13 @@ private:
 
         /* (Block) Add one site to each block */
         Block SysBlockEnl, EnvBlockEnl;
-        ierr = KronEye_Explicit(SysBlock, AddSite, SysBlockEnl); CHKERRQ(ierr);
+        PetscInt NumSitesSysEnl = SysBlock.NumSites() + AddSite.NumSites();
+        const std::vector< Hamiltonians::Term > TermsSys = Ham.H(NumSitesSysEnl);
+        ierr = KronEye_Explicit(SysBlock, AddSite, TermsSys, SysBlockEnl); CHKERRQ(ierr);
         if(!flg){
-            ierr = KronEye_Explicit(EnvBlock, AddSite, EnvBlockEnl); CHKERRQ(ierr);
+            PetscInt NumSitesEnvEnl = EnvBlock.NumSites() + AddSite.NumSites();
+            const std::vector< Hamiltonians::Term > TermsEnv = Ham.H(NumSitesEnvEnl);
+            ierr = KronEye_Explicit(EnvBlock, AddSite, TermsEnv, EnvBlockEnl); CHKERRQ(ierr);
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
@@ -401,6 +444,7 @@ private:
                         (OpString.find(term.Jop)->second).c_str(), term.Jsite );
                 }
             }
+            ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
         }
         #endif
 
