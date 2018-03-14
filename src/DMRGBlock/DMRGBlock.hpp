@@ -153,6 +153,9 @@ namespace Block {
             const std::string& save_dir_in
             );
 
+        /** Tells whether InitializeSave() has been properly called */
+        PetscBool SaveInitialized() const { return init_save; }
+
         /** Save all the matrix operators to file and destroy the current storage */
         PetscErrorCode SaveAndDestroy();
 
