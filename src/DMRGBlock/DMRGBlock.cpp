@@ -4,10 +4,6 @@
 #include <sstream>
 #include <iomanip>
 
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <dirent.h>
-
 #include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
 #include <../src/mat/impls/aij/mpi/mpiaij.h> /* Mat_MPIAIJ */
 
@@ -19,6 +15,7 @@ PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const P
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMats(const std::vector<Mat>& matrices);
 PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& dim, Mat& eye);
+PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
 /** Internal macro for checking the initialization state of the block object */
 #define CheckInit(func) if (PetscUnlikely(!init))\
@@ -465,24 +462,8 @@ PetscErrorCode Block::SpinOneHalf::InitializeSave(
     )
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
     if(save_dir_in.empty()) SETERRQ(mpi_comm,1,"Save dir cannot be empty.");
-
-    DIR *dir = opendir(save_dir_in.c_str());
-    if(!dir){
-        /* Info on mode_t: https://jameshfisher.com/2017/02/24/what-is-mode_t.html */
-        ierr = mkdir(save_dir_in.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-        if(ierr){
-            DIR *dir = opendir(save_dir_in.c_str());
-            if(!dir){
-                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d\n",ierr);
-                CHKERRQ(ierr);
-            }
-            closedir(dir);
-        }
-    } else {
-        closedir(dir);
-    }
+    ierr = Makedir(save_dir_in); CHKERRQ(ierr);
     save_dir = save_dir_in;
     /* If the last character is not a slash then add one */
     if(save_dir.back()!='/') save_dir += '/';

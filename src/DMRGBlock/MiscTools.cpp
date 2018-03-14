@@ -1,6 +1,10 @@
 #include <petscsys.h>
 #include <slepceps.h>
 #include <vector>
+#include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 /* Obtained from: https://gist.github.com/orlp/3551590 */
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp) {
@@ -270,4 +274,26 @@ PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& d
     ierr = MatEnsureAssembled(eye); CHKERRQ(ierr);
 
     return ierr;
+}
+
+
+PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name)
+{
+    PetscErrorCode ierr;
+    DIR *dir = opendir(dir_name.c_str());
+    if(!dir){
+        /* Info on mode_t: https://jameshfisher.com/2017/02/24/what-is-mode_t.html */
+        ierr = mkdir(dir_name.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        if(ierr){
+            DIR *dir = opendir(dir_name.c_str());
+            if(!dir){
+                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d\n",ierr);
+                CHKERRQ(ierr);
+            }
+            closedir(dir);
+        }
+    } else {
+        closedir(dir);
+    }
+    return(0);
 }
