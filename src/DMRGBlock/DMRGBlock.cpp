@@ -346,6 +346,7 @@ PetscErrorCode Block::SpinOneHalf::DestroySm()
 
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatDestroy(&SmData[isite]); CHKERRQ(ierr);
+        SmData[isite] = NULL;
     }
     init_Sm = PETSC_FALSE;
 
@@ -362,8 +363,11 @@ PetscErrorCode Block::SpinOneHalf::Destroy()
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = MatDestroy(&SzData[isite]); CHKERRQ(ierr);
         ierr = MatDestroy(&SpData[isite]); CHKERRQ(ierr);
+        SzData[isite] = NULL;
+        SpData[isite] = NULL;
     }
     ierr = MatDestroy(&H); CHKERRQ(ierr);
+    H = NULL;
     if (init_Sm){
         ierr = DestroySm(); CHKERRQ(ierr);
     }
