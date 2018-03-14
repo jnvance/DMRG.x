@@ -186,7 +186,7 @@ PetscErrorCode Test_SavingBlocks()
 
     Block::SpinOneHalf blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
-    ierr = blk.InitializeSave("trash_block_test"); CHKERRQ(ierr);
+    ierr = blk.InitializeSave("trash_block_test/"); CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
     {
         /*  Set the entries of Sz(0) following the correct sectors */
@@ -204,6 +204,41 @@ PetscErrorCode Test_SavingBlocks()
         /*  Set the entries of Sp(1) following the correct sectors */
         ierr = SetSp1(blk.Sp(1)); CHKERRQ(ierr);
         ierr = blk.MatOpCheckOperatorBlocks(OpSp, 1); CHKERRQ(ierr);
+    }
+
+    ierr = blk.SaveAndDestroy(); CHKERRQ(ierr);
+
+    /* Ensure that matrices are null */
+    for(PetscInt isite = 0; isite < blk.NumSites(); ++isite){
+        if(blk.Sz(isite)!=NULL) SETERRQ1(PETSC_COMM_SELF,1,"Matrix Sz(%d) must be null.", isite);
+        if(blk.Sp(isite)!=NULL) SETERRQ1(PETSC_COMM_SELF,1,"Matrix Sp(%d) must be null.", isite);
+    }
+    if(blk.H!=NULL) SETERRQ(PETSC_COMM_SELF,1,"Matrix H must be null.");
+
+    ierr = blk.Retrieve(); CHKERRQ(ierr);
+    /* Ensure that retrieved matrices have the same entries */
+    {
+        Block::SpinOneHalf blk2;
+        ierr = blk2.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
+        ierr = blk2.InitializeSave("trash_block_test/"); CHKERRQ(ierr);
+        ierr = blk2.CheckSectors(); CHKERRQ(ierr);
+        PetscBool flg;
+        ierr = SetSz0(blk2.Sz(0)); CHKERRQ(ierr);
+        ierr = SetSp0(blk2.Sp(0)); CHKERRQ(ierr);
+        ierr = SetSz1(blk2.Sz(1)); CHKERRQ(ierr);
+        ierr = SetSp1(blk2.Sp(1)); CHKERRQ(ierr);
+        ierr = blk2.AssembleOperators(); CHKERRQ(ierr);
+
+        ierr = MatEqual(blk2.Sz(0), blk.Sz(0), &flg); CHKERRQ(ierr);
+        if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sz0");
+        ierr = MatEqual(blk2.Sp(0), blk.Sp(0), &flg); CHKERRQ(ierr);
+        if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sp0");
+        ierr = MatEqual(blk2.Sz(1), blk.Sz(1), &flg); CHKERRQ(ierr);
+        if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sz1");
+        ierr = MatEqual(blk2.Sp(1), blk.Sp(1), &flg); CHKERRQ(ierr);
+        if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sp1");
+
+        ierr = blk2.Destroy(); CHKERRQ(ierr);
     }
 
     ierr = blk.Destroy(); CHKERRQ(ierr);
@@ -229,7 +264,6 @@ int main(int argc, char **argv)
     ierr = Test_SavingBlocks(); CHKERRQ(ierr);
     PrintHeader(comm, "Test 03: Test_MatOpCheckOperatorBlocks");
     ierr = Test_MatOpCheckOperatorBlocks(); CHKERRQ(ierr);
-
 
     ierr = SlepcFinalize(); CHKERRQ(ierr);
     return ierr;

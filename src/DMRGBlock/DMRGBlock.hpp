@@ -104,6 +104,20 @@ namespace Block {
         /** Root directory to save the matrix blocks */
         std::string save_dir;
 
+        /** Saves a single operator */
+        PetscErrorCode SaveOperator(
+            const std::string& OpName,
+            const size_t& isite,
+            Mat& Op
+            );
+
+        /** Retrieves a single operator */
+        PetscErrorCode RetrieveOperator(
+            const std::string& OpName,
+            const size_t& isite,
+            Mat& Op
+            );
+
     public:
 
         /** Initializes block object with input attributes and array of matrix operators.
@@ -138,6 +152,12 @@ namespace Block {
         PetscErrorCode InitializeSave(
             const std::string& save_dir_in
             );
+
+        /** Save all the matrix operators to file and destroy the current storage */
+        PetscErrorCode SaveAndDestroy();
+
+        /** Retrieve all the matrix operators that were written to file by SaveAndDestroy() */
+        PetscErrorCode Retrieve();
 
         /** Destroys all operator matrices and frees memory.
             @remarks __TODO:__ Consider interfacing this to the object desctructor */

@@ -1,6 +1,8 @@
 #include "DMRGBlock.hpp"
 #include <numeric> // partial_sum
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -464,6 +466,7 @@ PetscErrorCode Block::SpinOneHalf::InitializeSave(
 {
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
+    if(save_dir_in.empty()) SETERRQ(mpi_comm,1,"Save dir cannot be empty.");
 
     DIR *dir = opendir(save_dir_in.c_str());
     if(!dir){
@@ -481,6 +484,79 @@ PetscErrorCode Block::SpinOneHalf::InitializeSave(
         closedir(dir);
     }
     save_dir = save_dir_in;
+    /* If the last character is not a slash then add one */
+    if(save_dir.back()!='/') save_dir += '/';
     init_save = PETSC_TRUE;
+    return(0);
+}
+
+
+std::string OpFilename(const std::string& RootDir, const std::string& OpName, const size_t& isite = 0){
+    std::ostringstream oss;
+    oss << RootDir << OpName << "_" << std::setfill('0') << std::setw(9) << isite << ".mat";
+    return oss.str();
+}
+
+
+PetscErrorCode Block::SpinOneHalf::SaveOperator(const std::string& OpName, const size_t& isite, Mat& Op){
+    PetscErrorCode ierr;
+    PetscViewer binv;
+    ierr = PetscViewerBinaryOpen(mpi_comm, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
+    ierr = MatView(Op, binv); CHKERRQ(ierr);
+    ierr = MatDestroy(&Op); CHKERRQ(ierr);
+    ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::RetrieveOperator(const std::string& OpName, const size_t& isite, Mat& Op){
+    PetscErrorCode ierr;
+    PetscViewer binv;
+    ierr = PetscViewerBinaryOpen(mpi_comm, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_READ, &binv); CHKERRQ(ierr);
+    ierr = MatCreate(mpi_comm, &Op); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(Op); CHKERRQ(ierr);
+    ierr = MatLoad(Op, binv); CHKERRQ(ierr);
+    ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
+{
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
+    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    PetscErrorCode ierr;
+    for(size_t isite = 0; isite < num_sites; ++isite){
+        ierr = SaveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
+    }
+    for(size_t isite = 0; isite < num_sites; ++isite){
+        ierr = SaveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
+    }
+    if(H){
+        ierr = SaveOperator("H",0,H); CHKERRQ(ierr);
+    }
+    ierr = Destroy(); CHKERRQ(ierr);
+    init = PETSC_FALSE;
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::Retrieve()
+{
+    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(init) SETERRQ(mpi_comm,1,"SaveAndDestroy() must be called first.");
+    PetscErrorCode ierr;
+    PetscBool flg = PETSC_FALSE;
+    for(size_t isite = 0; isite < num_sites; ++isite){
+        ierr = RetrieveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
+    }
+    for(size_t isite = 0; isite < num_sites; ++isite){
+        ierr = RetrieveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
+    }
+    ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);
+    if(flg){
+        ierr = SaveOperator("H",0,H); CHKERRQ(ierr);
+    }
+    init = PETSC_TRUE;
     return(0);
 }
