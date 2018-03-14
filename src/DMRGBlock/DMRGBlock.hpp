@@ -227,6 +227,9 @@ namespace Block {
             const SpinOneHalf& Source,  /**< [in] Block containing the original operators */
             const Mat& RotMatT          /**< [in] Transposed rotation matrix */
             );
+
+        /** Ensures that all operators are assembled */
+        PetscErrorCode AssembleOperators();
     };
 
 }

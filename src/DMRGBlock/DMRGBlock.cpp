@@ -15,6 +15,7 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz
 PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
+PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMats(const std::vector<Mat>& matrices);
 PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& dim, Mat& eye);
 
 /** Internal macro for checking the initialization state of the block object */
@@ -440,6 +441,15 @@ PetscErrorCode Block::SpinOneHalf::RotateOperators(const SpinOneHalf& Source, co
     }
     ierr = MatDestroy(&RotMat); CHKERRQ(ierr);
     ierr = CheckOperatorBlocks(); CHKERRQ(ierr);
+    return(0);
+}
+
+PetscErrorCode Block::SpinOneHalf::AssembleOperators()
+{
+    PetscErrorCode ierr;
+    ierr = MatEnsureAssembled_MultipleMats(SzData); CHKERRQ(ierr);
+    ierr = MatEnsureAssembled_MultipleMats(SpData); CHKERRQ(ierr);
+    if(H){ ierr = MatEnsureAssembled(H); CHKERRQ(ierr);}
     return(0);
 }
 
