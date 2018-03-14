@@ -70,6 +70,25 @@ public:
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
+
+        char path[512];
+        ierr = PetscOptionsGetString(NULL,NULL,"-save_dir",path,512,&do_save_dir); assert(!ierr);
+        save_dir = std::string(path);
+        if(save_dir.back()!='/') save_dir += '/';
+
+        /*  Print some info */
+        if(verbose){
+            ierr = PetscPrintf(mpi_comm,
+                "=========================================\n"
+                "DENSITY MATRIX RENORMALIZATION GROUP\n"
+                "-----------------------------------------\n"); assert(!ierr);
+            ierr = PetscPrintf(mpi_comm,
+                "Save Directory:     %s\n", do_save_dir ? save_dir.c_str() : "NULL" ); assert(!ierr);
+            ierr = PetscPrintf(mpi_comm,
+                "=========================================\n"); assert(!ierr);
+
+        }
+
     }
 
     /** Destroys all created blocks */
@@ -89,7 +108,8 @@ public:
         return(0);
     }
 
-    #define PrintLines() printf("=====================================\n")
+    #define PrintLines() printf("-----------------------------------------\n")
+    #define PRINTLINES() printf("=========================================\n")
     #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
 
     /** Performs the warmup stage of DMRG.
@@ -181,8 +201,12 @@ public:
         env_ninit = 0;
         warmed_up = PETSC_TRUE;
 
-        if(verbose) PetscPrintf(mpi_comm, "Initialized system blocks: %d\n"
-            "Total number of sites: %d\n\n", sys_ninit, num_sites);
+        if(verbose){
+            PetscPrintf(mpi_comm,
+                "  Initialized system blocks: %d\n"
+                "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
+            if(!mpi_rank) PRINTLINES();
+        }
         return(0);
     }
 
@@ -232,6 +256,7 @@ public:
 
         /*  NOTE: If we do not assume REFLECTION SYMMETRY, then the sweeps should be center to right,
             right to left, then left to center */
+        if(!mpi_rank && verbose) PRINTLINES();
 
         return(0);
     };
@@ -312,6 +337,13 @@ private:
 
     /** Reference to the block of site/s added during enlargement */
     Block& AddSite = SingleSite;
+
+    /** Directory in which the blocks will be saved */
+    std::string save_dir = ".";
+
+    /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
+        This is automatically set when indicating -save_dir */
+    PetscBool do_save_dir = PETSC_FALSE;
 
     PetscErrorCode SingleDMRGStep(
         Block& SysBlock,            /**< [in] the old system (left) block */
