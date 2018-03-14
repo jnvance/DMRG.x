@@ -35,5 +35,6 @@ flush: clean
 	${RM} -rf test_kron/*
 	${RM} -rf test_reshape/*
 	${RM} -rf data/*
+	${RM} -rf trash_block_test
 
 include ${SLEPC_DIR}/lib/slepc/conf/slepc_common

@@ -14,7 +14,7 @@ static char hborder[] = //"*****************************************************
                         "------------------------------------------------------------";
 
 #define PrintHeader(COMM,TEXT) \
-    ierr = PetscPrintf((COMM), "%s\n%s\n%s", hborder, (TEXT), hborder); CHKERRQ(ierr);
+    ierr = PetscPrintf((COMM), "%s\n%s\n%s\n", hborder, (TEXT), hborder); CHKERRQ(ierr);
 
 PetscErrorCode SetSz0(const Mat& Sz)
 {
@@ -180,6 +180,38 @@ PetscErrorCode Test_MatOpCheckOperatorBlocks()
     return ierr;
 }
 
+PetscErrorCode Test_SavingBlocks()
+{
+    PetscErrorCode ierr = 0;
+
+    Block::SpinOneHalf blk;
+    ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
+    ierr = blk.InitializeSave("trash_block_test"); CHKERRQ(ierr);
+    ierr = blk.CheckSectors(); CHKERRQ(ierr);
+    {
+        /*  Set the entries of Sz(0) following the correct sectors */
+        ierr = SetSz0(blk.Sz(0)); CHKERRQ(ierr);
+        ierr = blk.MatOpCheckOperatorBlocks(OpSz, 0); CHKERRQ(ierr);
+
+        /*  Set the entries of Sp(0) following the correct sectors */
+        ierr = SetSp0(blk.Sp(0)); CHKERRQ(ierr);
+        ierr = blk.MatOpCheckOperatorBlocks(OpSp, 0); CHKERRQ(ierr);
+
+        /*  Set the entries of Sz(1) following the correct sectors */
+        ierr = SetSz1(blk.Sz(1)); CHKERRQ(ierr);
+        ierr = blk.MatOpCheckOperatorBlocks(OpSz, 1); CHKERRQ(ierr);
+
+        /*  Set the entries of Sp(1) following the correct sectors */
+        ierr = SetSp1(blk.Sp(1)); CHKERRQ(ierr);
+        ierr = blk.MatOpCheckOperatorBlocks(OpSp, 1); CHKERRQ(ierr);
+    }
+
+    ierr = blk.Destroy(); CHKERRQ(ierr);
+
+    return(0);
+}
+
+
 int main(int argc, char **argv)
 {
     PetscErrorCode  ierr = 0;
@@ -193,8 +225,11 @@ int main(int argc, char **argv)
 
     PrintHeader(comm, "Test 01: Test_InitAndCopy");
     ierr = Test_InitAndCopy(); CHKERRQ(ierr);
-    PrintHeader(comm, "Test 02: Test_MatOpCheckOperatorBlocks");
+    PrintHeader(comm, "Test 02: Test_SavingBlocks");
+    ierr = Test_SavingBlocks(); CHKERRQ(ierr);
+    PrintHeader(comm, "Test 03: Test_MatOpCheckOperatorBlocks");
     ierr = Test_MatOpCheckOperatorBlocks(); CHKERRQ(ierr);
+
 
     ierr = SlepcFinalize(); CHKERRQ(ierr);
     return ierr;
