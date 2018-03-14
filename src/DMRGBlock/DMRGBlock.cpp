@@ -1,6 +1,11 @@
 #include "DMRGBlock.hpp"
 #include <numeric> // partial_sum
 #include <iostream>
+
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
+
 #include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
 #include <../src/mat/impls/aij/mpi/mpiaij.h> /* Mat_MPIAIJ */
 
@@ -435,5 +440,33 @@ PetscErrorCode Block::SpinOneHalf::RotateOperators(const SpinOneHalf& Source, co
     }
     ierr = MatDestroy(&RotMat); CHKERRQ(ierr);
     ierr = CheckOperatorBlocks(); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::InitializeSave(
+    const std::string& save_dir_in
+    )
+{
+    PetscErrorCode ierr = 0;
+    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
+
+    DIR *dir = opendir(save_dir_in.c_str());
+    if(!dir){
+        /* Info on mode_t: https://jameshfisher.com/2017/02/24/what-is-mode_t.html */
+        ierr = mkdir(save_dir_in.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        if(ierr){
+            DIR *dir = opendir(save_dir_in.c_str());
+            if(!dir){
+                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d\n",ierr);
+                CHKERRQ(ierr);
+            }
+            closedir(dir);
+        }
+    } else {
+        closedir(dir);
+    }
+    save_dir = save_dir_in;
+    init_save = PETSC_TRUE;
     return(0);
 }

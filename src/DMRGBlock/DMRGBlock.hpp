@@ -98,6 +98,12 @@ namespace Block {
         /** Array of matrices representing \f$S^-\f$ operators */
         std::vector<Mat> SmData;
 
+        /** Whether saving the block matrices to file has been initialized correctly */
+        PetscBool init_save = PETSC_FALSE;
+
+        /** Root directory to save the matrix blocks */
+        std::string save_dir;
+
     public:
 
         /** Initializes block object with input attributes and array of matrix operators.
@@ -126,6 +132,11 @@ namespace Block {
         PetscErrorCode Initialize(
             const PetscInt& num_sites_in,
             const QuantumNumbers& qn_in
+            );
+
+        /** Initializes the writing of the block matrices to file */
+        PetscErrorCode InitializeSave(
+            const std::string& save_dir_in
             );
 
         /** Destroys all operator matrices and frees memory.
