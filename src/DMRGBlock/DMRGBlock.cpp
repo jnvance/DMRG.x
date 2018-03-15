@@ -27,6 +27,19 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
         (row), (col), (cstart), (cend));
 
 PetscErrorCode Block::SpinOneHalf::Initialize(
+    const MPI_Comm& comm_in)
+{
+    PetscErrorCode ierr;
+    if(mpi_init) SETERRQ(mpi_comm,1,"This initializer should only be called once.");
+    mpi_comm = comm_in;
+    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CPP_CHKERRQ(ierr);
+    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CPP_CHKERRQ(ierr);
+    mpi_init = PETSC_TRUE;
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
     const PetscInt& num_states_in)
@@ -37,9 +50,11 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
 
     /*  Initialize attributes  */
-    mpi_comm = comm_in;
-    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CPP_CHKERRQ(ierr);
-    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CPP_CHKERRQ(ierr);
+    if(!mpi_init){
+        ierr = Initialize(comm_in); CHKERRQ(ierr);
+    } else if (comm_in!=mpi_comm) {
+        SETERRQ(PETSC_COMM_SELF,1,"Mismatch in MPI communicators.");
+    }
 
     /*  Initial number of sites and number of states  */
     num_sites = num_sites_in;
@@ -462,8 +477,11 @@ PetscErrorCode Block::SpinOneHalf::InitializeSave(
     )
 {
     PetscErrorCode ierr = 0;
+    PetscBool flg = PETSC_FALSE;
     if(save_dir_in.empty()) SETERRQ(mpi_comm,1,"Save dir cannot be empty.");
-    ierr = Makedir(save_dir_in); CHKERRQ(ierr);
+    if(!mpi_init) SETERRQ(mpi_comm,1,"MPI Initialization must be completed first.");
+    ierr = PetscTestDirectory(save_dir_in.c_str(), 'r', &flg); CHKERRQ(ierr);
+    if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",save_dir_in.c_str());
     save_dir = save_dir_in;
     /* If the last character is not a slash then add one */
     if(save_dir.back()!='/') save_dir += '/';
