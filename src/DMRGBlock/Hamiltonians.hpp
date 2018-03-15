@@ -75,7 +75,7 @@ namespace Hamiltonians
         /** Returns the object used to construct the Hamiltonian using sites counted from the left side of the lattice */
         std::vector< Term > H(
             const PetscInt& nsites  /**< Number of sites involved in the interaction */
-            ) const;
+            );
 
     private:
 
@@ -125,6 +125,11 @@ namespace Hamiltonians
             const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
             ) const;
 
+        /** Contains the Hamiltonian involving the entire lattice */
+        std::vector< Term > H_full;
+
+        /** Tells whether H_full has been constructed */
+        PetscBool H_full_filled = PETSC_FALSE;
     };
 }
 

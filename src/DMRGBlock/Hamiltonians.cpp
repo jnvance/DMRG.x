@@ -47,9 +47,13 @@ std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNextNearestNei
     return nnn;
 }
 
-std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(const PetscInt& nsites_in) const
+std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(const PetscInt& nsites_in)
 {
     PetscInt ns = (nsites_in == PETSC_DEFAULT) ? Lx*Ly : nsites_in;
+    PetscBool full_lattice = PetscBool(nsites_in == Lx*Ly);
+    if(full_lattice && H_full_filled){
+        return H_full;
+    };
     std::vector< Hamiltonians::Term > Terms(0);
     Terms.reserve(ns*4*2); /* Assume the maximum when all sites have all 4 interactions and 2 terms each */
     for (PetscInt is = 0; is < ns; ++is)
@@ -88,6 +92,11 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
                 if(Jz2 != 0.0) Terms.push_back({ Jz2, OpSz, il, OpSz, ir }); /* J2 S^+_ia S^-_ib */
             }
         }
+    }
+    if(full_lattice && !H_full_filled){
+        H_full = Terms;
+        H_full_filled = PETSC_TRUE;
+        return H_full;
     }
     return Terms;
 }
