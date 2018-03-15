@@ -123,6 +123,7 @@ public:
     #define PRINTLINES() printf("=========================================\n")
     #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
 
+    /** Returns the path to the directory for the storage of a specific system block */
     std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
         std::ostringstream oss;
         oss << save_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
@@ -153,8 +154,7 @@ public:
 
     /** Performs the warmup stage of DMRG.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
-        of sites. All created system blocks and only the last environment block are stored all of which will
-        be represented by `MStates` number of basis states */
+        of sites. All created system blocks are stored and will be represented by at most `MStates` number of basis states */
     PetscErrorCode Warmup(
         const PetscInt& MStates /**< [in] the maximum number of states to keep after each truncation */
         )
@@ -270,20 +270,20 @@ public:
         return(0);
     }
 
+    /** Performs the sweep stage of DMRG. */
     PetscErrorCode Sweep(
-        const PetscInt& MStates,
-        const PetscInt& MinBlock = PETSC_DEFAULT
+        const PetscInt& MStates, /**< [in] the maximum number of states to keep after each truncation */
+        const PetscInt& MinBlock = PETSC_DEFAULT /**< [in] the minimum block length when performing sweeps. Defaults to 1 */
         )
     {
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
+        if(!mpi_rank && verbose) printf("SWEEP MStates=%d\n", MStates);
 
-        /*  TODO: Set a minimum number of blocks (min_block). Decide whether to set it statically or let
+        /*  Set a minimum number of blocks (min_block). Decide whether to set it statically or let
             the number correspond to the least number of sites needed to exactly build MStates. */
         PetscInt min_block = MinBlock==PETSC_DEFAULT ? 1 : MinBlock;
         if(min_block < 1) SETERRQ1(mpi_comm,1,"MinBlock must at least be 1. Got %d.", min_block);
-
-        if(!mpi_rank && verbose) printf("SWEEP MStates=%d\n", MStates);
 
         /*  Starting from the midpoint, perform a center to right sweep */
         for(PetscInt iblock = num_sites/2; iblock < num_sites - min_block - 2; ++iblock)
@@ -320,10 +320,6 @@ public:
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
 
-        /*  FIXME: Does this count as a complete sweep? */
-
-        /*  NOTE: If we do not assume REFLECTION SYMMETRY, then the sweeps should be center to right,
-            right to left, then left to center */
         if(!mpi_rank && verbose) PRINTLINES();
 
         return(0);
@@ -413,6 +409,8 @@ private:
         This is automatically set when indicating -save_dir */
     PetscBool do_save_dir = PETSC_FALSE;
 
+    /** Performs a single DMRG iteration taking in a system and environment block, adding one site
+        to each and performing a truncation to at most MStates */
     PetscErrorCode SingleDMRGStep(
         Block& SysBlock,            /**< [in] the old system (left) block */
         Block& EnvBlock,            /**< [in] the old environment (right) block */
@@ -535,9 +533,11 @@ private:
             }
         }
         #endif
+
         ierr = PetscTime(&tenl); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
+
         #if defined(PETSC_USE_DEBUG)
         {
             PetscBool flg = PETSC_FALSE;
@@ -612,7 +612,6 @@ private:
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
         /* TODO: Add an option to accept flg for redundant blocks */
 
-
         if(!mpi_rank && verbose) printf("  Left  Block Truncation Error: %g\n", TruncErr_L);
         if(!mpi_rank && verbose) printf("  Right Block Truncation Error: %g\n", TruncErr_R);
 
@@ -626,26 +625,16 @@ private:
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = PetscTime(&trdm); CHKERRQ(ierr);
-        #if 1
-        {
-            ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
-            ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
-            ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
-            if(!flg){
-                ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
-                ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
-                ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
-            }
 
+
+        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
+        ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
+        ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
+        if(!flg){
+            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
+            ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
-        #else
-        {
-            SysBlockOut = SysBlockEnl;
-            if(!flg){
-                EnvBlockOut = EnvBlockEnl;
-            }
-        }
-        #endif
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -675,16 +664,17 @@ private:
         return(0);
     }
 
+    /** Obtain the rotation matrix for the truncation step from the ground state vector */
     PetscErrorCode GetTruncation(
-        const KronBlocks_t& KronBlocks,
-        const Vec& gsv_r,
-        const PetscInt& MStates,
-        Mat& RotMatT_L,
-        QuantumNumbers& QN_L,
-        PetscReal& TruncErr_L,
-        Mat& RotMatT_R,
-        QuantumNumbers& QN_R,
-        PetscReal& TruncErr_R
+        const KronBlocks_t& KronBlocks, /**< [in] Context for quantum numbers aware Kronecker product */
+        const Vec& gsv_r,               /**< [in] Real part of the superblock ground state vector */
+        const PetscInt& MStates,        /**< [in] the maximum number of states to keep */
+        Mat& RotMatT_L,                 /**< [out] rotation matrix for the system (left) block */
+        QuantumNumbers& QN_L,           /**< [out] quantum numbers context for the system (left) block */
+        PetscReal& TruncErr_L,          /**< [out] total weights of discarded states for the system (left) block */
+        Mat& RotMatT_R,                 /**< [out] rotation matrix for the environment (right) block */
+        QuantumNumbers& QN_R,           /**< [out] quantum numbers context for the environment (right) block */
+        PetscReal& TruncErr_R           /**< [out] total weights of discarded states for the environment (right) block */
         )
     {
         PetscErrorCode ierr;
@@ -877,8 +867,8 @@ private:
             #endif
 
             /*  Calculate the elements of the rotation matrices and the QN object */
-            ierr = FillRotation_BlockDiag(eigen_L, eps_list_L, rdmd_vecs_L, KronBlocks.LeftBlockRef(),  m_L, RotMatT_L); CHKERRQ(ierr);
-            ierr = FillRotation_BlockDiag(eigen_R, eps_list_R, rdmd_vecs_R, KronBlocks.RightBlockRef(), m_R, RotMatT_R); CHKERRQ(ierr);
+            ierr = FillRotation_BlockDiag(eigen_L, eps_list_L, rdmd_vecs_L, KronBlocks.LeftBlockRef(),  RotMatT_L); CHKERRQ(ierr);
+            ierr = FillRotation_BlockDiag(eigen_R, eps_list_R, rdmd_vecs_R, KronBlocks.RightBlockRef(), RotMatT_R); CHKERRQ(ierr);
 
             /*  Calculate the truncation error */
             TruncErr_L = 1.0;
@@ -970,12 +960,13 @@ private:
         return(0);
     }
 
+    /** Obtain the eigenspectrum of a diagonal block of the reduced density matrix through an interface to a lapack routine */
     PetscErrorCode EigRDM_BlockDiag(
-        const Mat& matin,
-        const PetscInt& seqIdx,
-        const PetscInt& blkIdx,
-        std::vector< Eigen_t >& eigList,
-        EPS& eps
+        const Mat& matin,                   /**< [in] diagonal block matrix */
+        const PetscInt& seqIdx,             /**< [in] sequence index */
+        const PetscInt& blkIdx,             /**< [in] block index */
+        std::vector< Eigen_t >& eigList,    /**< [out] resulting list of eigenstates */
+        EPS& eps                            /**< [out] eigensolver context */
         )
     {
         PetscErrorCode ierr;
@@ -1013,13 +1004,13 @@ private:
         return(0);
     }
 
+    /** FIlls the rotation matrix assumming that the reduced density matrix has a block diagonal structure */
     PetscErrorCode FillRotation_BlockDiag(
-        const std::vector< Eigen_t >&   eigen_list,
-        const std::vector< EPS >&       eps_list,
-        const std::vector< Vec >&       rdmd_vecs,
-        const Block&                    BlockRef,
-        const PetscInt&                 m,
-        Mat&                            RotMatT
+        const std::vector< Eigen_t >&   eigen_list,     /**< [in] full list of eigenstates */
+        const std::vector< EPS >&       eps_list,       /**< [in] ordered list of EPS contexts */
+        const std::vector< Vec >&       rdmd_vecs,      /**< [in] ordered list of corresponding eigenvector containers */
+        const Block&                    BlockRef,       /**< [in] reference to the block object to get the magnetization */
+        Mat&                            RotMatT         /**< [out] resulting rotation matrix */
         )
     {
         PetscErrorCode ierr;
