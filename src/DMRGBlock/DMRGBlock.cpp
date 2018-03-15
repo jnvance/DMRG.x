@@ -536,6 +536,8 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
     }
     ierr = Destroy(); CHKERRQ(ierr);
     init = PETSC_FALSE;
+    saved = PETSC_TRUE;
+    retrieved = PETSC_FALSE;
     return(0);
 }
 
@@ -543,7 +545,7 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
 PetscErrorCode Block::SpinOneHalf::Retrieve()
 {
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
-    if(init) SETERRQ(mpi_comm,1,"SaveAndDestroy() must be called first.");
+    if(init) SETERRQ(mpi_comm,1,"Destroy() must be called first.");
     PetscErrorCode ierr;
     PetscBool flg = PETSC_FALSE;
     for(size_t isite = 0; isite < num_sites; ++isite){
@@ -554,8 +556,26 @@ PetscErrorCode Block::SpinOneHalf::Retrieve()
     }
     ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);
     if(flg){
-        ierr = SaveOperator("H",0,H); CHKERRQ(ierr);
+        ierr = RetrieveOperator("H",0,H); CHKERRQ(ierr);
     }
     init = PETSC_TRUE;
+    saved = PETSC_FALSE;
+    retrieved = PETSC_TRUE;
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::EnsureSaved()
+{
+    if(!init || !init_save || saved) return(0);
+    PetscErrorCode ierr = SaveAndDestroy(); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::EnsureRetrieved()
+{
+    if(init || !init_save || retrieved) return(0);
+    PetscErrorCode ierr = Retrieve(); CHKERRQ(ierr);
     return(0);
 }

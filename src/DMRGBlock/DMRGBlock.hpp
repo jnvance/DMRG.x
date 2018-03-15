@@ -77,6 +77,9 @@ namespace Block {
         /** Tells whether the block was initialized */
         PetscBool init = PETSC_FALSE;
 
+        /** Tells whether the block's MPI attributes were initialized */
+        PetscBool mpi_init = PETSC_FALSE;
+
         /** Tells whether to printout info during certain function calls */
         PetscBool verbose = PETSC_FALSE;
 
@@ -101,6 +104,12 @@ namespace Block {
         /** Whether saving the block matrices to file has been initialized correctly */
         PetscBool init_save = PETSC_FALSE;
 
+        /** Whether the block matrices have been saved */
+        PetscBool saved = PETSC_FALSE;
+
+        /** Whether the block matrices have been retrieved */
+        PetscBool retrieved = PETSC_FALSE;
+
         /** Root directory to save the matrix blocks */
         std::string save_dir;
 
@@ -119,6 +128,11 @@ namespace Block {
             );
 
     public:
+
+        /** Initializes block object's MPI attributes */
+        PetscErrorCode Initialize(
+            const MPI_Comm& comm_in       /**< [in] MPI communicator */
+        );
 
         /** Initializes block object with input attributes and array of matrix operators.
             @post Arrays of operator matrices are initialized to the correct number of sites and states.
@@ -161,6 +175,12 @@ namespace Block {
 
         /** Retrieve all the matrix operators that were written to file by SaveAndDestroy() */
         PetscErrorCode Retrieve();
+
+        /** Ensures that the block matrices have been saved if the block is initialized, otherwise does nothing */
+        PetscErrorCode EnsureSaved();
+
+        /** Ensures that the block matrices have been retrieved if the block is initialized, otherwise does nothing */
+        PetscErrorCode EnsureRetrieved();
 
         /** Destroys all operator matrices and frees memory.
             @remarks __TODO:__ Consider interfacing this to the object desctructor */
