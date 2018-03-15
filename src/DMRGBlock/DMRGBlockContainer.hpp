@@ -7,6 +7,7 @@
     @addtogroup DMRGBlockContainer
     @{ */
 
+#include <petsctime.h>
 #include <slepceps.h>
 #include <petscmat.h>
 #include <vector>
@@ -421,6 +422,8 @@ private:
         )
     {
         PetscErrorCode ierr;
+        PetscLogDouble t0, tenl, tkron, tdiag, trdm, trot;
+        ierr = PetscTime(&t0); CHKERRQ(ierr);
 
         /* Check whether the system and environment blocks are the same */
         Mat H = nullptr; /* Hamiltonian matrix */
@@ -532,9 +535,9 @@ private:
             }
         }
         #endif
-
+        ierr = PetscTime(&tenl); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
-
+        ierr = PetscTime(&tkron); CHKERRQ(ierr);
         #if defined(PETSC_USE_DEBUG)
         {
             PetscBool flg = PETSC_FALSE;
@@ -577,6 +580,7 @@ private:
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+        ierr = PetscTime(&tdiag); CHKERRQ(ierr);
         if(!mpi_rank && verbose)
         {
             printf("  NumSites:    %d\n", NumSitesTotal);
@@ -621,7 +625,7 @@ private:
             copy enlarged blocks to out blocks but overwrite the matrices */
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
-
+        ierr = PetscTime(&trdm); CHKERRQ(ierr);
         #if 1
         {
             ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
@@ -659,8 +663,15 @@ private:
 
         ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
         ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
+        ierr = PetscTime(&trot); CHKERRQ(ierr);
 
-        if(!mpi_rank && verbose) printf("\n");
+        PetscLogDouble ttotal = trot - t0;
+        ttotal += (ttotal < 0) * 86400.0; /* Just in case it transitions from a previous day */
+
+        if(verbose){
+            ierr = PetscPrintf(mpi_comm,"  Total Time (s):  %g\n", trot-t0); CHKERRQ(ierr);
+            ierr = PetscPrintf(mpi_comm,"\n"); CHKERRQ(ierr);
+        }
         return(0);
     }
 
