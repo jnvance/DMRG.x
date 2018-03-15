@@ -7,6 +7,7 @@ static char help[] =
 #include <iostream>
 
 PETSC_EXTERN PetscErrorCode SetRow(const Mat& A, const PetscInt& row, const std::vector<PetscInt>& idxn);
+PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
 static char hborder[] = //"************************************************************"
                         //"************************************************************";
@@ -183,6 +184,8 @@ PetscErrorCode Test_MatOpCheckOperatorBlocks()
 PetscErrorCode Test_SavingBlocks()
 {
     PetscErrorCode ierr = 0;
+
+    ierr = Makedir("trash_block_test/"); CHKERRQ(ierr);
 
     Block::SpinOneHalf blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);

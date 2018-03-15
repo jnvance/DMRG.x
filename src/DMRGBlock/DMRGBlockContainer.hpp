@@ -12,7 +12,12 @@
 #include <vector>
 #include <map>
 #include <set>
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 #include "DMRGKron.hpp"
+
+PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
 #if defined(PETSC_USE_DEBUG)
 #include <iostream>
@@ -86,7 +91,6 @@ public:
                 "Save Directory:     %s\n", do_save_dir ? save_dir.c_str() : "NULL" ); assert(!ierr);
             ierr = PetscPrintf(mpi_comm,
                 "=========================================\n"); assert(!ierr);
-
         }
 
     }
@@ -112,6 +116,34 @@ public:
     #define PRINTLINES() printf("=========================================\n")
     #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
 
+    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
+        std::ostringstream oss;
+        oss << save_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
+        return oss.str();
+    }
+
+    /** Ensure that required blocks are loaded while unrequired blocks are saved */
+    PetscErrorCode SysBlocksActive(const std::set< PetscInt >& SysIdx)
+    {
+        PetscErrorCode ierr;
+        PetscInt sys_idx = 0;
+        std::set< PetscInt >::iterator act_it;
+        for(act_it = SysIdx.begin(); act_it != SysIdx.end(); ++act_it){
+            for(PetscInt idx = sys_idx; idx < *act_it; ++idx){
+                // PetscPrintf(mpi_comm,"EnsureSaved:     %d\n",idx);
+                ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
+            }
+            // PetscPrintf(mpi_comm,"EnsureRetrieved: %d\n",*act_it);
+            ierr = sys_blocks[*act_it].EnsureRetrieved(); CHKERRQ(ierr);
+            sys_idx = *act_it+1;
+        }
+        for(PetscInt idx = sys_idx; idx < sys_ninit; ++idx){
+            // PetscPrintf(mpi_comm,"EnsureSaved:     %d\n",idx);
+            ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
+        }
+        return(0);
+    }
+
     /** Performs the warmup stage of DMRG.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
         of sites. All created system blocks and only the last environment block are stored all of which will
@@ -127,6 +159,26 @@ public:
         /*  Initialize array of blocks */
         num_sys_blocks = num_sites - 1;
         sys_blocks.resize(num_sys_blocks);
+
+        /*  Initialize directories for saving the block operators */
+        if(do_save_dir){
+            PetscBool flg;
+            ierr = PetscTestDirectory(save_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
+            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",save_dir.c_str());
+            for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
+                std::string path = BlockDir("Sys",iblock);
+                if(!mpi_rank){
+                    ierr = Makedir(path); CHKERRQ(ierr);
+                    #if defined(PETSC_USE_DEBUG)
+                        ierr = PetscTestDirectory(path.c_str(), 'r', &flg); CHKERRQ(ierr);
+                        if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",path.c_str());
+                        if(verbose) std::cout << path << std::endl;
+                    #endif
+                }
+                ierr = sys_blocks[iblock].Initialize(mpi_comm); CHKERRQ(ierr);
+                ierr = sys_blocks[iblock].InitializeSave(path); CHKERRQ(ierr);
+            }
+        }
 
         /*  Initialize the 0th system block with one site  */
         ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
@@ -179,7 +231,10 @@ public:
                     PrintLines();
                     PrintBlocks(sys_ninit,env_numsites);
                 }
-
+                if(do_save_dir){
+                    std::set< PetscInt > SysIdx = {sys_ninit-1, sys_ninit, env_numsites-1, env_numsites};
+                    ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
+                }
                 ierr = SingleDMRGStep(
                     sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], MStates,
                     sys_blocks[sys_ninit],    sys_blocks[env_numsites]); CHKERRQ(ierr);
@@ -234,6 +289,10 @@ public:
                 PrintLines();
                 PrintBlocks(insys+1,inenv+1);
             }
+            if(do_save_dir){
+                std::set< PetscInt > SysIdx = {insys, outsys, inenv, outenv};
+                ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
+            }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
@@ -247,6 +306,10 @@ public:
             if(!mpi_rank && verbose){
                 PrintLines();
                 PrintBlocks(insys+1,inenv+1);
+            }
+            if(do_save_dir){
+                std::set< PetscInt > SysIdx = {insys, outsys, inenv, outenv};
+                ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
