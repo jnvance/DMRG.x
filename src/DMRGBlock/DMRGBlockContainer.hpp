@@ -584,8 +584,8 @@ private:
         if(!mpi_rank && verbose)
         {
             printf("  NumSites:    %d\n", NumSitesTotal);
-            printf("  Energy:      %g\n", gse_r);
-            printf("  Energy/site: %g\n", gse_r/PetscScalar(NumSitesTotal));
+            printf("  Energy:      %-10.10g\n", gse_r);
+            printf("  Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
         }
 
         #if defined(PETSC_USE_DEBUG)
