@@ -77,9 +77,14 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
 
         char path[512];
-        ierr = PetscOptionsGetString(NULL,NULL,"-save_dir",path,512,&do_save_dir); assert(!ierr);
-        save_dir = std::string(path);
-        if(save_dir.back()!='/') save_dir += '/';
+        PetscBool opt_do_save_dir;
+        ierr = PetscOptionsGetString(NULL,NULL,"-save_dir",path,512,&opt_do_save_dir); assert(!ierr);
+        do_save_dir = opt_do_save_dir;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_dir",&do_save_dir,NULL); assert(!ierr);
+        if(do_save_dir){
+            save_dir = std::string(path);
+            if(save_dir.back()!='/') save_dir += '/';
+        }
 
         /*  Print some info */
         if(verbose){
@@ -87,12 +92,13 @@ public:
                 "=========================================\n"
                 "DENSITY MATRIX RENORMALIZATION GROUP\n"
                 "-----------------------------------------\n"); assert(!ierr);
-            ierr = PetscPrintf(mpi_comm,
-                "Save Directory:     %s\n", do_save_dir ? save_dir.c_str() : "NULL" ); assert(!ierr);
+            if(do_save_dir){
+                ierr = PetscPrintf(mpi_comm,
+                "Save Directory:     %s\n", save_dir.c_str()); assert(!ierr);
+            }
             ierr = PetscPrintf(mpi_comm,
                 "=========================================\n"); assert(!ierr);
         }
-
     }
 
     /** Destroys all created blocks */
@@ -165,16 +171,14 @@ public:
             PetscBool flg;
             ierr = PetscTestDirectory(save_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
             if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",save_dir.c_str());
+            if(!mpi_rank){
+                for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
+                    std::string path = BlockDir("Sys",iblock);
+                    ierr = Makedir(path); CHKERRQ(ierr);
+                }
+            }
             for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                 std::string path = BlockDir("Sys",iblock);
-                if(!mpi_rank){
-                    ierr = Makedir(path); CHKERRQ(ierr);
-                    #if defined(PETSC_USE_DEBUG)
-                        ierr = PetscTestDirectory(path.c_str(), 'r', &flg); CHKERRQ(ierr);
-                        if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",path.c_str());
-                        if(verbose) std::cout << path << std::endl;
-                    #endif
-                }
                 ierr = sys_blocks[iblock].Initialize(mpi_comm); CHKERRQ(ierr);
                 ierr = sys_blocks[iblock].InitializeSave(path); CHKERRQ(ierr);
             }

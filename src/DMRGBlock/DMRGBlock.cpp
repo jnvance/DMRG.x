@@ -480,7 +480,10 @@ PetscErrorCode Block::SpinOneHalf::InitializeSave(
     PetscBool flg = PETSC_FALSE;
     if(save_dir_in.empty()) SETERRQ(mpi_comm,1,"Save dir cannot be empty.");
     if(!mpi_init) SETERRQ(mpi_comm,1,"MPI Initialization must be completed first.");
-    ierr = PetscTestDirectory(save_dir_in.c_str(), 'r', &flg); CHKERRQ(ierr);
+    if(!mpi_rank){
+        ierr = PetscTestDirectory(save_dir_in.c_str(), 'r', &flg); CHKERRQ(ierr);
+    }
+    ierr = MPI_Bcast(&flg, 1, MPI_INT, 0, mpi_comm); CHKERRQ(ierr);
     if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",save_dir_in.c_str());
     save_dir = save_dir_in;
     /* If the last character is not a slash then add one */
@@ -502,8 +505,8 @@ PetscErrorCode Block::SpinOneHalf::SaveOperator(const std::string& OpName, const
     PetscViewer binv;
     ierr = PetscViewerBinaryOpen(mpi_comm, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
     ierr = MatView(Op, binv); CHKERRQ(ierr);
-    ierr = MatDestroy(&Op); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
+    ierr = MatDestroy(&Op); CHKERRQ(ierr);
     return(0);
 }
 
