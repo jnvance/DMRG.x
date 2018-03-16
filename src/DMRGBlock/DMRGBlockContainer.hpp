@@ -208,14 +208,12 @@ public:
                 ++sys_ninit;
             }
 
-            #if defined(PETSC_USE_DEBUG)
             {
                 if(!mpi_rank && verbose) printf("  sys_ninit: %d\n", sys_ninit);
                 for(PetscInt isys = 0; isys < sys_ninit; ++isys){
-                    if(!mpi_rank && verbose) printf("   > block %d, num_sites %d\n", isys, sys_blocks[isys].NumSites());
+                    if(!mpi_rank && verbose) printf("   block %d, num_sites %d\n", isys, sys_blocks[isys].NumSites());
                 }
             }
-            #endif
 
             /*  Continuously enlarge the system block until it reaches half the total system size and use the largest
                 available environment block that forms a full lattice (multiple of nsites_cluster) */
@@ -420,7 +418,7 @@ private:
         )
     {
         PetscErrorCode ierr;
-        PetscLogDouble t0, tenl, tkron, tdiag, trdm, trot;
+        PetscLogDouble t0, tenlr, tkron, tdiag, trdms, trotb;
         ierr = PetscTime(&t0); CHKERRQ(ierr);
 
         /* Check whether the system and environment blocks are the same */
@@ -534,7 +532,7 @@ private:
         }
         #endif
 
-        ierr = PetscTime(&tenl); CHKERRQ(ierr);
+        ierr = PetscTime(&tenlr); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
 
@@ -612,9 +610,10 @@ private:
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
         /* TODO: Add an option to accept flg for redundant blocks */
 
-        if(!mpi_rank && verbose) printf("  Left  Block Truncation Error: %g\n", TruncErr_L);
-        if(!mpi_rank && verbose) printf("  Right Block Truncation Error: %g\n", TruncErr_R);
-
+        if(!mpi_rank && verbose){
+            printf("  Sys Block Trunc Error: %g\n"
+                   "  Env Block Trunc Error: %g\n", TruncErr_L, TruncErr_R);
+        }
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
 
@@ -624,8 +623,7 @@ private:
             copy enlarged blocks to out blocks but overwrite the matrices */
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
-        ierr = PetscTime(&trdm); CHKERRQ(ierr);
-
+        ierr = PetscTime(&trdms); CHKERRQ(ierr);
 
         ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
         ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
@@ -652,15 +650,24 @@ private:
 
         ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
         ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
-        ierr = PetscTime(&trot); CHKERRQ(ierr);
+        ierr = PetscTime(&trotb); CHKERRQ(ierr);
 
-        PetscLogDouble ttotal = trot - t0;
+        PetscLogDouble ttotal = trotb - t0;
         ttotal += (ttotal < 0) * 86400.0; /* Just in case it transitions from a previous day */
 
-        if(verbose){
-            ierr = PetscPrintf(mpi_comm,"  Total Time (s):  %g\n", trot-t0); CHKERRQ(ierr);
-            ierr = PetscPrintf(mpi_comm,"\n"); CHKERRQ(ierr);
+        if(!mpi_rank && verbose){
+            printf("\n");
+            printf("  Total Time:              %12.6f s\n", ttotal);
+            printf("    Add One Site:          %12.6f s \t%6.2f %%\n", tenlr-t0,    100*(tenlr-t0)/ttotal);
+            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n", tkron-tenlr, 100*(tkron-tenlr)/ttotal);
+            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n", tdiag-tkron, 100*(tdiag-tkron)/ttotal);
+            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n", trdms-tdiag, 100*(trdms-tdiag)/ttotal);
+            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n", trotb-trdms, 100*(trotb-trdms)/ttotal);
+            printf("\n");
         }
+
+        /* TODO: Dump timing breakdown into file */
+
         return(0);
     }
 
