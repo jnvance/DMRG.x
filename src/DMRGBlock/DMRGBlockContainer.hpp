@@ -130,28 +130,6 @@ public:
         return oss.str();
     }
 
-    /** Ensure that required blocks are loaded while unrequired blocks are saved */
-    PetscErrorCode SysBlocksActive(const std::set< PetscInt >& SysIdx)
-    {
-        PetscErrorCode ierr;
-        PetscInt sys_idx = 0;
-        std::set< PetscInt >::iterator act_it;
-        for(act_it = SysIdx.begin(); act_it != SysIdx.end(); ++act_it){
-            for(PetscInt idx = sys_idx; idx < *act_it; ++idx){
-                // PetscPrintf(mpi_comm,"EnsureSaved:     %d\n",idx);
-                ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
-            }
-            // PetscPrintf(mpi_comm,"EnsureRetrieved: %d\n",*act_it);
-            ierr = sys_blocks[*act_it].EnsureRetrieved(); CHKERRQ(ierr);
-            sys_idx = *act_it+1;
-        }
-        for(PetscInt idx = sys_idx; idx < sys_ninit; ++idx){
-            // PetscPrintf(mpi_comm,"EnsureSaved:     %d\n",idx);
-            ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
-        }
-        return(0);
-    }
-
     /** Performs the warmup stage of DMRG.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
         of sites. All created system blocks are stored and will be represented by at most `MStates` number of basis states */
@@ -1065,6 +1043,24 @@ private:
         return(0);
     }
 
+    /** Ensure that required blocks are loaded while unrequired blocks are saved */
+    PetscErrorCode SysBlocksActive(const std::set< PetscInt >& SysIdx)
+    {
+        PetscErrorCode ierr;
+        PetscInt sys_idx = 0;
+        std::set< PetscInt >::iterator act_it;
+        for(act_it = SysIdx.begin(); act_it != SysIdx.end(); ++act_it){
+            for(PetscInt idx = sys_idx; idx < *act_it; ++idx){
+                ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
+            }
+            ierr = sys_blocks[*act_it].EnsureRetrieved(); CHKERRQ(ierr);
+            sys_idx = *act_it+1;
+        }
+        for(PetscInt idx = sys_idx; idx < sys_ninit; ++idx){
+            ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
+        }
+        return(0);
+    }
 };
 
 /**
