@@ -213,7 +213,7 @@ public:
                     PrintBlocks(sys_ninit,env_numsites);
                 }
                 if(do_save_dir){
-                    std::set< PetscInt > SysIdx = {sys_ninit-1, sys_ninit, env_numsites-1, env_numsites};
+                    std::set< PetscInt > SysIdx = {sys_ninit-1, env_numsites-1};
                     ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
                 }
                 ierr = SingleDMRGStep(
@@ -271,7 +271,7 @@ public:
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_save_dir){
-                std::set< PetscInt > SysIdx = {insys, outsys, inenv, outenv};
+                std::set< PetscInt > SysIdx = {insys, inenv};
                 ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
@@ -289,7 +289,7 @@ public:
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_save_dir){
-                std::set< PetscInt > SysIdx = {insys, outsys, inenv, outenv};
+                std::set< PetscInt > SysIdx = {insys, inenv};
                 ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
@@ -408,10 +408,12 @@ private:
         PetscInt NumSitesSysEnl = SysBlock.NumSites() + AddSite.NumSites();
         const std::vector< Hamiltonians::Term > TermsSys = Ham.H(NumSitesSysEnl);
         ierr = KronEye_Explicit(SysBlock, AddSite, TermsSys, SysBlockEnl); CHKERRQ(ierr);
+        ierr = SysBlock.EnsureSaved(); CHKERRQ(ierr);
         if(!flg){
             PetscInt NumSitesEnvEnl = EnvBlock.NumSites() + AddSite.NumSites();
             const std::vector< Hamiltonians::Term > TermsEnv = Ham.H(NumSitesEnvEnl);
             ierr = KronEye_Explicit(EnvBlock, AddSite, TermsEnv, EnvBlockEnl); CHKERRQ(ierr);
+            ierr = EnvBlock.EnsureSaved(); CHKERRQ(ierr);
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
