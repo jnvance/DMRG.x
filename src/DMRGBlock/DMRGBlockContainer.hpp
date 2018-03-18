@@ -51,7 +51,7 @@ bool greater_eigval(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e
 bool less_blkIdx(const Eigen_t &e1, const Eigen_t &e2) { return e1.blkIdx < e2.blkIdx; }
 
 /** Storage for basic data to be saved corresponding to a call of SingleDMRGStep() */
-struct BasicData
+struct StepData
 {
     PetscInt    NumSites_Sys;       /**< Number of sites in the input sys block */
     PetscInt    NumSites_Env;       /**< Number of sites in the input env block */
@@ -76,6 +76,7 @@ struct TimingsData
     PetscLogDouble  tDiag;
     PetscLogDouble  tRdms;
     PetscLogDouble  tRotb;
+    PetscLogDouble  Total;
 };
 
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
@@ -128,8 +129,11 @@ public:
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
         }
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("data_basic.dat")).c_str(), "w", &fp_basic); assert(!ierr);
-        if(!mpi_rank) fprintf(fp_basic,"[\n");
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("StepData.dat")).c_str(), "w", &fp_step); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_step,"[\n");
+
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("TimingsData.dat")).c_str(), "w", &fp_timings); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_timings,"[\n");
 
         /*  Print some info to stdout */
         if(verbose && !mpi_rank){
@@ -155,8 +159,10 @@ public:
         ierr = SingleSite.Destroy(); assert(!ierr);
         for(Block blk: sys_blocks) { ierr = blk.Destroy(); assert(!ierr); }
         for(Block blk: env_blocks) { ierr = blk.Destroy(); assert(!ierr); }
-        if(!mpi_rank) fprintf(fp_basic,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_basic); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_step,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_step); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_timings,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_timings); assert(!ierr);
     }
 
     /** Get parameters from command line options */
@@ -440,8 +446,11 @@ private:
         This is automatically set when indicating -scratch_dir */
     PetscBool do_scratch_dir = PETSC_FALSE;
 
-    /** File to store basic data (energy, timings, etc) */
-    FILE *fp_basic;
+    /** File to store basic data (energy, number of sites, etc) */
+    FILE *fp_step;
+
+    /** File to store timings data for each section of a single iteration */
+    FILE *fp_timings;
 
     /** Global index key which must be unique for each record */
     PetscInt GlobIdx = 0;
@@ -470,11 +479,11 @@ private:
         ierr = PetscTime(&t0); CHKERRQ(ierr);
 
         /* Fill-in data from input blocks */
-        BasicData basic_data;
-        basic_data.NumSites_Sys = SysBlock.NumSites();
-        basic_data.NumSites_Env = EnvBlock.NumSites();
-        basic_data.NumStates_Sys = SysBlock.NumStates();
-        basic_data.NumStates_Env = EnvBlock.NumStates();
+        StepData step_data;
+        step_data.NumSites_Sys = SysBlock.NumSites();
+        step_data.NumSites_Env = EnvBlock.NumSites();
+        step_data.NumStates_Sys = SysBlock.NumStates();
+        step_data.NumStates_Env = EnvBlock.NumStates();
 
         /* Check whether the system and environment blocks are the same */
         Mat H = nullptr; /* Hamiltonian matrix */
@@ -495,10 +504,10 @@ private:
             EnvBlockEnl = SysBlockEnl;
         }
 
-        basic_data.NumSites_SysEnl = SysBlockEnl.NumSites();
-        basic_data.NumSites_EnvEnl = EnvBlockEnl.NumSites();
-        basic_data.NumStates_SysEnl = SysBlockEnl.NumStates();
-        basic_data.NumStates_EnvEnl = EnvBlockEnl.NumStates();
+        step_data.NumSites_SysEnl = SysBlockEnl.NumSites();
+        step_data.NumSites_EnvEnl = EnvBlockEnl.NumSites();
+        step_data.NumStates_SysEnl = SysBlockEnl.NumStates();
+        step_data.NumStates_EnvEnl = EnvBlockEnl.NumStates();
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -639,7 +648,7 @@ private:
             ierr = EPSGetEigenpair(eps, 0, &gse_r, &gse_i, gsv_r, gsv_i); CHKERRQ(ierr);
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
-        basic_data.GSEnergy = gse_r;
+        step_data.GSEnergy = gse_r;
         ierr = MatDestroy(&H); CHKERRQ(ierr);
         ierr = PetscTime(&tdiag); CHKERRQ(ierr);
         if(!mpi_rank && verbose)
@@ -699,10 +708,10 @@ private:
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
 
-        basic_data.NumStates_SysRot = SysBlockOut.NumStates();
-        basic_data.NumStates_EnvRot = EnvBlockOut.NumStates();
-        basic_data.TruncErr_Sys = TruncErr_L;
-        basic_data.TruncErr_Env = TruncErr_R;
+        step_data.NumStates_SysRot = SysBlockOut.NumStates();
+        step_data.NumStates_EnvRot = EnvBlockOut.NumStates();
+        step_data.TruncErr_Sys = TruncErr_L;
+        step_data.TruncErr_Env = TruncErr_R;
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -722,23 +731,34 @@ private:
         ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
         ierr = PetscTime(&trotb); CHKERRQ(ierr);
 
-        PetscLogDouble ttotal = trotb - t0;
-        ttotal += (ttotal < 0) * 86400.0; /* Just in case it transitions from a previous day */
+        TimingsData timings_data;
+        timings_data.Total = trotb - t0;
+        timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
+        timings_data.tEnlr = tenlr-t0;
+        timings_data.tKron = tkron-tenlr;
+        timings_data.tDiag = tdiag-tkron;
+        timings_data.tRdms = trdms-tdiag;
+        timings_data.tRotb = trotb-trdms;
 
         if(!mpi_rank && verbose){
             printf("\n");
-            printf("  Total Time:              %12.6f s\n", ttotal);
-            printf("    Add One Site:          %12.6f s \t%6.2f %%\n", tenlr-t0,    100*(tenlr-t0)/ttotal);
-            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n", tkron-tenlr, 100*(tkron-tenlr)/ttotal);
-            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n", tdiag-tkron, 100*(tdiag-tkron)/ttotal);
-            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n", trdms-tdiag, 100*(trdms-tdiag)/ttotal);
-            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n", trotb-trdms, 100*(trotb-trdms)/ttotal);
+            printf("  Total Time:              %12.6f s\n", timings_data.Total);
+            printf("    Add One Site:          %12.6f s \t%6.2f %%\n",
+                timings_data.tEnlr, 100*(timings_data.tEnlr)/timings_data.Total);
+            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n",
+                timings_data.tKron, 100*(timings_data.tKron)/timings_data.Total);
+            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n",
+                timings_data.tDiag, 100*(timings_data.tDiag)/timings_data.Total);
+            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n",
+                timings_data.tRdms, 100*(timings_data.tRdms)/timings_data.Total);
+            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n",
+                timings_data.tRotb, 100*(timings_data.tRotb)/timings_data.Total);
             printf("\n");
         }
 
         /* Save data */
-        ierr = SaveBasic(basic_data); CHKERRQ(ierr);
-        /* TODO: Dump timing breakdown into file */
+        ierr = SaveStepData(step_data); CHKERRQ(ierr);
+        ierr = SaveTimingsData(timings_data); CHKERRQ(ierr);
 
         /* Increment counters */
         ++GlobIdx;
@@ -1159,42 +1179,54 @@ private:
         return(0);
     }
 
-    /** Save basic data to file */
-    PetscErrorCode SaveBasic(
-        const BasicData& data
+    /** Save step data to file */
+    PetscErrorCode SaveStepData(
+        const StepData& data
         )
     {
         if(mpi_rank) return(0);
-        fprintf(fp_basic,"%s", GlobIdx ? ",\n" : "");
-        fprintf(fp_basic,"  {\n");
-        fprintf(fp_basic,"    \"GlobIdx\": %d,\n",      GlobIdx);
-        fprintf(fp_basic,"    \"LoopType\": \"%s\",\n", LoopType ? "Sweep" : "Warmup");
-        fprintf(fp_basic,"    \"LoopIdx\": %d,\n",      LoopIdx);
-        fprintf(fp_basic,"    \"StepIdx\": %d,\n",      StepIdx);
-        fprintf(fp_basic,"    \"NumSites\": {\n");
-        fprintf(fp_basic,"      \"Sys\": %d,\n",        data.NumSites_Sys);
-        fprintf(fp_basic,"      \"Env\": %d,\n",        data.NumSites_Env);
-        fprintf(fp_basic,"      \"SysEnl\": %d,\n",     data.NumSites_SysEnl);
-        fprintf(fp_basic,"      \"EnvEnl\": %d\n",      data.NumSites_EnvEnl);
-        fprintf(fp_basic,"    },\n");
-        fprintf(fp_basic,"    \"NumStates\": {\n");
-        fprintf(fp_basic,"      \"Sys\": %d,\n",        data.NumStates_Sys);
-        fprintf(fp_basic,"      \"Env\": %d,\n",        data.NumStates_Env);
-        fprintf(fp_basic,"      \"SysEnl\": %d,\n",     data.NumStates_SysEnl);
-        fprintf(fp_basic,"      \"EnvEnl\": %d,\n",     data.NumStates_EnvEnl);
-        fprintf(fp_basic,"      \"SysRot\": %d,\n",     data.NumStates_SysRot);
-        fprintf(fp_basic,"      \"EnvRot\": %d\n",      data.NumStates_EnvRot);
-        fprintf(fp_basic,"    },\n");
-        fprintf(fp_basic,"    \"GSEnergy\": %.20g,\n",  data.GSEnergy);
-        fprintf(fp_basic,"    \"TruncErr\": {\n");
-        fprintf(fp_basic,"      \"Sys\": %.20g,\n",     data.TruncErr_Sys);
-        fprintf(fp_basic,"      \"Env\": %.20g\n",      data.TruncErr_Env);
-        fprintf(fp_basic,"    }\n");
-        fprintf(fp_basic,"  }");
-        fflush(fp_basic);
+        fprintf(fp_step,"%s", GlobIdx ? ",\n" : "");
+        fprintf(fp_step,"  {\n");
+        fprintf(fp_step,"    \"GlobIdx\": %d,\n",          GlobIdx);
+        fprintf(fp_step,"    \"LoopType\": \"%s\",\n",     LoopType ? "Sweep" : "Warmup");
+        fprintf(fp_step,"    \"LoopIdx\": %d,\n",          LoopIdx);
+        fprintf(fp_step,"    \"StepIdx\": %d,\n",          StepIdx);
+        fprintf(fp_step,"    \"NSites_Sys\": %d,\n",       data.NumSites_Sys);
+        fprintf(fp_step,"    \"NSites_Env\": %d,\n",       data.NumSites_Env);
+        fprintf(fp_step,"    \"NSites_SysEnl\": %d,\n",    data.NumSites_SysEnl);
+        fprintf(fp_step,"    \"NSites_EnvEnl\": %d,\n",    data.NumSites_EnvEnl);
+        fprintf(fp_step,"    \"NStates_Sys\": %d,\n",      data.NumStates_Sys);
+        fprintf(fp_step,"    \"NStates_Env\": %d,\n",      data.NumStates_Env);
+        fprintf(fp_step,"    \"NStates_SysEnl\": %d,\n",   data.NumStates_SysEnl);
+        fprintf(fp_step,"    \"NStates_EnvEnl\": %d,\n",   data.NumStates_EnvEnl);
+        fprintf(fp_step,"    \"NStates_SysRot\": %d,\n",   data.NumStates_SysRot);
+        fprintf(fp_step,"    \"NStates_EnvRot\": %d,\n",   data.NumStates_EnvRot);
+        fprintf(fp_step,"    \"TruncErr_Sys\": %.20g,\n",  data.TruncErr_Sys);
+        fprintf(fp_step,"    \"TruncErr_Env\": %.20g,\n",  data.TruncErr_Env);
+        fprintf(fp_step,"    \"GSEnergy\": %.20g\n",       data.GSEnergy);
+        fprintf(fp_step,"  }");
+        fflush(fp_step);
         return(0);
     }
 
+    /** Save timings data to file */
+    PetscErrorCode SaveTimingsData(
+        const TimingsData& data
+        )
+    {
+        if(mpi_rank) return(0);
+        fprintf(fp_timings,"%s", GlobIdx ? ",\n" : "");
+        fprintf(fp_timings,"  {\n");
+        fprintf(fp_timings,"    \"Total\": %.9g,\n", data.Total);
+        fprintf(fp_timings,"    \"Enlr\":  %.9g,\n", data.tEnlr);
+        fprintf(fp_timings,"    \"Kron\":  %.9g,\n", data.tKron);
+        fprintf(fp_timings,"    \"Diag\":  %.9g,\n", data.tDiag);
+        fprintf(fp_timings,"    \"Rdms\":  %.9g,\n", data.tRdms);
+        fprintf(fp_timings,"    \"Rotb\":  %.9g\n",  data.tRotb);
+        fprintf(fp_timings,"  }");
+        fflush(fp_timings);
+        return(0);
+    }
 };
 
 /**
