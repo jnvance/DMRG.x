@@ -20,10 +20,6 @@
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
-#if defined(PETSC_USE_DEBUG)
-#include <iostream>
-#endif
-
 /** Provides an alias of Side_t to follow the Sys-Env convention */
 typedef enum
 {
@@ -31,6 +27,13 @@ typedef enum
     BlockEnv = 1
 }
 Block_t;
+
+typedef enum
+{
+    WarmupStep,
+    SweepStep
+}
+Step_t;
 
 /** Storage for information on resulting eigenpairs of the reduced density matrices */
 struct Eigen_t
@@ -46,6 +49,34 @@ bool greater_eigval(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e
 
 /** Comparison operator for sorting Eigen_t objects by increasing blkIdx (decreasing qn's) */
 bool less_blkIdx(const Eigen_t &e1, const Eigen_t &e2) { return e1.blkIdx < e2.blkIdx; }
+
+/** Storage for basic data to be saved corresponding to a call of SingleDMRGStep() */
+struct BasicData
+{
+    PetscInt    NumSites_Sys;       /**< Number of sites in the input sys block */
+    PetscInt    NumSites_Env;       /**< Number of sites in the input env block */
+    PetscInt    NumSites_SysEnl;    /**< Number of sites in the enlarged sys block */
+    PetscInt    NumSites_EnvEnl;    /**< Number of sites in the enlarged env block */
+    PetscInt    NumStates_Sys;      /**< Number of states in the input sys block */
+    PetscInt    NumStates_Env;      /**< Number of states in the input env block */
+    PetscInt    NumStates_SysEnl;   /**< Number of states in the enlarged sys block */
+    PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
+    PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
+    PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
+    PetscScalar GSEnergy;
+    PetscReal   TruncErr_Sys;
+    PetscReal   TruncErr_Env;
+};
+
+/** Storage for timings to be saved corresponding to a call of SingleDMRGStep() */
+struct TimingsData
+{
+    PetscLogDouble  tEnlr;
+    PetscLogDouble  tKron;
+    PetscLogDouble  tDiag;
+    PetscLogDouble  tRdms;
+    PetscLogDouble  tRotb;
+};
 
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
@@ -77,28 +108,43 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
 
+        /*  The scratch space to save temporary data*/
         char path[512];
-        PetscBool opt_do_save_dir;
-        ierr = PetscOptionsGetString(NULL,NULL,"-save_dir",path,512,&opt_do_save_dir); assert(!ierr);
-        do_save_dir = opt_do_save_dir;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_dir",&do_save_dir,NULL); assert(!ierr);
-        if(do_save_dir){
-            save_dir = std::string(path);
-            if(save_dir.back()!='/') save_dir += '/';
+        PetscBool opt_do_scratch_dir;
+        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); assert(!ierr);
+        do_scratch_dir = opt_do_scratch_dir;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); assert(!ierr);
+        if(do_scratch_dir){
+            scratch_dir = std::string(path);
+            if(scratch_dir.back()!='/') scratch_dir += '/';
         }
 
-        /*  Print some info */
-        if(verbose){
-            ierr = PetscPrintf(mpi_comm,
+        /* The location to save basic data */
+        memset(path,0,sizeof(path));
+        std::string data_dir;
+        PetscBool opt_data_dir;
+        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); assert(!ierr);
+        if(opt_data_dir){
+            data_dir = std::string(path);
+            if(data_dir.back()!='/') data_dir += '/';
+        }
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("data_basic.dat")).c_str(), "w", &fp_basic); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_basic,"[\n");
+
+        /*  Print some info to stdout */
+        if(verbose && !mpi_rank){
+            printf(
                 "=========================================\n"
                 "DENSITY MATRIX RENORMALIZATION GROUP\n"
-                "-----------------------------------------\n"); assert(!ierr);
-            if(do_save_dir){
-                ierr = PetscPrintf(mpi_comm,
-                "Save Directory:     %s\n", save_dir.c_str()); assert(!ierr);
+                "-----------------------------------------\n");
+            if(do_scratch_dir){
+                printf(
+                "Scratch Directory:     %s\n", scratch_dir.c_str());
             }
-            ierr = PetscPrintf(mpi_comm,
-                "=========================================\n"); assert(!ierr);
+            printf(
+                "Data Directory:        %s\n", opt_data_dir ? data_dir.c_str() : "." );
+            printf(
+                "=========================================\n");
         }
     }
 
@@ -109,6 +155,8 @@ public:
         ierr = SingleSite.Destroy(); assert(!ierr);
         for(Block blk: sys_blocks) { ierr = blk.Destroy(); assert(!ierr); }
         for(Block blk: env_blocks) { ierr = blk.Destroy(); assert(!ierr); }
+        if(!mpi_rank) fprintf(fp_basic,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_basic); assert(!ierr);
     }
 
     /** Get parameters from command line options */
@@ -126,7 +174,7 @@ public:
     /** Returns the path to the directory for the storage of a specific system block */
     std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
         std::ostringstream oss;
-        oss << save_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
+        oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
         return oss.str();
     }
 
@@ -146,10 +194,10 @@ public:
         sys_blocks.resize(num_sys_blocks);
 
         /*  Initialize directories for saving the block operators */
-        if(do_save_dir){
+        if(do_scratch_dir){
             PetscBool flg;
-            ierr = PetscTestDirectory(save_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
-            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",save_dir.c_str());
+            ierr = PetscTestDirectory(scratch_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
+            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",scratch_dir.c_str());
             if(!mpi_rank){
                 for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                     std::string path = BlockDir("Sys",iblock);
@@ -195,6 +243,8 @@ public:
 
             /*  Continuously enlarge the system block until it reaches half the total system size and use the largest
                 available environment block that forms a full lattice (multiple of nsites_cluster) */
+            LoopType = WarmupStep;
+            StepIdx = 0;
             while(sys_ninit < num_sites/2)
             {
                 PetscInt full_cluster = (((sys_ninit+2) / nsites_cluster)+1) * nsites_cluster;
@@ -212,7 +262,7 @@ public:
                     PrintLines();
                     PrintBlocks(sys_ninit,env_numsites);
                 }
-                if(do_save_dir){
+                if(do_scratch_dir){
                     std::set< PetscInt > SysIdx = {sys_ninit-1, env_numsites-1};
                     ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
                 }
@@ -226,6 +276,7 @@ public:
                     if(!mpi_rank && verbose) printf("  Number of system blocks: %d\n", sys_ninit);
                 #endif
             }
+            ++LoopIdx;
         }
 
         if(sys_ninit != num_sites/2)
@@ -243,6 +294,7 @@ public:
                 "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
             if(!mpi_rank) PRINTLINES();
         }
+
         return(0);
     }
 
@@ -262,6 +314,8 @@ public:
         if(min_block < 1) SETERRQ1(mpi_comm,1,"MinBlock must at least be 1. Got %d.", min_block);
 
         /*  Starting from the midpoint, perform a center to right sweep */
+        LoopType = SweepStep;
+        StepIdx = 0;
         for(PetscInt iblock = num_sites/2; iblock < num_sites - min_block - 2; ++iblock)
         {
             const PetscInt  insys  = iblock-1,   inenv  = num_sites - iblock - 3;
@@ -270,7 +324,7 @@ public:
                 PrintLines();
                 PrintBlocks(insys+1,inenv+1);
             }
-            if(do_save_dir){
+            if(do_scratch_dir){
                 std::set< PetscInt > SysIdx = {insys, inenv};
                 ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
@@ -288,13 +342,14 @@ public:
                 PrintLines();
                 PrintBlocks(insys+1,inenv+1);
             }
-            if(do_save_dir){
+            if(do_scratch_dir){
                 std::set< PetscInt > SysIdx = {insys, inenv};
                 ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
+        ++LoopIdx;
 
         if(!mpi_rank && verbose) PRINTLINES();
 
@@ -379,11 +434,26 @@ private:
     Block& AddSite = SingleSite;
 
     /** Directory in which the blocks will be saved */
-    std::string save_dir = ".";
+    std::string scratch_dir = ".";
 
     /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
-        This is automatically set when indicating -save_dir */
-    PetscBool do_save_dir = PETSC_FALSE;
+        This is automatically set when indicating -scratch_dir */
+    PetscBool do_scratch_dir = PETSC_FALSE;
+
+    /** File to store basic data (energy, timings, etc) */
+    FILE *fp_basic;
+
+    /** Global index key which must be unique for each record */
+    PetscInt GlobIdx = 0;
+
+    /** The type of step performed, whether as part of warmup or sweep */
+    Step_t   LoopType;
+
+    /** Counter for this loop (the same counter for warmup and sweeps) */
+    PetscInt LoopIdx = 0;
+
+    /** Counter for the step inside this loop */
+    PetscInt StepIdx = 0;
 
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
@@ -398,6 +468,13 @@ private:
         PetscErrorCode ierr;
         PetscLogDouble t0, tenlr, tkron, tdiag, trdms, trotb;
         ierr = PetscTime(&t0); CHKERRQ(ierr);
+
+        /* Fill-in data from input blocks */
+        BasicData basic_data;
+        basic_data.NumSites_Sys = SysBlock.NumSites();
+        basic_data.NumSites_Env = EnvBlock.NumSites();
+        basic_data.NumStates_Sys = SysBlock.NumStates();
+        basic_data.NumStates_Env = EnvBlock.NumStates();
 
         /* Check whether the system and environment blocks are the same */
         Mat H = nullptr; /* Hamiltonian matrix */
@@ -417,6 +494,11 @@ private:
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
+
+        basic_data.NumSites_SysEnl = SysBlockEnl.NumSites();
+        basic_data.NumSites_EnvEnl = EnvBlockEnl.NumSites();
+        basic_data.NumStates_SysEnl = SysBlockEnl.NumStates();
+        basic_data.NumStates_EnvEnl = EnvBlockEnl.NumStates();
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -557,13 +639,16 @@ private:
             ierr = EPSGetEigenpair(eps, 0, &gse_r, &gse_i, gsv_r, gsv_i); CHKERRQ(ierr);
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
+        basic_data.GSEnergy = gse_r;
         ierr = MatDestroy(&H); CHKERRQ(ierr);
         ierr = PetscTime(&tdiag); CHKERRQ(ierr);
         if(!mpi_rank && verbose)
         {
-            printf("  NumSites:    %d\n", NumSitesTotal);
-            printf("  Energy:      %-10.10g\n", gse_r);
-            printf("  Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
+            printf("  Superblock:\n");
+            printf("    NumStates:   %d\n", KronBlocks.NumStates());
+            printf("    NumSites:    %d\n", NumSitesTotal);
+            printf("    Energy:      %-10.10g\n", gse_r);
+            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
         }
 
         #if defined(PETSC_USE_DEBUG)
@@ -614,6 +699,11 @@ private:
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
 
+        basic_data.NumStates_SysRot = SysBlockOut.NumStates();
+        basic_data.NumStates_EnvRot = EnvBlockOut.NumStates();
+        basic_data.TruncErr_Sys = TruncErr_L;
+        basic_data.TruncErr_Env = TruncErr_R;
+
         #if defined(PETSC_USE_DEBUG)
         {
             PetscBool flg = PETSC_FALSE;
@@ -646,8 +736,13 @@ private:
             printf("\n");
         }
 
+        /* Save data */
+        ierr = SaveBasic(basic_data); CHKERRQ(ierr);
         /* TODO: Dump timing breakdown into file */
 
+        /* Increment counters */
+        ++GlobIdx;
+        ++StepIdx;
         return(0);
     }
 
@@ -1063,6 +1158,42 @@ private:
         }
         return(0);
     }
+
+    PetscErrorCode SaveBasic(
+        const BasicData& data
+        )
+    {
+        if(mpi_rank) return(0);
+        fprintf(fp_basic,"%s", GlobIdx ? ",\n" : "");
+        fprintf(fp_basic,"  {\n");
+        fprintf(fp_basic,"    \"GlobIdx\": %d,\n",      GlobIdx);
+        fprintf(fp_basic,"    \"LoopType\": \"%s\",\n", LoopType ? "Sweep" : "Warmup");
+        fprintf(fp_basic,"    \"LoopIdx\": %d,\n",      LoopIdx);
+        fprintf(fp_basic,"    \"StepIdx\": %d,\n",      StepIdx);
+        fprintf(fp_basic,"    \"NumSites\": {\n");
+        fprintf(fp_basic,"      \"Sys\": %d,\n",        data.NumSites_Sys);
+        fprintf(fp_basic,"      \"Env\": %d,\n",        data.NumSites_Env);
+        fprintf(fp_basic,"      \"SysEnl\": %d,\n",     data.NumSites_SysEnl);
+        fprintf(fp_basic,"      \"EnvEnl\": %d\n",      data.NumSites_EnvEnl);
+        fprintf(fp_basic,"    },\n");
+        fprintf(fp_basic,"    \"NumStates\": {\n");
+        fprintf(fp_basic,"      \"Sys\": %d,\n",        data.NumStates_Sys);
+        fprintf(fp_basic,"      \"Env\": %d,\n",        data.NumStates_Env);
+        fprintf(fp_basic,"      \"SysEnl\": %d,\n",     data.NumStates_SysEnl);
+        fprintf(fp_basic,"      \"EnvEnl\": %d,\n",     data.NumStates_EnvEnl);
+        fprintf(fp_basic,"      \"SysRot\": %d,\n",     data.NumStates_SysRot);
+        fprintf(fp_basic,"      \"EnvRot\": %d\n",      data.NumStates_EnvRot);
+        fprintf(fp_basic,"    },\n");
+        fprintf(fp_basic,"    \"GSEnergy\": %.20g,\n",  data.GSEnergy);
+        fprintf(fp_basic,"    \"TruncErr\": {\n");
+        fprintf(fp_basic,"      \"Sys\": %.20g,\n",     data.TruncErr_Sys);
+        fprintf(fp_basic,"      \"Env\": %.20g\n",      data.TruncErr_Env);
+        fprintf(fp_basic,"    }\n");
+        fprintf(fp_basic,"  }");
+        fflush(fp_basic);
+        return(0);
+    }
+
 };
 
 /**
