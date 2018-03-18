@@ -1159,6 +1159,7 @@ private:
         return(0);
     }
 
+    /** Save basic data to file */
     PetscErrorCode SaveBasic(
         const BasicData& data
         )
