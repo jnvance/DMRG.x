@@ -643,6 +643,7 @@ private:
             ierr = EPSSetOperators(eps, H, nullptr); CHKERRQ(ierr);
             ierr = EPSSetProblemType(eps, EPS_HEP); CHKERRQ(ierr);
             ierr = EPSSetWhichEigenpairs(eps, EPS_SMALLEST_REAL); CHKERRQ(ierr);
+            ierr = EPSSetOptionsPrefix(eps,"H_"); CHKERRQ(ierr);
             ierr = EPSSetFromOptions(eps); CHKERRQ(ierr);
             ierr = EPSSolve(eps); CHKERRQ(ierr);
             ierr = EPSGetEigenpair(eps, 0, &gse_r, &gse_i, gsv_r, gsv_i); CHKERRQ(ierr);
