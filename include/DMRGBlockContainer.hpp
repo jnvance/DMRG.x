@@ -137,18 +137,16 @@ public:
 
         /*  Print some info to stdout */
         if(!mpi_rank){
-            printf(
-                "=========================================\n"
-                "DENSITY MATRIX RENORMALIZATION GROUP\n"
-                "-----------------------------------------\n");
-            if(do_scratch_dir){
-                printf(
-                "Scratch Directory:     %s\n", scratch_dir.c_str());
-            }
-            printf(
-                "Data Directory:        %s\n", opt_data_dir ? data_dir.c_str() : "." );
-            printf(
-                "=========================================\n");
+            printf( "=========================================\n"
+                    "DENSITY MATRIX RENORMALIZATION GROUP\n"
+                    "-----------------------------------------\n");
+            ierr = Ham.PrintOut(); assert(!ierr);
+            printf( "-----------------------------------------\n");
+            printf( "DIRECTORIES\n");
+            if(do_scratch_dir) printf(
+                    "  Scratch: %s\n", scratch_dir.c_str());
+            printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
+            printf( "=========================================\n");
         }
     }
 

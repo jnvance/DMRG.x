@@ -77,6 +77,20 @@ namespace Hamiltonians
             const PetscInt& nsites  /**< Number of sites involved in the interaction */
             );
 
+        /** Prints out some information to stdout */
+        PetscErrorCode PrintOut() const {
+            printf( "HAMILTONIAN: J1J2XYModel_SquareLattice\n");
+            printf( "  Lx  : %d\n", Lx);
+            printf( "  Ly  : %d\n", Ly);
+            printf( "  J1  : %g\n", J1);
+            printf( "  Jz1 : %g\n", Jz1);
+            printf( "  J2  : %g\n", J2);
+            printf( "  Jz2 : %g\n", Jz2);
+            printf( "  BCx : %s\n", BCx?"Periodic":"Open");
+            printf( "  BCy : %s\n", BCy?"Periodic":"Open");
+            return(0);
+        }
+
     private:
 
         /** Set from options */
