@@ -136,7 +136,12 @@ public:
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Data.json")).c_str(), "w", &fp_data); assert(!ierr);
-        if(!mpi_rank) fprintf(fp_data,"{\n");
+        if(!mpi_rank){
+            fprintf(fp_data,"{\n");
+            Ham.SaveOut(fp_data);
+            fprintf(fp_data,"}\n");
+        }
+        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
 
         /*  Print some info to stdout */
         if(!mpi_rank){
@@ -151,7 +156,6 @@ public:
             printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
             printf( "=========================================\n");
         }
-        if(!mpi_rank) Ham.SaveOut(fp_data);
     }
 
     /** Destroys all created blocks */
@@ -165,8 +169,6 @@ public:
         ierr = PetscFClose(mpi_comm, fp_step); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"\n]\n");
         ierr = PetscFClose(mpi_comm, fp_timings); assert(!ierr);
-        if(!mpi_rank) fprintf(fp_data,"}\n");
-        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
     }
 
     /** Get parameters from command line options */
