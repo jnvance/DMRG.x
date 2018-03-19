@@ -129,10 +129,10 @@ public:
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
         }
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("StepData.dat")).c_str(), "w", &fp_step); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataStep.json")).c_str(), "w", &fp_step); assert(!ierr);
         if(!mpi_rank) fprintf(fp_step,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("TimingsData.dat")).c_str(), "w", &fp_timings); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataTimings.json")).c_str(), "w", &fp_timings); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
         /*  Print some info to stdout */
