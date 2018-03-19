@@ -30,13 +30,13 @@ int main(int argc, char **argv)
         msweeps.resize(num_msweeps);
 
         /* Print some info */
-        if(!rank && DMRG.Verbose()){
+        if(!rank){
             printf( "WARMUP\n");
-            printf( "  m_states:                %d\n",mstates);
+            printf( "  NumStates to keep:       %d\n",mstates);
             printf( "SWEEPS\n");
             printf( "  Use msweeps array:       %s\n",use_msweeps?"yes":"no");
             printf( "  Number of sweeps:        %d\n",use_msweeps?num_msweeps:nsweeps);
-            printf( "  m_states:               ");
+            printf( "  NumStates to keep:      ");
             if(use_msweeps) for(const PetscInt& m: msweeps) printf(" %d ",m);
             else printf(" %d ",mstates);
             printf("\n");

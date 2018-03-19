@@ -136,7 +136,7 @@ public:
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
         /*  Print some info to stdout */
-        if(verbose && !mpi_rank){
+        if(!mpi_rank){
             printf(
                 "=========================================\n"
                 "DENSITY MATRIX RENORMALIZATION GROUP\n"
@@ -193,7 +193,7 @@ public:
     {
         PetscErrorCode ierr = 0;
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
-        if(!mpi_rank && verbose) printf("WARMUP\n");
+        if(!mpi_rank) printf("WARMUP\n");
 
         /*  Initialize array of blocks */
         num_sys_blocks = num_sites - 1;
@@ -230,8 +230,8 @@ public:
             if (nsites_cluster % 2) nsites_cluster *= 2;
 
             /*  Prepare an exact representation of blocks of sites incremented up to the cluster size */
-            if(!mpi_rank && verbose){
-                PrintLines();
+            if(!mpi_rank){
+                if(verbose) PrintLines();
                 printf(" Preparing initial blocks.\n");
             }
             while(sys_ninit < nsites_cluster){
@@ -264,8 +264,8 @@ public:
                 if(env_numsites < 1 || env_numsites > sys_ninit)
                     SETERRQ1(mpi_comm,1,"Incorrect number of sites. Got %d.", env_numsites);
 
-                if(!mpi_rank && verbose){
-                    PrintLines();
+                if(!mpi_rank){
+                    if(verbose) PrintLines();
                     PrintBlocks(sys_ninit,env_numsites);
                 }
                 if(do_scratch_dir){
@@ -298,8 +298,8 @@ public:
             PetscPrintf(mpi_comm,
                 "  Initialized system blocks: %d\n"
                 "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
-            if(!mpi_rank) PRINTLINES();
         }
+        if(!mpi_rank) PRINTLINES();
 
         return(0);
     }
@@ -312,7 +312,7 @@ public:
     {
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
-        if(!mpi_rank && verbose) printf("SWEEP MStates=%d\n", MStates);
+        if(!mpi_rank) printf("SWEEP MStates=%d\n", MStates);
 
         /*  Set a minimum number of blocks (min_block). Decide whether to set it statically or let
             the number correspond to the least number of sites needed to exactly build MStates. */
@@ -326,8 +326,8 @@ public:
         {
             const PetscInt  insys  = iblock-1,   inenv  = num_sites - iblock - 3;
             const PetscInt  outsys = iblock,     outenv = num_sites - iblock - 2;
-            if(!mpi_rank && verbose){
-                PrintLines();
+            if(!mpi_rank){
+                if(verbose) PrintLines();
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -344,8 +344,8 @@ public:
         {
             const PetscInt  insys  = num_sites - iblock - 3,    inenv  = iblock-1;
             const PetscInt  outsys = num_sites - iblock - 2,    outenv = iblock;
-            if(!mpi_rank && verbose){
-                PrintLines();
+            if(!mpi_rank){
+                if(verbose) PrintLines();
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -357,7 +357,7 @@ public:
         }
         ++LoopIdx;
 
-        if(!mpi_rank && verbose) PRINTLINES();
+        if(!mpi_rank) PRINTLINES();
 
         return(0);
     };
