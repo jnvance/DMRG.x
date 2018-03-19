@@ -383,6 +383,9 @@ public:
     /** Returns that number of sites recorded in the Hamiltonian object */
     PetscInt NumSites() const { return num_sites; }
 
+    /** Returns whether verbose printing is active */
+    PetscBool Verbose() const { return verbose; }
+
 private:
 
     /** MPI Communicator */
@@ -686,8 +689,12 @@ private:
         /* TODO: Add an option to accept flg for redundant blocks */
 
         if(!mpi_rank && verbose){
-            printf("  Sys Block Trunc Error: %g\n"
-                   "  Env Block Trunc Error: %g\n", TruncErr_L, TruncErr_R);
+            printf( "  Sys Block Out\n"
+                    "    NumStates: %d\n"
+                    "    TrunError: %g\n", QN_L.NumStates(), TruncErr_L);
+            printf( "  Env Block Out\n"
+                    "    NumStates: %d\n"
+                    "    TrunError: %g\n", QN_R.NumStates(), TruncErr_R);
         }
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);

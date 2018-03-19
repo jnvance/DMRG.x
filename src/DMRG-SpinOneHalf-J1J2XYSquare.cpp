@@ -28,7 +28,9 @@ int main(int argc, char **argv)
         std::vector<PetscInt> msweeps(MAX_SWEEPS);
         ierr = PetscOptionsGetIntArray(NULL,NULL,"-msweeps",&msweeps[0],&num_msweeps,&use_msweeps); CHKERRQ(ierr);
         msweeps.resize(num_msweeps);
-        if(!rank){
+
+        /* Print some info */
+        if(!rank && DMRG.Verbose()){
             printf( "WARMUP\n");
             printf( "  m_states:                %d\n",mstates);
             printf( "SWEEPS\n");
@@ -41,6 +43,7 @@ int main(int argc, char **argv)
             printf("=========================================\n");
         }
 
+        /* Perform DMRG steps */
         ierr = DMRG.Warmup(mstates); CHKERRQ(ierr);
         if(use_msweeps){
             for(const PetscInt& mstates: msweeps){
