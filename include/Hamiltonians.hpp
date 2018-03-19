@@ -78,7 +78,7 @@ namespace Hamiltonians
             );
 
         /** Prints out some information to stdout */
-        PetscErrorCode PrintOut() const {
+        void PrintOut() const {
             printf( "HAMILTONIAN: J1J2XYModel_SquareLattice\n");
             printf( "  Lx  : %d\n", Lx);
             printf( "  Ly  : %d\n", Ly);
@@ -88,7 +88,24 @@ namespace Hamiltonians
             printf( "  Jz2 : %g\n", Jz2);
             printf( "  BCx : %s\n", BCx?"Periodic":"Open");
             printf( "  BCy : %s\n", BCy?"Periodic":"Open");
-            return(0);
+        }
+
+        /** Writes out some JSON information to stdout */
+        void SaveOut(FILE *fp) const {
+            fprintf(fp, "  \"Hamiltonian\": {\n");
+            fprintf(fp, "    \"label\":\"J1J2XYModel_SquareLattice\",\n");
+            fprintf(fp, "    \"parameters\": {\n");
+            fprintf(fp, "      \"Lx\"  : %d,\n", Lx);
+            fprintf(fp, "      \"Ly\"  : %d,\n", Ly);
+            fprintf(fp, "      \"J1\"  : %g,\n", J1);
+            fprintf(fp, "      \"Jz1\" : %g,\n", Jz1);
+            fprintf(fp, "      \"J2\"  : %g,\n", J2);
+            fprintf(fp, "      \"Jz2\" : %g,\n", Jz2);
+            fprintf(fp, "      \"BCx\" : \"%s\",\n", BCx?"Periodic":"Open");
+            fprintf(fp, "      \"BCy\" : \"%s\"\n", BCy?"Periodic":"Open");
+            fprintf(fp, "    }\n");
+            fprintf(fp, "  }\n");
+            fflush(fp);
         }
 
     private:

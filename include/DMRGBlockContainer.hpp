@@ -135,12 +135,15 @@ public:
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataTimings.json")).c_str(), "w", &fp_timings); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Data.json")).c_str(), "w", &fp_data); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_data,"{\n");
+
         /*  Print some info to stdout */
         if(!mpi_rank){
             printf( "=========================================\n"
                     "DENSITY MATRIX RENORMALIZATION GROUP\n"
                     "-----------------------------------------\n");
-            ierr = Ham.PrintOut(); assert(!ierr);
+            Ham.PrintOut();
             printf( "-----------------------------------------\n");
             printf( "DIRECTORIES\n");
             if(do_scratch_dir) printf(
@@ -148,6 +151,7 @@ public:
             printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
             printf( "=========================================\n");
         }
+        if(!mpi_rank) Ham.SaveOut(fp_data);
     }
 
     /** Destroys all created blocks */
@@ -161,6 +165,8 @@ public:
         ierr = PetscFClose(mpi_comm, fp_step); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"\n]\n");
         ierr = PetscFClose(mpi_comm, fp_timings); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_data,"}\n");
+        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
     }
 
     /** Get parameters from command line options */
@@ -452,6 +458,9 @@ private:
 
     /** File to store timings data for each section of a single iteration */
     FILE *fp_timings;
+
+    /** File to store timings data for each section of a single iteration */
+    FILE *fp_data;
 
     /** Global index key which must be unique for each record */
     PetscInt GlobIdx = 0;
