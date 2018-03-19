@@ -16,12 +16,9 @@ main.x: main.o ${MAIN_DEPS} chkopts
 	${RM} main.o
 
 docs:
-	cd ../.. && doxygen Doxyfile
+	cd .. && doxygen Doxyfile
 
 flush: clean
-	${RM} ${TARGETS} *.dat *.dat.info *.x
-	${RM} -rf test_kron/*
-	${RM} -rf test_reshape/*
-	${RM} -rf data/*
+	${RM} ${TARGETS} ${MAIN_DEPS} *.dat *.dat.info *.x
 
 include ${SLEPC_DIR}/lib/slepc/conf/slepc_common

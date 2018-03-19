@@ -28,7 +28,7 @@ UnitTests_DMRGKron.x: UnitTests_DMRGKron.o ${UnitTests_DMRGKron_DEPS} chkopts
 	${RM} UnitTests_DMRGKron.o
 
 docs:
-	cd .. && make docs
+	cd .. && doxygen Doxyfile
 
 flush: clean
 	${RM} -rf ${TARGETS} ${UnitTests_DMRGBlockContainer_DEPS} *.dat *.dat.info *.x
