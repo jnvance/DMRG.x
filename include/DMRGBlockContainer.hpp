@@ -20,6 +20,10 @@
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
+#define PrintLines() printf("-----------------------------------------\n")
+#define PRINTLINES() printf("=========================================\n")
+#define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
+
 /** Provides an alias of Side_t to follow the Sys-Env convention */
 typedef enum
 {
@@ -156,38 +160,14 @@ public:
             printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
             printf( "=========================================\n");
         }
+
+        init = PETSC_TRUE;
     }
 
     /** Destroys all created blocks */
     ~DMRGBlockContainer()
     {
-        PetscInt ierr = 0;
-        ierr = SingleSite.Destroy(); assert(!ierr);
-        for(Block blk: sys_blocks) { ierr = blk.Destroy(); assert(!ierr); }
-        for(Block blk: env_blocks) { ierr = blk.Destroy(); assert(!ierr); }
-        if(!mpi_rank) fprintf(fp_step,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_step); assert(!ierr);
-        if(!mpi_rank) fprintf(fp_timings,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_timings); assert(!ierr);
-    }
-
-    /** Get parameters from command line options */
-    PetscErrorCode SetFromOptions()
-    {
-        PetscErrorCode ierr;
-        ierr = Ham.SetFromOptions(); CHKERRQ(ierr);
-        return(0);
-    }
-
-    #define PrintLines() printf("-----------------------------------------\n")
-    #define PRINTLINES() printf("=========================================\n")
-    #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
-
-    /** Returns the path to the directory for the storage of a specific system block */
-    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
-        std::ostringstream oss;
-        oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
-        return oss.str();
+        if(Destroy()) throw std::runtime_error("Error in destroying DMRGBlockContainer object.");
     }
 
     /** Performs the warmup stage of DMRG.
@@ -369,7 +349,19 @@ public:
     };
 
     /** Destroys the container object */
-    PetscErrorCode Destroy();
+    PetscErrorCode Destroy(){
+        if(!init) return(0);
+        PetscInt ierr = 0;
+        ierr = SingleSite.Destroy(); CHKERRQ(ierr);
+        for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+        for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+        if(!mpi_rank) fprintf(fp_step,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
+        if(!mpi_rank) fprintf(fp_timings,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
+        init = PETSC_FALSE;
+        return(0);
+    }
 
     /** Accesses the specified system block */
     const Block& SysBlock(const PetscInt& BlockIdx) const {
@@ -402,6 +394,9 @@ private:
 
     /** MPI size of mpi_comm */
     PetscMPIInt mpi_size;
+
+    /** Tells whether the object is initialized */
+    PetscBool   init = PETSC_FALSE;
 
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
@@ -1194,6 +1189,13 @@ private:
             ierr = sys_blocks[idx].EnsureSaved(); CHKERRQ(ierr);
         }
         return(0);
+    }
+
+    /** Returns the path to the directory for the storage of a specific system block */
+    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
+        std::ostringstream oss;
+        oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
+        return oss.str();
     }
 
     /** Save step data to file */
