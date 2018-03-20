@@ -32,6 +32,24 @@
     #endif
 #endif
 
+#define DMRG_KRON_TIMINGS
+
+#if defined(DMRG_KRON_TIMINGS)
+    #include <petsctime.h>
+    #define FUNCTION_TIMINGS_BEGIN() \
+        PetscLogDouble tstart, tend; \
+        if(!mpi_rank) PetscTime(&tstart);
+    #define FUNCTION_TIMINGS_END() \
+        if(!mpi_rank){ \
+        ierr = PetscTime(&tend); CHKERRQ(ierr); \
+        printf("    %-20s           %-12.6f s\n", __FUNCTION__, tend - tstart); }
+    #define FUNCTION_TIMINGS_PRINT_SPACE() if(!mpi_rank) printf("\n");
+#else
+    #define FUNCTION_TIMINGS_BEGIN()
+    #define FUNCTION_TIMINGS_END()
+    #define FUNCTION_TIMINGS_PRINT_SPACE()
+#endif
+
 PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMats(
@@ -887,6 +905,8 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     )
 {
     PetscErrorCode ierr = 0;
+    FUNCTION_TIMINGS_BEGIN()
+
     /*  Determine the local rows to be collected from each of the left and right block */
     {
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
@@ -974,6 +994,8 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
     /* Set to maximum value in case preallocation is not called */
     ctx.MaxElementsPerRow = ctx.Ncols;
+
+    FUNCTION_TIMINGS_END()
     return(0);
 }
 
@@ -986,6 +1008,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     )
 {
     PetscErrorCode ierr = 0;
+    FUNCTION_TIMINGS_BEGIN()
 
     /*  Go through each local row, then go through each term in ctx
         and determine the number of entries that go into each row   */
@@ -1095,6 +1118,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
 
     ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
+    FUNCTION_TIMINGS_END()
     return(0);
 }
 
@@ -1104,6 +1128,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     )
 {
     PetscErrorCode ierr = 0;
+    FUNCTION_TIMINGS_BEGIN()
 
     /*  Preallocate largest needed workspace */
     PetscInt *idx;
@@ -1218,5 +1243,8 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     ierr = MatEnsureAssembled(MatOut); CHKERRQ(ierr);
     ierr = PetscFree(idx); CHKERRQ(ierr);
     ierr = PetscFree(vals); CHKERRQ(ierr);
+
+    FUNCTION_TIMINGS_END()
+    FUNCTION_TIMINGS_PRINT_SPACE()
     return(0);
 }
