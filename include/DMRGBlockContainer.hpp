@@ -530,6 +530,8 @@ private:
             EnvBlockEnl = SysBlockEnl;
         }
 
+        ierr = PetscTime(&tenlr); CHKERRQ(ierr);
+
         step_data.NumSites_SysEnl = SysBlockEnl.NumSites();
         step_data.NumSites_EnvEnl = EnvBlockEnl.NumSites();
         step_data.NumStates_SysEnl = SysBlockEnl.NumStates();
@@ -629,7 +631,6 @@ private:
         }
         #endif
 
-        ierr = PetscTime(&tenlr); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
 
