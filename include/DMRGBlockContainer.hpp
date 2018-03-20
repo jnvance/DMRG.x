@@ -134,18 +134,19 @@ public:
             if(data_dir.back()!='/') data_dir += '/';
         }
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataStep.json")).c_str(), "w", &fp_step); assert(!ierr);
+        ierr = SaveStepHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_step,"[\n");
 
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataTimings.json")).c_str(), "w", &fp_timings); assert(!ierr);
+        ierr = SaveTimingsHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Data.json")).c_str(), "w", &fp_data); assert(!ierr);
         if(!mpi_rank){
             fprintf(fp_data,"{\n");
             Ham.SaveOut(fp_data);
-            fprintf(fp_data,"}\n");
+            fprintf(fp_data,",\n");
         }
-        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
 
         /*  Print some info to stdout */
         if(!mpi_rank){
@@ -268,7 +269,6 @@ public:
                     if(!mpi_rank && verbose) printf("  Number of system blocks: %d\n", sys_ninit);
                 #endif
             }
-            ++LoopIdx;
         }
 
         if(sys_ninit != num_sites/2)
@@ -279,6 +279,7 @@ public:
         }
         env_ninit = 0;
         warmed_up = PETSC_TRUE;
+        warmup_mstates = MStates;
 
         if(verbose){
             PetscPrintf(mpi_comm,
@@ -286,7 +287,7 @@ public:
                 "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
         }
         if(!mpi_rank) PRINTLINES();
-
+        ++LoopIdx;
         return(0);
     }
 
@@ -341,8 +342,8 @@ public:
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
+        sweeps_mstates.push_back(MStates);
         ++LoopIdx;
-
         if(!mpi_rank) PRINTLINES();
 
         return(0);
@@ -355,10 +356,18 @@ public:
         ierr = SingleSite.Destroy(); CHKERRQ(ierr);
         for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
         for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
-        if(!mpi_rank) fprintf(fp_step,"\n]\n");
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_step,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_step,"\n  ]\n}\n");
         ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
-        if(!mpi_rank) fprintf(fp_timings,"\n]\n");
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_timings,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
         ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
+
+        ierr = SaveLoopsData();
+        if(!mpi_rank) fprintf(fp_data,"\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
         init = PETSC_FALSE;
         return(0);
     }
@@ -407,6 +416,13 @@ private:
     /** Tells whether no quantum number symmetries will be implemented */
     PetscBool   no_symm = PETSC_FALSE;
 
+    /** Number of states requested for warmup */
+    PetscInt    warmup_mstates = 0;
+
+    /** Records the number of states requested for each sweep, where each entry is a single
+        call to Sweep() */
+    std::vector<PetscInt> sweeps_mstates;
+
     /** Total number of sites */
     PetscInt    num_sites;
 
@@ -449,6 +465,9 @@ private:
     /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
         This is automatically set when indicating -scratch_dir */
     PetscBool do_scratch_dir = PETSC_FALSE;
+
+    /** Tells whether data should be saved in tabular form, instead of verbose json */
+    PetscBool data_tabular = PETSC_TRUE;
 
     /** File to store basic data (energy, number of sites, etc) */
     FILE *fp_step;
@@ -1198,6 +1217,35 @@ private:
         return oss.str();
     }
 
+    /* Save headers for tabular step */
+    PetscErrorCode SaveStepHeaders()
+    {
+        if(mpi_rank || !data_tabular) return(0);
+        fprintf(fp_step,"{\n");
+        fprintf(fp_step,"  \"headers\" : [");
+        fprintf(fp_step,    "\"GlobIdx\", ");
+        fprintf(fp_step,    "\"LoopType\", ");
+        fprintf(fp_step,    "\"LoopIdx\", ");
+        fprintf(fp_step,    "\"StepIdx\", ");
+        fprintf(fp_step,    "\"NSites_Sys\", ");
+        fprintf(fp_step,    "\"NSites_Env\", ");
+        fprintf(fp_step,    "\"NSites_SysEnl\", ");
+        fprintf(fp_step,    "\"NSites_EnvEnl\", ");
+        fprintf(fp_step,    "\"NStates_Sys\", ");
+        fprintf(fp_step,    "\"NStates_Env\", ");
+        fprintf(fp_step,    "\"NStates_SysEnl\", ");
+        fprintf(fp_step,    "\"NStates_EnvEnl\", ");
+        fprintf(fp_step,    "\"NStates_SysRot\", ");
+        fprintf(fp_step,    "\"NStates_EnvRot\", ");
+        fprintf(fp_step,    "\"TruncErr_Sys\", ");
+        fprintf(fp_step,    "\"TruncErr_Env\", ");
+        fprintf(fp_step,    "\"GSEnergy\"");
+        fprintf(fp_step,"  ],\n");
+        fprintf(fp_step,"  \"table\" : ");
+        fflush(fp_step);
+        return(0);
+    }
+
     /** Save step data to file */
     PetscErrorCode SaveStepData(
         const StepData& data
@@ -1205,6 +1253,29 @@ private:
     {
         if(mpi_rank) return(0);
         fprintf(fp_step,"%s", GlobIdx ? ",\n" : "");
+        if(data_tabular){
+            fprintf(fp_step,"    [ ");
+            fprintf(fp_step,"%d, ",     GlobIdx);
+            fprintf(fp_step,"%s, ",     LoopType ? "\"Sweep\"" : "\"Warmup\"");
+            fprintf(fp_step,"%d, ",     LoopIdx);
+            fprintf(fp_step,"%d, ",     StepIdx);
+            fprintf(fp_step,"%d, ",     data.NumSites_Sys);
+            fprintf(fp_step,"%d, ",     data.NumSites_Env);
+            fprintf(fp_step,"%d, ",     data.NumSites_SysEnl);
+            fprintf(fp_step,"%d, ",     data.NumSites_EnvEnl);
+            fprintf(fp_step,"%d, ",     data.NumStates_Sys);
+            fprintf(fp_step,"%d, ",     data.NumStates_Env);
+            fprintf(fp_step,"%d, ",     data.NumStates_SysEnl);
+            fprintf(fp_step,"%d, ",     data.NumStates_EnvEnl);
+            fprintf(fp_step,"%d, ",     data.NumStates_SysRot);
+            fprintf(fp_step,"%d, ",     data.NumStates_EnvRot);
+            fprintf(fp_step,"%.12g, ",  data.TruncErr_Sys);
+            fprintf(fp_step,"%.12g, ",  data.TruncErr_Env);
+            fprintf(fp_step,"%.12g",    data.GSEnergy);
+            fprintf(fp_step,"]");
+            fflush(fp_step);
+            return(0);
+        }
         fprintf(fp_step,"  {\n");
         fprintf(fp_step,"    \"GlobIdx\": %d,\n",          GlobIdx);
         fprintf(fp_step,"    \"LoopType\": \"%s\",\n",     LoopType ? "Sweep" : "Warmup");
@@ -1228,6 +1299,25 @@ private:
         return(0);
     }
 
+    /* Save headers for tabular step */
+    PetscErrorCode SaveTimingsHeaders()
+    {
+        if(mpi_rank || !data_tabular) return(0);
+        fprintf(fp_timings,"{\n");
+        fprintf(fp_timings,"  \"headers\" : [");
+        fprintf(fp_timings,"\"GlobIdx\", ");
+        fprintf(fp_timings,"\"Total\", ");
+        fprintf(fp_timings,"\"Enlr\", ");
+        fprintf(fp_timings,"\"Kron\", ");
+        fprintf(fp_timings,"\"Diag\", ");
+        fprintf(fp_timings,"\"Rdms\", ");
+        fprintf(fp_timings,"\"Rotb\" ");
+        fprintf(fp_timings,"],\n");
+        fprintf(fp_timings,"  \"table\" : ");
+        fflush(fp_timings);
+        return(0);
+    }
+
     /** Save timings data to file */
     PetscErrorCode SaveTimingsData(
         const TimingsData& data
@@ -1235,6 +1325,19 @@ private:
     {
         if(mpi_rank) return(0);
         fprintf(fp_timings,"%s", GlobIdx ? ",\n" : "");
+        if(data_tabular){
+            fprintf(fp_timings,"    [ ");
+            fprintf(fp_timings,"%d, ",    GlobIdx);
+            fprintf(fp_timings,"%.9g, ", data.Total);
+            fprintf(fp_timings,"%.9g, ", data.tEnlr);
+            fprintf(fp_timings,"%.9g, ", data.tKron);
+            fprintf(fp_timings,"%.9g, ", data.tDiag);
+            fprintf(fp_timings,"%.9g, ", data.tRdms);
+            fprintf(fp_timings,"%.9g ",  data.tRotb);
+            fprintf(fp_timings,"]");
+            fflush(fp_timings);
+            return(0);
+        }
         fprintf(fp_timings,"  {\n");
         fprintf(fp_timings,"    \"Total\": %.9g,\n", data.Total);
         fprintf(fp_timings,"    \"Enlr\":  %.9g,\n", data.tEnlr);
@@ -1246,6 +1349,28 @@ private:
         fflush(fp_timings);
         return(0);
     }
+
+    PetscErrorCode SaveLoopsData()
+    {
+        if(mpi_rank) return(0);
+
+        fprintf(fp_data,"  \"Warmup\": {\n");
+        fprintf(fp_data,"    \"MStates\": %d\n", warmup_mstates);
+        fprintf(fp_data,"  },\n");
+        fprintf(fp_data,"  \"Sweeps\": {\n");
+        fprintf(fp_data,"    \"MStates\": [");
+
+        PetscInt nsweeps = sweeps_mstates.size();
+        if(nsweeps>0) fprintf(fp_data," %d", sweeps_mstates[0]);
+        for(PetscInt i=1;i<nsweeps;++i) fprintf(fp_data,", %d", sweeps_mstates[i]);
+
+        fprintf(fp_data," ]\n");
+        fprintf(fp_data,"  }");
+        fflush(fp_data);
+        return(0);
+    }
+
+
 };
 
 /**
