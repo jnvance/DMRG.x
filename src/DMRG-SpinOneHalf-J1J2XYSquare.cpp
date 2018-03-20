@@ -37,8 +37,8 @@ int main(int argc, char **argv)
             printf( "  Use msweeps array:       %s\n",use_msweeps?"yes":"no");
             printf( "  Number of sweeps:        %d\n",use_msweeps?num_msweeps:nsweeps);
             printf( "  NumStates to keep:      ");
-            if(use_msweeps) for(const PetscInt& m: msweeps) printf(" %d ",m);
-            else printf(" %d ",mstates);
+            if(use_msweeps) for(const PetscInt& m: msweeps) printf(" %d",m);
+            else printf(" %d",mstates);
             printf("\n");
             printf("=========================================\n");
         }
