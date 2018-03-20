@@ -41,13 +41,35 @@
         if(!mpi_rank) PetscTime(&tstart);
     #define FUNCTION_TIMINGS_END() \
         if(!mpi_rank){ \
-        ierr = PetscTime(&tend); CHKERRQ(ierr); \
-        printf("    %-20s           %-12.6f s\n", __FUNCTION__, tend - tstart); }
+            PetscTime(&tend); \
+            printf("    %-20s           %-12.6f s\n", __FUNCTION__, tend - tstart); \
+        }
     #define FUNCTION_TIMINGS_PRINT_SPACE() if(!mpi_rank) printf("\n");
+    #define INTERVAL_TIMINGS_SETUP() PetscLogDouble itstart, itend;
+    #define INTERVAL_TIMINGS_BEGIN() if(!mpi_rank) PetscTime(&itstart);
+    #define INTERVAL_TIMINGS_END(LABEL) \
+        if(!mpi_rank){ \
+            PetscTime(&itend); \
+            printf("      %-20s         %-12.6f s\n", LABEL, itend - itstart); \
+        }
+    #define ACCUM_TIMINGS_SETUP(LABEL)  PetscLogDouble ts_##LABEL, te_##LABEL, tot_##LABEL = 0.0;
+    #define ACCUM_TIMINGS_BEGIN(LABEL)  if(!mpi_rank){ PetscTime(&ts_##LABEL); }
+    #define ACCUM_TIMINGS_END(LABEL)    if(!mpi_rank){ PetscTime(&te_##LABEL); \
+        tot_##LABEL += (te_##LABEL - ts_##LABEL); }
+    #define ACCUM_TIMINGS_PRINT(LABEL, TEXT)  \
+        if(!mpi_rank){ \
+            printf("      %-20s         %-12.6f s\n", TEXT, tot_##LABEL); \
+        }
 #else
     #define FUNCTION_TIMINGS_BEGIN()
     #define FUNCTION_TIMINGS_END()
     #define FUNCTION_TIMINGS_PRINT_SPACE()
+    #define INTERVAL_TIMINGS_SETUP()
+    #define INTERVAL_TIMINGS_BEGIN()
+    #define INTERVAL_TIMINGS_END(LABEL)
+    #define ACCUM_TIMINGS_SETUP(LABEL)
+    #define ACCUM_TIMINGS_BEGIN(LABEL)
+    #define ACCUM_TIMINGS_END(LABEL)
 #endif
 
 PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
@@ -1128,6 +1150,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     )
 {
     PetscErrorCode ierr = 0;
+    INTERVAL_TIMINGS_SETUP()
     FUNCTION_TIMINGS_BEGIN()
 
     /*  Preallocate largest needed workspace */
@@ -1141,6 +1164,10 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
         in quantum numbers */
     std::map< Op_t, PetscInt > fws_LOP = {};
     std::map< Op_t, PetscInt > Row_NumStates_ROP = {};
+
+    ACCUM_TIMINGS_SETUP(MatSetValues)
+    ACCUM_TIMINGS_SETUP(MatLoop)
+    INTERVAL_TIMINGS_BEGIN()
     {
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
         for( ; KIter.Loop(); ++KIter)
@@ -1179,6 +1206,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
             for(const KronSumTerm& term: ctx.Terms)
             {
+                ACCUM_TIMINGS_BEGIN(MatLoop)
                 if(term.a == PetscScalar(0.0)) continue;
 
                 if(term.OpTypeA != OpEye){
@@ -1236,11 +1264,21 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                         }
                     }
                 }
+                ACCUM_TIMINGS_END(MatLoop)
+                ACCUM_TIMINGS_BEGIN(MatSetValues)
                 ierr = MatSetValues(MatOut, 1, &Irow, nz_L*nz_R, idx, vals, ADD_VALUES); CHKERRQ(ierr);
+                ACCUM_TIMINGS_END(MatSetValues)
             }
         }
     }
+    ACCUM_TIMINGS_PRINT(MatSetValues,   "  MatSetValues")
+    ACCUM_TIMINGS_PRINT(MatLoop,        "  MatLoop")
+    INTERVAL_TIMINGS_END("Loop")
+
+    INTERVAL_TIMINGS_BEGIN()
     ierr = MatEnsureAssembled(MatOut); CHKERRQ(ierr);
+    INTERVAL_TIMINGS_END("MatEnsureAssembled")
+
     ierr = PetscFree(idx); CHKERRQ(ierr);
     ierr = PetscFree(vals); CHKERRQ(ierr);
 
