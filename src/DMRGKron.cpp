@@ -42,7 +42,7 @@
     #define FUNCTION_TIMINGS_END() \
         if(!mpi_rank){ \
             PetscTime(&tend); \
-            printf("    %-20s           %-12.6f s\n", __FUNCTION__, tend - tstart); \
+            printf("    %-28s   %-12.6f s\n", __FUNCTION__, tend - tstart); \
         }
     #define FUNCTION_TIMINGS_PRINT_SPACE() if(!mpi_rank) printf("\n");
     #define INTERVAL_TIMINGS_SETUP() PetscLogDouble itstart, itend;
@@ -50,7 +50,7 @@
     #define INTERVAL_TIMINGS_END(LABEL) \
         if(!mpi_rank){ \
             PetscTime(&itend); \
-            printf("      %-20s         %-12.6f s\n", LABEL, itend - itstart); \
+            printf("      %-28s %-12.6f s\n", LABEL, itend - itstart); \
         }
     #define ACCUM_TIMINGS_SETUP(LABEL)  PetscLogDouble ts_##LABEL, te_##LABEL, tot_##LABEL = 0.0;
     #define ACCUM_TIMINGS_BEGIN(LABEL)  if(!mpi_rank){ PetscTime(&ts_##LABEL); }
@@ -58,7 +58,7 @@
         tot_##LABEL += (te_##LABEL - ts_##LABEL); }
     #define ACCUM_TIMINGS_PRINT(LABEL, TEXT)  \
         if(!mpi_rank){ \
-            printf("      %-20s         %-12.6f s\n", TEXT, tot_##LABEL); \
+            printf("      %-28s %-12.6f s\n", TEXT, tot_##LABEL); \
         }
 #else
     #define FUNCTION_TIMINGS_BEGIN()
@@ -1271,9 +1271,9 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             }
         }
     }
-    ACCUM_TIMINGS_PRINT(MatSetValues,   "  MatSetValues")
     ACCUM_TIMINGS_PRINT(MatLoop,        "  MatLoop")
-    INTERVAL_TIMINGS_END("Loop")
+    ACCUM_TIMINGS_PRINT(MatSetValues,   "  MatSetValues")
+    INTERVAL_TIMINGS_END("KronSumFillMatrixLoop")
 
     INTERVAL_TIMINGS_BEGIN()
     ierr = MatEnsureAssembled(MatOut); CHKERRQ(ierr);
