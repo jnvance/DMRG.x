@@ -104,7 +104,7 @@ namespace Hamiltonians
             fprintf(fp, "      \"BCx\" : \"%s\",\n", BCx?"Periodic":"Open");
             fprintf(fp, "      \"BCy\" : \"%s\"\n", BCy?"Periodic":"Open");
             fprintf(fp, "    }\n");
-            fprintf(fp, "  }\n");
+            fprintf(fp, "  }");
             fflush(fp);
         }
 
