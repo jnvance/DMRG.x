@@ -1138,13 +1138,13 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ierr = MatMPIAIJSetPreallocation(MatOut, 0, ctx.Dnnz, 0, ctx.Onnz); CHKERRQ(ierr);
     /* Note: Preallocation for seq not required as long as mpiaij(mkl) matrices are specified */
 
-    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ZERO_ROWS, PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(MatOut, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(MatOut, MAT_KEEP_NONZERO_PATTERN, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(MatOut, MAT_HERMITIAN, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(MatOut, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE); CHKERRQ(ierr);
     ierr = MatSetOption(MatOut, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(MatOut, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
-    ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(MatOut, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ZERO_ROWS, PETSC_TRUE); CHKERRQ(ierr);
 
     ierr = PetscFree(idx_arr); CHKERRQ(ierr);
     ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
