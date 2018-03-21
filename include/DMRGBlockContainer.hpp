@@ -67,6 +67,7 @@ struct StepData
     PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
     PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
     PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
+    PetscInt    NumStates_H;        /**< Number of states used in constructing the superblock Hamiltonian */
     PetscScalar GSEnergy;
     PetscReal   TruncErr_Sys;
     PetscReal   TruncErr_Env;
@@ -561,7 +562,7 @@ private:
             QNSectors = {};
         }
         KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, QNSectors);
-
+        step_data.NumStates_H = KronBlocks.NumStates();
         #if defined(PETSC_USE_DEBUG)
         {
             PetscBool flg = PETSC_FALSE;
@@ -1224,23 +1225,24 @@ private:
         if(mpi_rank || !data_tabular) return(0);
         fprintf(fp_step,"{\n");
         fprintf(fp_step,"  \"headers\" : [");
-        fprintf(fp_step,    "\"GlobIdx\", ");
-        fprintf(fp_step,    "\"LoopType\", ");
-        fprintf(fp_step,    "\"LoopIdx\", ");
-        fprintf(fp_step,    "\"StepIdx\", ");
-        fprintf(fp_step,    "\"NSites_Sys\", ");
-        fprintf(fp_step,    "\"NSites_Env\", ");
-        fprintf(fp_step,    "\"NSites_SysEnl\", ");
-        fprintf(fp_step,    "\"NSites_EnvEnl\", ");
-        fprintf(fp_step,    "\"NStates_Sys\", ");
-        fprintf(fp_step,    "\"NStates_Env\", ");
-        fprintf(fp_step,    "\"NStates_SysEnl\", ");
-        fprintf(fp_step,    "\"NStates_EnvEnl\", ");
-        fprintf(fp_step,    "\"NStates_SysRot\", ");
-        fprintf(fp_step,    "\"NStates_EnvRot\", ");
-        fprintf(fp_step,    "\"TruncErr_Sys\", ");
-        fprintf(fp_step,    "\"TruncErr_Env\", ");
-        fprintf(fp_step,    "\"GSEnergy\"");
+        fprintf(fp_step,    "\"GlobIdx\", ");                                   /* 01 */
+        fprintf(fp_step,    "\"LoopType\", ");                                  /* 02 */
+        fprintf(fp_step,    "\"LoopIdx\", ");                                   /* 03 */
+        fprintf(fp_step,    "\"StepIdx\", ");                                   /* 04 */
+        fprintf(fp_step,    "\"NSites_Sys\", ");                                /* 05 */
+        fprintf(fp_step,    "\"NSites_Env\", ");                                /* 06 */
+        fprintf(fp_step,    "\"NSites_SysEnl\", ");                             /* 07 */
+        fprintf(fp_step,    "\"NSites_EnvEnl\", ");                             /* 08 */
+        fprintf(fp_step,    "\"NStates_Sys\", ");                               /* 09 */
+        fprintf(fp_step,    "\"NStates_Env\", ");                               /* 10 */
+        fprintf(fp_step,    "\"NStates_SysEnl\", ");                            /* 11 */
+        fprintf(fp_step,    "\"NStates_EnvEnl\", ");                            /* 12 */
+        fprintf(fp_step,    "\"NStates_SysRot\", ");                            /* 13 */
+        fprintf(fp_step,    "\"NStates_EnvRot\", ");                            /* 14 */
+        fprintf(fp_step,    "\"NumStates_H\", ");                               /* 15 */
+        fprintf(fp_step,    "\"TruncErr_Sys\", ");                              /* 16 */
+        fprintf(fp_step,    "\"TruncErr_Env\", ");                              /* 17 */
+        fprintf(fp_step,    "\"GSEnergy\"");                                    /* 18 */
         fprintf(fp_step,"  ],\n");
         fprintf(fp_step,"  \"table\" : ");
         fflush(fp_step);
@@ -1256,23 +1258,24 @@ private:
         fprintf(fp_step,"%s", GlobIdx ? ",\n" : "");
         if(data_tabular){
             fprintf(fp_step,"    [ ");
-            fprintf(fp_step,"%d, ",     GlobIdx);
-            fprintf(fp_step,"%s, ",     LoopType ? "\"Sweep\"" : "\"Warmup\"");
-            fprintf(fp_step,"%d, ",     LoopIdx);
-            fprintf(fp_step,"%d, ",     StepIdx);
-            fprintf(fp_step,"%d, ",     data.NumSites_Sys);
-            fprintf(fp_step,"%d, ",     data.NumSites_Env);
-            fprintf(fp_step,"%d, ",     data.NumSites_SysEnl);
-            fprintf(fp_step,"%d, ",     data.NumSites_EnvEnl);
-            fprintf(fp_step,"%d, ",     data.NumStates_Sys);
-            fprintf(fp_step,"%d, ",     data.NumStates_Env);
-            fprintf(fp_step,"%d, ",     data.NumStates_SysEnl);
-            fprintf(fp_step,"%d, ",     data.NumStates_EnvEnl);
-            fprintf(fp_step,"%d, ",     data.NumStates_SysRot);
-            fprintf(fp_step,"%d, ",     data.NumStates_EnvRot);
-            fprintf(fp_step,"%.12g, ",  data.TruncErr_Sys);
-            fprintf(fp_step,"%.12g, ",  data.TruncErr_Env);
-            fprintf(fp_step,"%.12g",    data.GSEnergy);
+            fprintf(fp_step,"%d, ",     GlobIdx);                               /* 01 */
+            fprintf(fp_step,"%s, ",     LoopType ? "\"Sweep\"" : "\"Warmup\""); /* 02 */
+            fprintf(fp_step,"%d, ",     LoopIdx);                               /* 03 */
+            fprintf(fp_step,"%d, ",     StepIdx);                               /* 04 */
+            fprintf(fp_step,"%d, ",     data.NumSites_Sys);                     /* 05 */
+            fprintf(fp_step,"%d, ",     data.NumSites_Env);                     /* 06 */
+            fprintf(fp_step,"%d, ",     data.NumSites_SysEnl);                  /* 07 */
+            fprintf(fp_step,"%d, ",     data.NumSites_EnvEnl);                  /* 08 */
+            fprintf(fp_step,"%d, ",     data.NumStates_Sys);                    /* 09 */
+            fprintf(fp_step,"%d, ",     data.NumStates_Env);                    /* 10 */
+            fprintf(fp_step,"%d, ",     data.NumStates_SysEnl);                 /* 11 */
+            fprintf(fp_step,"%d, ",     data.NumStates_EnvEnl);                 /* 12 */
+            fprintf(fp_step,"%d, ",     data.NumStates_SysRot);                 /* 13 */
+            fprintf(fp_step,"%d, ",     data.NumStates_EnvRot);                 /* 14 */
+            fprintf(fp_step,"%d, ",     data.NumStates_H);                      /* 15 */
+            fprintf(fp_step,"%.12g, ",  data.TruncErr_Sys);                     /* 16 */
+            fprintf(fp_step,"%.12g, ",  data.TruncErr_Env);                     /* 17 */
+            fprintf(fp_step,"%.12g",    data.GSEnergy);                         /* 18 */
             fprintf(fp_step,"]");
             fflush(fp_step);
             return(0);
