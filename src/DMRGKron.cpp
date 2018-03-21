@@ -1037,10 +1037,9 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ctx.MaxElementsPerRow = 0;
     ierr = PetscCalloc2(ctx.lrows, &ctx.Dnnz, ctx.lrows, &ctx.Onnz); CHKERRQ(ierr);
 
-    // /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
-    // PetscInt *idx_full;
-    // ierr = PetscCalloc1(ctx.Ncols, &idx_full); CHKERRQ(ierr);
-    // ierr = PetscFree(idx_full); CHKERRQ(ierr);
+    /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
+    PetscInt *idx_arr;
+    ierr = PetscCalloc1(ctx.Ncols, &idx_arr); CHKERRQ(ierr);
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
         assumes that the right block is a valid operator type such that the resulting matrix term is block-diagonal
@@ -1083,9 +1082,6 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
                 };
             }
 
-            /* Insert all resulting column indices in this set and count later */
-            std::set< PetscInt > idx_set;
-
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
             for(const KronSumTerm& term: ctx.Terms)
             {
@@ -1122,24 +1118,20 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
                 {
                     for(size_t r=0; r<nz_R; ++r)
                     {
-                        // PetscInt idx = (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O;
-                        // if ( ctx.cstart <= idx && idx < ctx.cend ) ++ctx.Dnnz[lrow];
-                        // else ++ctx.Onnz[lrow];
-                        idx_set.insert( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O );
+                        idx_arr[ (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O ] = 1;
                     }
                 }
-                nelts = nz_L * nz_R;
-                if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
             }
-            // /*  The maximum possible number in Dnnz and Onnz for this row must not exceed the total columns */
-            // ctx.Dnnz[lrow] = (ctx.Dnnz[lrow] < ctx.lcols) ? ctx.Dnnz[lrow] : ctx.lcols;
-            // ctx.Onnz[lrow] = (ctx.Onnz[lrow] < ctx.Ncols-ctx.lcols) ? ctx.Onnz[lrow] : ctx.Ncols-ctx.lcols;
-
-            /* Go through each entry of the set and determine the number of diag and off-diag terms */
-            for(const PetscInt idx: idx_set){
-                if ( ctx.cstart <= idx && idx < ctx.cend ) ++ctx.Dnnz[lrow];
-            }
-            ctx.Onnz[lrow] = PetscInt(idx_set.size()) - ctx.Dnnz[lrow];
+            /* Sum up all columns in the diagonal and off-diagonal */
+            PetscInt dnnz = 0, onnz=0, i;
+            for (i=0; i<ctx.cstart; i++)        onnz += idx_arr[i];
+            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += idx_arr[i];
+            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += idx_arr[i];
+            ierr = PetscMemzero(idx_arr, ctx.Ncols*sizeof(idx_arr[0])); CHKERRQ(ierr);
+            ctx.Dnnz[lrow] = dnnz;
+            ctx.Onnz[lrow] = onnz;
+            nelts = dnnz + onnz;
+            if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
         }
     }
 
@@ -1154,6 +1146,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ierr = MatSetOption(MatOut, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
 
+    ierr = PetscFree(idx_arr); CHKERRQ(ierr);
     ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
     FUNCTION_TIMINGS_END()
     return(0);
