@@ -80,6 +80,13 @@ public:
         return qn_list;
     }
 
+    /** Returns the list of quantum numbers as a const reference */
+    const std::vector<PetscReal>& ListRef() const
+    {
+        assert(initialized);
+        return qn_list;
+    }
+
     /** Returns the quantum number associated to the given index */
     PetscReal List(const PetscInt& idx) const
     {
