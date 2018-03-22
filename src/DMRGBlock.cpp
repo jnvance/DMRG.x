@@ -356,6 +356,7 @@ PetscErrorCode Block::SpinOneHalf::CreateSm()
 PetscErrorCode Block::SpinOneHalf::DestroySm()
 {
     PetscErrorCode ierr = 0;
+    if(!init_Sm && !init) return(0);
     if(!init_Sm) SETERRQ1(mpi_comm, 1, "%s was called but Sm was not yet initialized. ",__FUNCTION__);
 
     for(PetscInt isite = 0; isite < num_sites; ++isite){

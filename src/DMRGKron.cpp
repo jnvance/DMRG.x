@@ -831,6 +831,8 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     ierr = PetscCalloc1(ctx.Ncols, &ctx.idx_arr); CHKERRQ(ierr);
 
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+    ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
+    ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 

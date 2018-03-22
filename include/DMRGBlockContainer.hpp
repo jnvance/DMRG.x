@@ -200,6 +200,8 @@ public:
                     std::string path = BlockDir("Sys",iblock);
                     ierr = Makedir(path); CHKERRQ(ierr);
                 }
+                ierr = Makedir(BlockDir("SysEnl",0)); CHKERRQ(ierr);
+                ierr = Makedir(BlockDir("EnvEnl",0)); CHKERRQ(ierr);
             }
             for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                 std::string path = BlockDir("Sys",iblock);
@@ -536,9 +538,11 @@ private:
             const std::vector< Hamiltonians::Term > TermsEnv = Ham.H(NumSitesEnvEnl);
             ierr = KronEye_Explicit(EnvBlock, AddSite, TermsEnv, EnvBlockEnl); CHKERRQ(ierr);
             ierr = EnvBlock.EnsureSaved(); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.InitializeSave(BlockDir("EnvEnl",0)); CHKERRQ(ierr);
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
+        ierr = SysBlockEnl.InitializeSave(BlockDir("SysEnl",0)); CHKERRQ(ierr);
 
         ierr = PetscTime(&tenlr); CHKERRQ(ierr);
 
@@ -733,8 +737,6 @@ private:
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
 
-        /*  Initialize the new blocks and copy the new blocks */
-
         /* (Block) Initialize the new blocks
             copy enlarged blocks to out blocks but overwrite the matrices */
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
@@ -742,10 +744,12 @@ private:
         ierr = PetscTime(&trdms); CHKERRQ(ierr);
 
         ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
+        ierr = SysBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
         ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
         ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
         if(!flg){
             ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
             ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
