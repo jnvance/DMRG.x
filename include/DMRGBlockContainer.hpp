@@ -134,18 +134,18 @@ public:
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
         }
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataStep.json")).c_str(), "w", &fp_step); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); assert(!ierr);
         ierr = SaveStepHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_step,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataTimings.json")).c_str(), "w", &fp_timings); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Timings.json")).c_str(), "w", &fp_timings); assert(!ierr);
         ierr = SaveTimingsHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataEntanglement.json")).c_str(), "w", &fp_entanglement); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("EntanglementSpectra.json")).c_str(), "w", &fp_entanglement); assert(!ierr);
         if(!mpi_rank) fprintf(fp_entanglement,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Data.json")).c_str(), "w", &fp_data); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGRun.json")).c_str(), "w", &fp_data); assert(!ierr);
         if(!mpi_rank){
             fprintf(fp_data,"{\n");
             Ham.SaveOut(fp_data);
