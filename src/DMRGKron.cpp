@@ -827,9 +827,14 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     }
     #endif
 
+    /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
+    ierr = PetscCalloc1(ctx.Ncols, &ctx.idx_arr); CHKERRQ(ierr);
+
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
+
+    ierr = PetscFree(ctx.idx_arr); CHKERRQ(ierr);
 
     #if defined(PETSC_USE_DEBUG)
     if(__flg){
@@ -1037,10 +1042,6 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ctx.MaxElementsPerRow = 0;
     ierr = PetscCalloc2(ctx.lrows, &ctx.Dnnz, ctx.lrows, &ctx.Onnz); CHKERRQ(ierr);
 
-    /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
-    PetscInt *idx_arr;
-    ierr = PetscCalloc1(ctx.Ncols, &idx_arr); CHKERRQ(ierr);
-
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
         assumes that the right block is a valid operator type such that the resulting matrix term is block-diagonal
         in quantum numbers */
@@ -1083,6 +1084,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
             }
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
+            ierr = PetscMemzero(ctx.idx_arr, ctx.Ncols*sizeof(ctx.idx_arr[0])); CHKERRQ(ierr);
             for(const KronSumTerm& term: ctx.Terms)
             {
                 if(term.a == PetscScalar(0.0)) continue;
@@ -1118,16 +1120,15 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
                 {
                     for(size_t r=0; r<nz_R; ++r)
                     {
-                        idx_arr[ (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O ] = 1;
+                        ctx.idx_arr[ (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O ] = 1;
                     }
                 }
             }
             /* Sum up all columns in the diagonal and off-diagonal */
             PetscInt dnnz = 0, onnz=0, i;
-            for (i=0; i<ctx.cstart; i++)        onnz += idx_arr[i];
-            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += idx_arr[i];
-            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += idx_arr[i];
-            ierr = PetscMemzero(idx_arr, ctx.Ncols*sizeof(idx_arr[0])); CHKERRQ(ierr);
+            for (i=0; i<ctx.cstart; i++)        onnz += ctx.idx_arr[i];
+            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += ctx.idx_arr[i];
+            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += ctx.idx_arr[i];
             ctx.Dnnz[lrow] = dnnz;
             ctx.Onnz[lrow] = onnz;
             nelts = dnnz + onnz;
@@ -1145,8 +1146,8 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ierr = MatSetOption(MatOut, MAT_IGNORE_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ZERO_ROWS, PETSC_TRUE); CHKERRQ(ierr);
+    ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
 
-    ierr = PetscFree(idx_arr); CHKERRQ(ierr);
     ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
     FUNCTION_TIMINGS_END()
     return(0);
@@ -1162,10 +1163,10 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     FUNCTION_TIMINGS_BEGIN()
 
     /*  Preallocate largest needed workspace */
-    PetscInt *idx;
-    PetscScalar *vals;
-    ierr = PetscCalloc1(ctx.MaxElementsPerRow+1, &idx); CHKERRQ(ierr);
-    ierr = PetscCalloc1(ctx.MaxElementsPerRow+1, &vals); CHKERRQ(ierr);
+    ierr = PetscCalloc1(ctx.Ncols, &ctx.val_arr); CHKERRQ(ierr);
+
+    /* Fill in all indices */
+    for(PetscInt i=0; i<ctx.Ncols; ++i) ctx.idx_arr[i] = i;
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
         assumes that the right block is a valid operator type such that the resulting matrix term is block-diagonal
@@ -1212,6 +1213,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             }
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
+            ierr = PetscMemzero(ctx.val_arr, ctx.Ncols*sizeof(ctx.val_arr[0])); CHKERRQ(ierr);
             for(const KronSumTerm& term: ctx.Terms)
             {
                 ACCUM_TIMINGS_BEGIN(MatLoop)
@@ -1243,40 +1245,18 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                 fws_O = fws_LOP.at(term.OpTypeA);
                 col_NStatesR = Row_NumStates_ROP.at(term.OpTypeB);
                 if(col_NStatesR==-1) SETERRQ(PETSC_COMM_SELF,1,"Accessed incorrect value.");
-
                 for(size_t l=0; l<nz_L; ++l)
                 {
                     for(size_t r=0; r<nz_R; ++r)
                     {
-                        idx[l*nz_R+r] = (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O;
-                    }
-                }
-
-                if(term.a==PetscScalar(1.0))
-                {
-                    for(size_t l=0; l<nz_L; ++l)
-                    {
-                        for(size_t r=0; r<nz_R; ++r)
-                        {
-                            vals[l*nz_R+r] = v_L[l] * v_R[r];
-                        }
-                    }
-                }
-                else
-                {
-                    for(size_t l=0; l<nz_L; ++l)
-                    {
-                        for(size_t r=0; r<nz_R; ++r)
-                        {
-                            vals[l*nz_R+r] = term.a * v_L[l] * v_R[r];
-                        }
+                        ctx.val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
                 }
                 ACCUM_TIMINGS_END(MatLoop)
-                ACCUM_TIMINGS_BEGIN(MatSetValues)
-                ierr = MatSetValues(MatOut, 1, &Irow, nz_L*nz_R, idx, vals, ADD_VALUES); CHKERRQ(ierr);
-                ACCUM_TIMINGS_END(MatSetValues)
             }
+            ACCUM_TIMINGS_BEGIN(MatSetValues)
+            ierr = MatSetValues(MatOut, 1, &Irow, ctx.Ncols, ctx.idx_arr, ctx.val_arr, INSERT_VALUES); CHKERRQ(ierr);
+            ACCUM_TIMINGS_END(MatSetValues)
         }
     }
     ACCUM_TIMINGS_PRINT(MatLoop,        "  MatLoop")
@@ -1287,8 +1267,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     ierr = MatEnsureAssembled(MatOut); CHKERRQ(ierr);
     INTERVAL_TIMINGS_END("MatEnsureAssembled")
 
-    ierr = PetscFree(idx); CHKERRQ(ierr);
-    ierr = PetscFree(vals); CHKERRQ(ierr);
+    ierr = PetscFree(ctx.val_arr); CHKERRQ(ierr);
 
     FUNCTION_TIMINGS_END()
     FUNCTION_TIMINGS_PRINT_SPACE()

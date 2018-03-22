@@ -296,6 +296,14 @@ private:
 
         /** Predicted maximum number of elements on each local row */
         std::vector< PetscInt > Maxnnz;
+
+        /** Workspace for the indices in a row.
+            This must be allocated and deallocated within a call to KronSumConstruct() */
+        PetscInt *idx_arr;
+
+        /** Workspace for the values in a row. */
+        PetscScalar *val_arr;
+
     } KronSumCtx;
 
     PetscErrorCode KronSumPrepareTerms(
