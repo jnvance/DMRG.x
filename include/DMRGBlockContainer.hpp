@@ -142,6 +142,9 @@ public:
         ierr = SaveTimingsHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DataEntanglement.json")).c_str(), "w", &fp_entanglement); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_entanglement,"[\n");
+
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Data.json")).c_str(), "w", &fp_data); assert(!ierr);
         if(!mpi_rank){
             fprintf(fp_data,"{\n");
@@ -366,6 +369,9 @@ public:
         if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
         ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
 
+        if(!mpi_rank) fprintf(fp_entanglement,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_entanglement); CHKERRQ(ierr);
+
         ierr = SaveLoopsData();
         if(!mpi_rank) fprintf(fp_data,"\n}\n");
         ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
@@ -475,6 +481,9 @@ private:
 
     /** File to store timings data for each section of a single iteration */
     FILE *fp_timings;
+
+    /** File to store the entanglement spectrum of the reduced density matrices for a single iteration */
+    FILE *fp_entanglement;
 
     /** File to store timings data for each section of a single iteration */
     FILE *fp_data;
@@ -936,6 +945,11 @@ private:
             }
             #endif
 
+            /*  Dump unsorted (grouped) entanglement spectra to file */
+            ierr = SaveEntanglementSpectra(
+                eigen_L, KronBlocks.LeftBlockRef().Magnetization.ListRef(),
+                eigen_R, KronBlocks.RightBlockRef().Magnetization.ListRef()); CHKERRQ(ierr);
+
             /*  Sort the eigenvalue lists in descending order */
             std::stable_sort(eigen_L.begin(), eigen_L.end(), greater_eigval);
             std::stable_sort(eigen_R.begin(), eigen_R.end(), greater_eigval);
@@ -1351,6 +1365,55 @@ private:
         fprintf(fp_timings,"    \"Rotb\":  %.9g\n",  data.tRotb);
         fprintf(fp_timings,"  }");
         fflush(fp_timings);
+        return(0);
+    }
+
+    /** Save the entanglement spectra to file */
+    PetscErrorCode SaveEntanglementSpectra(
+        const std::vector< Eigen_t >& eigen_L,
+        const std::vector< PetscReal >& qn_L,
+        const std::vector< Eigen_t >& eigen_R,
+        const std::vector< PetscReal >& qn_R
+        )
+    {
+        if(mpi_rank) return(0);
+        fprintf(fp_entanglement, "%s", GlobIdx ? ",\n" : "");
+        fprintf(fp_entanglement, "  {\n");
+        fprintf(fp_entanglement, "    \"GlobIdx\": %d,\n", GlobIdx);
+        fprintf(fp_entanglement, "    \"Sys\": [\n");
+        {
+            PetscInt idx_prev = 999999999;
+            for(const Eigen_t &eig: eigen_L){
+                if(idx_prev!=eig.blkIdx){
+                    if(idx_prev != 999999999) fprintf(fp_entanglement," ]},\n");
+                    fprintf(fp_entanglement,"      {");
+                    fprintf(fp_entanglement,"\"sector\": %g, \"vals\": [ %g",qn_L[eig.blkIdx], eig.eigval);
+                } else {
+                    fprintf(fp_entanglement,", %g", eig.eigval);
+                }
+                idx_prev = eig.blkIdx;
+            }
+            fprintf(fp_entanglement," ]}\n");
+        }
+        fprintf(fp_entanglement,"    ],\n");
+        fprintf(fp_entanglement,"    \"Env\": [\n");
+        {
+            PetscInt idx_prev = 999999999;
+            for(const Eigen_t &eig: eigen_R){
+                if(idx_prev!=eig.blkIdx){
+                    if(idx_prev != 999999999) fprintf(fp_entanglement," ]},\n");
+                    fprintf(fp_entanglement,"      {");
+                    fprintf(fp_entanglement,"\"sector\": %g, \"vals\": [ %g",qn_R[eig.blkIdx], eig.eigval);
+                } else {
+                    fprintf(fp_entanglement,", %g", eig.eigval);
+                }
+                idx_prev = eig.blkIdx;
+            }
+            fprintf(fp_entanglement," ]}\n");
+        }
+        fprintf(fp_entanglement,"    ]\n");
+        fprintf(fp_entanglement,"  }");
+        fflush(fp_entanglement);
         return(0);
     }
 
