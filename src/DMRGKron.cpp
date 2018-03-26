@@ -775,44 +775,13 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         }
     #endif
 
-    /*  Initialize the output matrix with the correct dimensions */
-    ierr = MatDestroy(&MatOut); CHKERRQ(ierr);
-    ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
-    ierr = MatSetSizes(MatOut, PETSC_DECIDE, PETSC_DECIDE, num_states, num_states); CHKERRQ(ierr);
-    ierr = MatSetOptionsPrefix(MatOut, "H_"); CHKERRQ(ierr);
-    ierr = MatSetFromOptions(MatOut); CHKERRQ(ierr);
-    ierr = MatSetUp(MatOut); CHKERRQ(ierr);
-
-    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ENTRIES          , PETSC_TRUE);
-    ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ZERO_ROWS        , PETSC_TRUE);
-    ierr = MatSetOption(MatOut, MAT_IGNORE_OFF_PROC_ENTRIES      , PETSC_TRUE);
-    ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES          , PETSC_TRUE);
-
+    /* Assumes that output matrix is square */
     KronSumCtx ctx;
-    ctx.rstart = MatOut->rmap->rstart;
-    ctx.rend   = MatOut->rmap->rend;
-    ctx.Nrows  = MatOut->rmap->N;
-    ctx.lrows  = MatOut->rmap->n;
-    ctx.cstart = MatOut->cmap->rstart;
-    ctx.cend   = MatOut->cmap->rend;
-    ctx.Ncols  = MatOut->cmap->N;
-    ctx.lcols  = MatOut->cmap->n;
-
-    /*  Verify that the row and column mapping match what is expected */
-    {
-        PetscInt M,N, locrows, loccols, Istart, Cstart;
-        ierr = MatGetSize(MatOut, &M, &N); CHKERRQ(ierr);
-        ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
-        if(locrows!=ctx.lrows) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, ctx.lrows, M, N);
-        if(Istart!=ctx.rstart) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, ctx.rstart, M, N);
-        ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
-        if(loccols!=ctx.lcols) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, ctx.lcols, M, N);
-        if(Cstart!=ctx.cstart) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
-    }
+    ctx.Nrows = ctx.Ncols = num_states;
+    ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+    ctx.cstart = ctx.rstart;
+    ctx.lcols = ctx.lrows;
+    ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
 
     /* Use the Hamiltonian directly for OpProdSumLL/RR */
     const Mat OpProdSumLL = LeftBlock.H;
@@ -834,6 +803,23 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
+
+    /*  Verify that the row and column mapping match what is expected */
+    {
+        PetscInt M,N, locrows, loccols, Istart, Cstart;
+        ierr = MatGetSize(MatOut, &M, &N); CHKERRQ(ierr);
+        ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
+        if(locrows!=ctx.lrows) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, ctx.lrows, M, N);
+        if(Istart!=ctx.rstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, ctx.rstart, M, N);
+        ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
+        if(loccols!=ctx.lcols) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, ctx.lcols, M, N);
+        if(Cstart!=ctx.cstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
+    }
+
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 
     ierr = PetscFree(ctx.idx_arr); CHKERRQ(ierr);
@@ -1138,7 +1124,12 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
         }
     }
 
+    ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
+    ierr = MatSetSizes(MatOut, PETSC_DECIDE, PETSC_DECIDE, ctx.Nrows, ctx.Ncols); CHKERRQ(ierr);
+    ierr = MatSetOptionsPrefix(MatOut, "H_"); CHKERRQ(ierr);
+    ierr = MatSetFromOptions(MatOut); CHKERRQ(ierr);
     ierr = MatMPIAIJSetPreallocation(MatOut, 0, ctx.Dnnz, 0, ctx.Onnz); CHKERRQ(ierr);
+
     /* Note: Preallocation for seq not required as long as mpiaij(mkl) matrices are specified */
 
     ierr = MatSetOption(MatOut, MAT_HERMITIAN, PETSC_TRUE); CHKERRQ(ierr);
