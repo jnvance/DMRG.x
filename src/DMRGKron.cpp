@@ -962,7 +962,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
         in quantum numbers */
     std::map< Op_t, PetscInt > fws_LOP = {};
     std::map< Op_t, PetscInt > Row_NumStates_ROP = {};
-    {
+    if(ctx.lrows){
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
         for( ; KIter.Loop(); ++KIter)
         {
@@ -1115,7 +1115,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     /*  Preallocate largest needed workspace */
     PetscInt *idx_arr;
     PetscScalar *val_arr;
-    PetscInt Nvals = (ctx.MaxIdx+1)-ctx.MinIdx;
+    PetscInt Nvals = (ctx.lrows > 0) ? (ctx.MaxIdx+1)-ctx.MinIdx : 0;
     ierr = PetscCalloc1(Nvals, &idx_arr); CHKERRQ(ierr);
     ierr = PetscCalloc1(Nvals, &val_arr); CHKERRQ(ierr);
 
@@ -1132,7 +1132,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     ACCUM_TIMINGS_SETUP(MatSetValues)
     ACCUM_TIMINGS_SETUP(MatLoop)
     INTERVAL_TIMINGS_BEGIN()
-    {
+    if(ctx.lrows){
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
         for( ; KIter.Loop(); ++KIter)
         {
