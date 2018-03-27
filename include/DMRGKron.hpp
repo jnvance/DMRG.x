@@ -306,13 +306,6 @@ private:
 
     } KronSumCtx;
 
-    PetscErrorCode KronSumPrepareTerms(
-        const std::vector< Hamiltonians::Term >& TermsLL,
-        const std::vector< Hamiltonians::Term >& TermsRR,
-        Mat& OpProdSumLL,
-        Mat& OpProdSumRR
-        );
-
     PetscErrorCode KronSumPrepare(
         const Mat& OpProdSumLL,
         const Mat& OpProdSumRR,

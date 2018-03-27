@@ -850,67 +850,6 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
 #define GetBlockMatFromTuple(BLOCK,TUPLE)\
             GetBlockMat((BLOCK), std::get<0>(TUPLE), std::get<1>(TUPLE))
 
-PetscErrorCode KronBlocks_t::KronSumPrepareTerms(
-    const std::vector< Hamiltonians::Term >& TermsLL,
-    const std::vector< Hamiltonians::Term >& TermsRR,
-    Mat& OpProdSumLL,
-    Mat& OpProdSumRR
-    )
-{
-    PetscErrorCode ierr;
-    /*  For each of the intra-block terms, perform the associated matrix multiplications of operators
-        residing on the same blocks and sum the block's terms */
-    {
-        /* Left intra-block */
-        for(size_t it = 0; it < TermsLL.size(); ++it)
-        {
-            Mat C = nullptr;
-            const Mat& A = GetBlockMat(LeftBlock,TermsLL[it].Iop,TermsLL[it].Isite);
-            const Mat& B = GetBlockMat(LeftBlock,TermsLL[it].Jop,TermsLL[it].Jsite);
-            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &C); CHKERRQ(ierr);
-            ierr = MatScale(C, TermsLL[it].a); CHKERRQ(ierr);
-            if(it==0){
-                OpProdSumLL = C;
-            } else {
-                ierr = MatAXPY(OpProdSumLL, PetscScalar(1.0), C, DIFFERENT_NONZERO_PATTERN); CHKERRQ(ierr);
-                ierr = MatDestroy(&C); CHKERRQ(ierr);
-            }
-        }
-        ierr = VerifySzAssumption({OpProdSumLL}, SideLeft); CHKERRQ(ierr);
-
-        /* Right intra-block */
-        for(size_t it = 0; it < TermsRR.size(); ++it)
-        {
-            Mat C = nullptr;
-            const Mat& A = GetBlockMat(RightBlock,TermsRR[it].Iop,TermsRR[it].Isite);
-            const Mat& B = GetBlockMat(RightBlock,TermsRR[it].Jop,TermsRR[it].Jsite);
-            ierr = MatMatMult(A, B, MAT_INITIAL_MATRIX, PETSC_DEFAULT, &C); CHKERRQ(ierr);
-            ierr = MatScale(C, TermsRR[it].a); CHKERRQ(ierr);
-            if(it==0){
-                OpProdSumRR = C;
-            } else {
-                ierr = MatAXPY(OpProdSumRR, PetscScalar(1.0), C, DIFFERENT_NONZERO_PATTERN); CHKERRQ(ierr);
-                ierr = MatDestroy(&C); CHKERRQ(ierr);
-            }
-        }
-        ierr = VerifySzAssumption({OpProdSumRR}, SideRight); CHKERRQ(ierr);
-    }
-
-    #if defined(PETSC_USE_DEBUG)
-    {
-        PetscBool flg = PETSC_FALSE;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_block",&flg,NULL); CHKERRQ(ierr);
-        if(flg)
-        {
-            ierr = MatPeek(OpProdSumLL, "OpProdSumLL"); CHKERRQ(ierr);
-            ierr = MatPeek(OpProdSumRR, "OpProdSumRR"); CHKERRQ(ierr);
-        }
-    }
-    #endif
-
-    return(0);
-}
-
 
 PetscErrorCode KronBlocks_t::KronSumPrepare(
     const Mat& OpProdSumLL,
