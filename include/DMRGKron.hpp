@@ -292,17 +292,16 @@ private:
         PetscInt *Onnz;
 
         /** Maximum number of elements across all local rows of MatOut */
-        PetscInt MaxElementsPerRow;
+        PetscInt MaxElementsPerRow = 0;
+
+        /** Smallest non-zero index in the current set of local rows */
+        PetscInt MinIdx;
+
+        /** Largest non-zero index in the current set of local rows */
+        PetscInt MaxIdx;
 
         /** Predicted maximum number of elements on each local row */
         std::vector< PetscInt > Maxnnz;
-
-        /** Workspace for the indices in a row.
-            This must be allocated and deallocated within a call to KronSumConstruct() */
-        PetscInt *idx_arr;
-
-        /** Workspace for the values in a row. */
-        PetscScalar *val_arr;
 
     } KronSumCtx;
 

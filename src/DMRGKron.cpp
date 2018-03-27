@@ -796,33 +796,11 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     }
     #endif
 
-    /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
-    ierr = PetscCalloc1(ctx.Ncols, &ctx.idx_arr); CHKERRQ(ierr);
-
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
-
-    /*  Verify that the row and column mapping match what is expected */
-    {
-        PetscInt M,N, locrows, loccols, Istart, Cstart;
-        ierr = MatGetSize(MatOut, &M, &N); CHKERRQ(ierr);
-        ierr = PreSplitOwnership(mpi_comm, M, locrows, Istart); CHKERRQ(ierr);
-        if(locrows!=ctx.lrows) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, ctx.lrows, M, N);
-        if(Istart!=ctx.rstart) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, ctx.rstart, M, N);
-        ierr = PreSplitOwnership(mpi_comm, N, loccols, Cstart); CHKERRQ(ierr);
-        if(loccols!=ctx.lcols) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, ctx.lcols, M, N);
-        if(Cstart!=ctx.cstart) SETERRQ4(PETSC_COMM_SELF, 1,
-            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
-    }
-
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
-
-    ierr = PetscFree(ctx.idx_arr); CHKERRQ(ierr);
 
     #if defined(PETSC_USE_DEBUG)
     if(__flg){
@@ -964,9 +942,15 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     PetscErrorCode ierr = 0;
     FUNCTION_TIMINGS_BEGIN()
 
+    /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
+    PetscInt *idx_arr;
+    ierr = PetscCalloc1(ctx.Ncols, &idx_arr); CHKERRQ(ierr);
+
     /*  Go through each local row, then go through each term in ctx
         and determine the number of entries that go into each row   */
     ctx.MaxElementsPerRow = 0;
+    ctx.MinIdx = ctx.Ncols;
+    ctx.MaxIdx = 0;
     ierr = PetscCalloc2(ctx.lrows, &ctx.Dnnz, ctx.lrows, &ctx.Onnz); CHKERRQ(ierr);
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
@@ -1011,7 +995,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
             }
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
-            ierr = PetscMemzero(ctx.idx_arr, ctx.Ncols*sizeof(ctx.idx_arr[0])); CHKERRQ(ierr);
+            ierr = PetscMemzero(idx_arr, ctx.Ncols*sizeof(idx_arr[0])); CHKERRQ(ierr);
             for(const KronSumTerm& term: ctx.Terms)
             {
                 if(term.a == PetscScalar(0.0)) continue;
@@ -1047,28 +1031,41 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
                 {
                     for(size_t r=0; r<nz_R; ++r)
                     {
-                        ctx.idx_arr[ (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O ] = 1;
+                        idx_arr[ (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O ] = 1;
                     }
                 }
             }
             /* Sum up all columns in the diagonal and off-diagonal */
             PetscInt dnnz = 0, onnz=0, i;
-            for (i=0; i<ctx.cstart; i++)        onnz += ctx.idx_arr[i];
-            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += ctx.idx_arr[i];
-            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += ctx.idx_arr[i];
+            for (i=0; i<ctx.cstart; i++)        onnz += idx_arr[i];
+            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += idx_arr[i];
+            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += idx_arr[i];
             ctx.Dnnz[lrow] = dnnz;
             ctx.Onnz[lrow] = onnz;
             nelts = dnnz + onnz;
             if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
+
+            /* Determine the smallest and largest indices for this row */
+            if(nelts){
+                PetscInt i = 0;
+                while(i < ctx.Ncols && !idx_arr[i]) i++;
+                if(i < ctx.MinIdx)  ctx.MinIdx = i;
+
+                i = ctx.Ncols-1;
+                while(i > 0 && !idx_arr[i]) i--;
+                if(i > ctx.MaxIdx)  ctx.MaxIdx = i;
+            }
         }
     }
+
+    ierr = PetscFree(idx_arr); CHKERRQ(ierr);
 
     ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
     ierr = MatSetSizes(MatOut, PETSC_DECIDE, PETSC_DECIDE, ctx.Nrows, ctx.Ncols); CHKERRQ(ierr);
     ierr = MatSetOptionsPrefix(MatOut, "H_"); CHKERRQ(ierr);
     ierr = MatSetFromOptions(MatOut); CHKERRQ(ierr);
     ierr = MatMPIAIJSetPreallocation(MatOut, 0, ctx.Dnnz, 0, ctx.Onnz); CHKERRQ(ierr);
-
+    ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
     /* Note: Preallocation for seq not required as long as mpiaij(mkl) matrices are specified */
 
     ierr = MatSetOption(MatOut, MAT_HERMITIAN, PETSC_TRUE); CHKERRQ(ierr);
@@ -1080,7 +1077,24 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ierr = MatSetOption(MatOut, MAT_NO_OFF_PROC_ZERO_ROWS, PETSC_TRUE); CHKERRQ(ierr);
     ierr = MatSetOption(MatOut, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE); CHKERRQ(ierr);
 
-    ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
+    /*  Verify that the row and column mapping match what is expected */
+    {
+        const PetscInt M = MatOut->rmap->N;
+        const PetscInt N = MatOut->cmap->N;
+        const PetscInt Istart  = MatOut->rmap->rstart;
+        const PetscInt locrows = MatOut->rmap->rend - Istart;
+        if(locrows!=ctx.lrows) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for locrows. Expected %d. Got %d. Size: %d x %d.", locrows, ctx.lrows, M, N);
+        if(Istart!=ctx.rstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Istart. Expected %d. Got %d. Size: %d x %d.",  Istart, ctx.rstart, M, N);
+        const PetscInt Cstart  = MatOut->cmap->rstart;
+        const PetscInt loccols = MatOut->cmap->rend - Cstart;
+        if(loccols!=ctx.lcols) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for loccols. Expected %d. Got %d. Size: %d x %d.", loccols, ctx.lcols, M, N);
+        if(Cstart!=ctx.cstart) SETERRQ4(PETSC_COMM_SELF, 1,
+            "Incorrect guess for Cstart. Expected %d. Got %d. Size: %d x %d.",  Cstart, ctx.cstart, M, N);
+    }
+
     FUNCTION_TIMINGS_END()
     return(0);
 }
@@ -1095,10 +1109,14 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     FUNCTION_TIMINGS_BEGIN()
 
     /*  Preallocate largest needed workspace */
-    ierr = PetscCalloc1(ctx.Ncols, &ctx.val_arr); CHKERRQ(ierr);
+    PetscInt *idx_arr;
+    PetscScalar *val_arr;
+    PetscInt Nvals = (ctx.MaxIdx+1)-ctx.MinIdx;
+    ierr = PetscCalloc1(Nvals, &idx_arr); CHKERRQ(ierr);
+    ierr = PetscCalloc1(Nvals, &val_arr); CHKERRQ(ierr);
 
     /* Fill in all indices */
-    for(PetscInt i=0; i<ctx.Ncols; ++i) ctx.idx_arr[i] = i;
+    for(PetscInt i=0; i < Nvals; ++i) idx_arr[i] = ctx.MinIdx + i;
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
         assumes that the right block is a valid operator type such that the resulting matrix term is block-diagonal
@@ -1147,7 +1165,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             }
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
-            ierr = PetscMemzero(ctx.val_arr, ctx.Ncols*sizeof(ctx.val_arr[0])); CHKERRQ(ierr);
+            ierr = PetscMemzero(val_arr, Nvals*sizeof(val_arr[0])); CHKERRQ(ierr);
             ACCUM_TIMINGS_END(KronIterSetup)
             ACCUM_TIMINGS_BEGIN(MatLoop)
             for(const KronSumTerm& term: ctx.Terms)
@@ -1177,23 +1195,26 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                 if(!(flg[SideLeft] && flg[SideRight])) continue;
                 if(nz_L*nz_R == 0) continue;
 
-                fws_O = fws_LOP.at(term.OpTypeA);
+                fws_O = fws_LOP.at(term.OpTypeA) - ctx.MinIdx;
                 col_NStatesR = Row_NumStates_ROP.at(term.OpTypeB);
                 if(col_NStatesR==-1) SETERRQ(PETSC_COMM_SELF,1,"Accessed incorrect value.");
                 for(size_t l=0; l<nz_L; ++l)
                 {
                     for(size_t r=0; r<nz_R; ++r)
                     {
-                        ctx.val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
+                        val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
                 }
             }
             ACCUM_TIMINGS_END(MatLoop)
             ACCUM_TIMINGS_BEGIN(MatSetValues)
-            ierr = MatSetValues(MatOut, 1, &Irow, ctx.Ncols, ctx.idx_arr, ctx.val_arr, INSERT_VALUES); CHKERRQ(ierr);
+            ierr = MatSetValues(MatOut, 1, &Irow, Nvals, idx_arr, val_arr, INSERT_VALUES); CHKERRQ(ierr);
             ACCUM_TIMINGS_END(MatSetValues)
         }
     }
+    ierr = PetscFree(val_arr); CHKERRQ(ierr);
+    ierr = PetscFree(idx_arr); CHKERRQ(ierr);
+
     ACCUM_TIMINGS_PRINT(KronIterSetup,  "  KronIterSetup")
     ACCUM_TIMINGS_PRINT(MatLoop,        "  MatLoop")
     ACCUM_TIMINGS_PRINT(MatSetValues,   "  MatSetValues")
@@ -1202,8 +1223,6 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     INTERVAL_TIMINGS_BEGIN()
     ierr = MatEnsureAssembled(MatOut); CHKERRQ(ierr);
     INTERVAL_TIMINGS_END("MatEnsureAssembled")
-
-    ierr = PetscFree(ctx.val_arr); CHKERRQ(ierr);
 
     FUNCTION_TIMINGS_END()
     FUNCTION_TIMINGS_PRINT_SPACE()
