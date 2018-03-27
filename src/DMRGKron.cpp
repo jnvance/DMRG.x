@@ -1106,6 +1106,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     std::map< Op_t, PetscInt > fws_LOP = {};
     std::map< Op_t, PetscInt > Row_NumStates_ROP = {};
 
+    ACCUM_TIMINGS_SETUP(KronIterSetup)
     ACCUM_TIMINGS_SETUP(MatSetValues)
     ACCUM_TIMINGS_SETUP(MatLoop)
     INTERVAL_TIMINGS_BEGIN()
@@ -1113,6 +1114,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
         for( ; KIter.Loop(); ++KIter)
         {
+            ACCUM_TIMINGS_BEGIN(KronIterSetup)
             const PetscInt Irow = KIter.Steps() + ctx.rstart;
             const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
             const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
@@ -1146,9 +1148,10 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
             ierr = PetscMemzero(ctx.val_arr, ctx.Ncols*sizeof(ctx.val_arr[0])); CHKERRQ(ierr);
+            ACCUM_TIMINGS_END(KronIterSetup)
+            ACCUM_TIMINGS_BEGIN(MatLoop)
             for(const KronSumTerm& term: ctx.Terms)
             {
-                ACCUM_TIMINGS_BEGIN(MatLoop)
                 if(term.a == PetscScalar(0.0)) continue;
 
                 if(term.OpTypeA != OpEye){
@@ -1184,13 +1187,14 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                         ctx.val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
                 }
-                ACCUM_TIMINGS_END(MatLoop)
             }
+            ACCUM_TIMINGS_END(MatLoop)
             ACCUM_TIMINGS_BEGIN(MatSetValues)
             ierr = MatSetValues(MatOut, 1, &Irow, ctx.Ncols, ctx.idx_arr, ctx.val_arr, INSERT_VALUES); CHKERRQ(ierr);
             ACCUM_TIMINGS_END(MatSetValues)
         }
     }
+    ACCUM_TIMINGS_PRINT(KronIterSetup,  "  KronIterSetup")
     ACCUM_TIMINGS_PRINT(MatLoop,        "  MatLoop")
     ACCUM_TIMINGS_PRINT(MatSetValues,   "  MatSetValues")
     INTERVAL_TIMINGS_END("KronSumFillMatrixLoop")
