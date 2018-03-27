@@ -514,6 +514,7 @@ private:
     {
         PetscErrorCode ierr;
         PetscLogDouble t0, tenlr, tkron, tdiag, trdms, trotb;
+        TimingsData timings_data;
         ierr = PetscTime(&t0); CHKERRQ(ierr);
 
         /* Fill-in data from input blocks */
@@ -545,6 +546,8 @@ private:
         ierr = SysBlockEnl.InitializeSave(BlockDir("SysEnl",0)); CHKERRQ(ierr);
 
         ierr = PetscTime(&tenlr); CHKERRQ(ierr);
+        timings_data.tEnlr = tenlr-t0;
+        if(!mpi_rank && verbose) printf("* Add One Site:          %12.6f s\n", timings_data.tEnlr);
 
         step_data.NumSites_SysEnl = SysBlockEnl.NumSites();
         step_data.NumSites_EnvEnl = EnvBlockEnl.NumSites();
@@ -646,7 +649,10 @@ private:
         #endif
 
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
+
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
+        timings_data.tKron = tkron-tenlr;
+        if(!mpi_rank && verbose)  printf("* Build Superblock H:    %12.6f s\n", timings_data.tKron);
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -692,15 +698,10 @@ private:
         }
         step_data.GSEnergy = gse_r;
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+
         ierr = PetscTime(&tdiag); CHKERRQ(ierr);
-        if(!mpi_rank && verbose)
-        {
-            printf("  Superblock:\n");
-            printf("    NumStates:   %d\n", KronBlocks.NumStates());
-            printf("    NumSites:    %d\n", NumSitesTotal);
-            printf("    Energy:      %-10.10g\n", gse_r);
-            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
-        }
+        timings_data.tDiag = tdiag-tkron;
+        if(!mpi_rank && verbose) printf("* Solve Ground State:    %12.6f s\n", timings_data.tDiag);
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -726,14 +727,6 @@ private:
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
         /* TODO: Add an option to accept flg for redundant blocks */
 
-        if(!mpi_rank && verbose){
-            printf( "  Sys Block Out\n"
-                    "    NumStates: %d\n"
-                    "    TrunError: %g\n", QN_L.NumStates(), TruncErr_L);
-            printf( "  Env Block Out\n"
-                    "    NumStates: %d\n"
-                    "    TrunError: %g\n", QN_R.NumStates(), TruncErr_R);
-        }
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
 
@@ -741,7 +734,10 @@ private:
             copy enlarged blocks to out blocks but overwrite the matrices */
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
+
         ierr = PetscTime(&trdms); CHKERRQ(ierr);
+        timings_data.tRdms = trdms-tdiag;
+        if(!mpi_rank && verbose) printf("* Eigendec. of RDMs:     %12.6f s\n", timings_data.tRdms);
 
         ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
         ierr = SysBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
@@ -775,18 +771,28 @@ private:
 
         ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
         ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
-        ierr = PetscTime(&trotb); CHKERRQ(ierr);
 
-        TimingsData timings_data;
+        ierr = PetscTime(&trotb); CHKERRQ(ierr);
+        timings_data.tRotb = trotb-trdms;
+        if(!mpi_rank && verbose) printf("* Rotation of Operators: %12.6f s\n", timings_data.tRotb);
+
+        // TimingsData timings_data;
         timings_data.Total = trotb - t0;
         timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
-        timings_data.tEnlr = tenlr-t0;
-        timings_data.tKron = tkron-tenlr;
-        timings_data.tDiag = tdiag-tkron;
-        timings_data.tRdms = trdms-tdiag;
-        timings_data.tRotb = trotb-trdms;
 
         if(!mpi_rank && verbose){
+            printf("\n");
+            printf("  Superblock:\n");
+            printf("    NumStates:   %d\n", KronBlocks.NumStates());
+            printf("    NumSites:    %d\n", NumSitesTotal);
+            printf("    Energy:      %-10.10g\n", gse_r);
+            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
+            printf("  Sys Block Out\n"
+                   "    NumStates: %d\n"
+                   "    TrunError: %g\n", QN_L.NumStates(), TruncErr_L);
+            printf("  Env Block Out\n"
+                   "    NumStates: %d\n"
+                   "    TrunError: %g\n", QN_R.NumStates(), TruncErr_R);
             printf("\n");
             printf("  Total Time:              %12.6f s\n", timings_data.Total);
             printf("    Add One Site:          %12.6f s \t%6.2f %%\n",

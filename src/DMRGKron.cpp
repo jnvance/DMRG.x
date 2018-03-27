@@ -36,6 +36,8 @@
 
 #if defined(DMRG_KRON_TIMINGS)
     #include <petsctime.h>
+    #define TIMINGS_NEWLINE() \
+        if(!mpi_rank) printf("\n");
     #define FUNCTION_TIMINGS_BEGIN() \
         PetscLogDouble tstart, tend; \
         if(!mpi_rank) PetscTime(&tstart);
@@ -61,6 +63,7 @@
             printf("      %-28s %-12.6f s\n", TEXT, tot_##LABEL); \
         }
 #else
+    #define TIMINGS_NEWLINE()
     #define FUNCTION_TIMINGS_BEGIN()
     #define FUNCTION_TIMINGS_END()
     #define FUNCTION_TIMINGS_PRINT_SPACE()
@@ -837,6 +840,7 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     )
 {
     PetscErrorCode ierr = 0;
+    TIMINGS_NEWLINE()
     FUNCTION_TIMINGS_BEGIN()
 
     /*  Determine the local rows to be collected from each of the left and right block */
