@@ -31,10 +31,14 @@ public:
     KronBlocks_t(
         Block::SpinOneHalf& LeftBlock,
         Block::SpinOneHalf& RightBlock,
-        const std::vector<PetscReal>& QNSectors = {} /**< [in] list of quantum number sectors for keeping selected states */
+        const std::vector<PetscReal>& QNSectors, /**< [in] list of quantum number sectors for keeping selected states */
+        FILE *fp_prealloc,
+        const PetscInt& GlobIdx
         ):
+        GlobIdx(GlobIdx),
         LeftBlock(LeftBlock),
-        RightBlock(RightBlock)
+        RightBlock(RightBlock),
+        fp_prealloc(fp_prealloc)
     {
         /* Require blocks to be initialized */
         if(!LeftBlock.Initialized()) throw std::runtime_error("Left input block not initialized.");
@@ -111,7 +115,9 @@ public:
         kb_offset.push_back(sum);
         num_states = sum;
 
-    }
+        do_saveprealloc = PetscBool(fp_prealloc!=NULL);
+        MPIU_Allreduce(MPI_IN_PLACE, &do_saveprealloc, 1, MPI_INT, MPI_SUM, PETSC_COMM_WORLD);
+    };
 
     /** Returns the total number blocks */
     size_t size() const { return KronBlocks.size(); }
@@ -202,6 +208,8 @@ private:
     MPI_Comm mpi_comm = PETSC_COMM_SELF;
     PetscMPIInt mpi_rank, mpi_size;
 
+    const PetscInt GlobIdx;
+
     /** Storage for kronblocks */
     std::vector<KronBlock_t> KronBlocks;
 
@@ -228,6 +236,12 @@ private:
 
     /** Reference to the right block object */
     Block::SpinOneHalf& RightBlock;
+
+    /** File to store preallocation data for each processor */
+    FILE *fp_prealloc;
+
+    /** Whether to store preallocation data for each processor */
+    PetscBool do_saveprealloc = PETSC_FALSE;
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)
@@ -322,6 +336,7 @@ private:
         Mat& MatOut
         );
 
+    PetscErrorCode SavePreallocData(const KronSumCtx& ctx);
 };
 
 

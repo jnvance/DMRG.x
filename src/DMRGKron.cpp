@@ -3,6 +3,7 @@
 #include <set>
 #include <map>
 #include <unordered_map>
+#include <stdio.h>
 
 #include "DMRGKron.hpp"
 #include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
@@ -557,7 +558,7 @@ PetscErrorCode KronEye_Explicit(
     ierr = RightBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
 
     /*  Create a list of tuples of quantum numbers following the kronecker product structure */
-    KronBlocks_t KronBlocks(LeftBlock, RightBlock);
+    KronBlocks_t KronBlocks(LeftBlock, RightBlock, {}, NULL, -1);
 
     #if DMRG_KRON_TESTING
         PRINT_RANK_BEGIN()
@@ -1061,8 +1062,8 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
             }
         }
     }
-
     ierr = PetscFree(idx_arr); CHKERRQ(ierr);
+    ierr = SavePreallocData(ctx);
 
     ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
     ierr = MatSetSizes(MatOut, PETSC_DECIDE, PETSC_DECIDE, ctx.Nrows, ctx.Ncols); CHKERRQ(ierr);
@@ -1230,5 +1231,45 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
 
     FUNCTION_TIMINGS_END()
     FUNCTION_TIMINGS_PRINT_SPACE()
+    return(0);
+}
+
+PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
+{
+    if(!do_saveprealloc) return(0);
+
+    PetscInt Dnnz=0, Onnz=0;
+    for(PetscInt irow=0; irow<ctx.lrows; ++irow) Dnnz += ctx.Dnnz[irow];
+    for(PetscInt irow=0; irow<ctx.lrows; ++irow) Onnz += ctx.Onnz[irow];
+
+    PetscInt ierr;
+    PetscInt *Dnnz_arr, *Onnz_arr;
+    if(!mpi_rank){
+        ierr = PetscCalloc2(mpi_size, &Dnnz_arr, mpi_size, &Onnz_arr); CHKERRQ(ierr);
+    }
+    ierr = MPI_Gather(&Dnnz, 1, MPIU_INT, Dnnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ierr = MPI_Gather(&Onnz, 1, MPIU_INT, Onnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+    if(mpi_rank) return(0);
+
+    if(GlobIdx) fprintf(fp_prealloc,",\n");
+    fprintf(fp_prealloc,"  {\n"
+                        "    \"GlobIdx\" : %d,\n"
+                        "    \"Dnnz\" : [", GlobIdx);
+    fprintf(fp_prealloc," %d", Dnnz_arr[0]);
+    for(PetscInt iproc=1; iproc<mpi_size; ++iproc){
+        fprintf(fp_prealloc,", %d",Dnnz_arr[iproc]);
+    }
+    fprintf(fp_prealloc,"],\n"
+                        "    \"Onnz\" : [");
+    fprintf(fp_prealloc," %d", Onnz_arr[0]);
+    for(PetscInt iproc=1; iproc<mpi_size; ++iproc){
+        fprintf(fp_prealloc,", %d",Onnz_arr[iproc]);
+    }
+    fprintf(fp_prealloc,"]\n  }");
+    fflush(fp_prealloc);
+    if(!mpi_rank){
+        ierr = PetscFree2(Dnnz_arr, Onnz_arr); CHKERRQ(ierr);
+    }
     return(0);
 }

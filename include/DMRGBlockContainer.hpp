@@ -152,6 +152,13 @@ public:
             fprintf(fp_data,",\n");
         }
 
+        /* do_save_prealloc: default value is FALSE */
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); assert(!ierr);
+        if(do_save_prealloc){
+            ierr = PetscFOpen(mpi_comm, (data_dir+std::string("HamiltonianPrealloc.json")).c_str(), "w", &fp_prealloc); assert(!ierr);
+            if(!mpi_rank) fprintf(fp_prealloc,"[\n");
+        }
+
         /*  Print some info to stdout */
         if(!mpi_rank){
             printf( "=========================================\n"
@@ -377,6 +384,12 @@ public:
         ierr = SaveLoopsData();
         if(!mpi_rank) fprintf(fp_data,"\n}\n");
         ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
+
+        if(do_save_prealloc){
+            if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
+            ierr = PetscFClose(mpi_comm, fp_prealloc); assert(!ierr);
+        }
+
         init = PETSC_FALSE;
         return(0);
     }
@@ -478,6 +491,9 @@ private:
     /** Tells whether data should be saved in tabular form, instead of verbose json */
     PetscBool data_tabular = PETSC_TRUE;
 
+    /** Tells whether to save preallocation data for the superblock Hamiltonian */
+    PetscBool do_save_prealloc = PETSC_FALSE;
+
     /** File to store basic data (energy, number of sites, etc) */
     FILE *fp_step;
 
@@ -489,6 +505,9 @@ private:
 
     /** File to store timings data for each section of a single iteration */
     FILE *fp_data;
+
+    /** File to store preallocation data of the superblock Hamiltonian */
+    FILE *fp_prealloc = NULL;
 
     /** Global index key which must be unique for each record */
     PetscInt GlobIdx = 0;
@@ -577,7 +596,7 @@ private:
         if(no_symm) {
             QNSectors = {};
         }
-        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, QNSectors);
+        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, QNSectors, fp_prealloc, GlobIdx);
         step_data.NumStates_H = KronBlocks.NumStates();
         #if defined(PETSC_USE_DEBUG)
         {
