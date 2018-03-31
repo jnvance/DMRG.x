@@ -179,7 +179,7 @@ public:
     /** Destroys all created blocks */
     ~DMRGBlockContainer()
     {
-        if(Destroy()) throw std::runtime_error("Error in destroying DMRGBlockContainer object.");
+        PetscErrorCode ierr = Destroy(); assert(!ierr);
     }
 
     /** Performs the warmup stage of DMRG.
