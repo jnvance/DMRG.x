@@ -297,7 +297,7 @@ private:
         std::vector< KronSumTerm > Terms;
 
         /** List of unique submatrices to be destroyed later */
-        std::vector< Mat > LocalSubMats;
+        std::vector< Mat* > LocalSubMats;
 
         /** Preallocation data of the output matrix for local diagonal rows */
         PetscInt *Dnnz;

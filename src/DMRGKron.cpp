@@ -813,8 +813,8 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     #endif
 
     /*  Destroy local submatrices and temporary matrices */
-    for(Mat& mat: ctx.LocalSubMats){
-        ierr = MatDestroy(&mat); CHKERRQ(ierr);
+    for(Mat *mat: ctx.LocalSubMats){
+        ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
     }
     /*  Destroy Sm in advance to avoid clashes with modifications in Sp */
     if(CreateSmL){
@@ -886,14 +886,14 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
         Mat *A;
         ierr = MatCreateSubMatrices(OpProdSumLL, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &A); CHKERRQ(ierr);
         ctx.Terms.push_back({1.0,OpSz,*A,OpEye,nullptr});
-        ctx.LocalSubMats.push_back(*A);
+        ctx.LocalSubMats.push_back(A);
     }
     /*  RR terms */
     {
         Mat *B;
         ierr = MatCreateSubMatrices(OpProdSumRR, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &B); CHKERRQ(ierr);
         ctx.Terms.push_back({1.0,OpEye,nullptr,OpSz,*B});
-        ctx.LocalSubMats.push_back(*B);
+        ctx.LocalSubMats.push_back(B);
     }
     /*  LR terms
         Create a mapping for the matrices needed in the L-R block:
@@ -910,14 +910,14 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
         Mat *submat;
         ierr = MatCreateSubMatrices(mat, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &submat); CHKERRQ(ierr);
         Op.second = submat[0];
-        ctx.LocalSubMats.push_back(submat[0]);
+        ctx.LocalSubMats.push_back(submat);
     }
     for (auto& Op: OpRight){
         const Mat mat = GetBlockMatFromTuple(RightBlock, Op.first);
         Mat *submat;
         ierr = MatCreateSubMatrices(mat, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &submat); CHKERRQ(ierr);
         Op.second = submat[0];
-        ctx.LocalSubMats.push_back(submat[0]);
+        ctx.LocalSubMats.push_back(submat);
     }
     /*  Generate the terms */
     for (const Hamiltonians::Term& term: TermsLR){
