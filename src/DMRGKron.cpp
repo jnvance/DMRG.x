@@ -40,7 +40,7 @@
     #define TIMINGS_NEWLINE() \
         if(!mpi_rank) printf("\n");
     #define FUNCTION_TIMINGS_BEGIN() \
-        PetscLogDouble tstart, tend; \
+        PetscLogDouble tstart = 0.0, tend = 0.0; \
         if(!mpi_rank) PetscTime(&tstart);
     #define FUNCTION_TIMINGS_END() \
         if(!mpi_rank){ \
@@ -48,7 +48,7 @@
             printf("    %-28s   %-12.6f s\n", __FUNCTION__, tend - tstart); \
         }
     #define FUNCTION_TIMINGS_PRINT_SPACE() if(!mpi_rank) printf("\n");
-    #define INTERVAL_TIMINGS_SETUP() PetscLogDouble itstart, itend;
+    #define INTERVAL_TIMINGS_SETUP() PetscLogDouble itstart = 0.0, itend = 0.0;
     #define INTERVAL_TIMINGS_BEGIN() if(!mpi_rank) PetscTime(&itstart);
     #define INTERVAL_TIMINGS_END(LABEL) \
         if(!mpi_rank){ \
