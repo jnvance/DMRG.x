@@ -55,7 +55,7 @@
             PetscTime(&itend); \
             printf("      %-28s %-12.6f s\n", LABEL, itend - itstart); \
         }
-    #define ACCUM_TIMINGS_SETUP(LABEL)  PetscLogDouble ts_##LABEL, te_##LABEL, tot_##LABEL = 0.0;
+    #define ACCUM_TIMINGS_SETUP(LABEL)  PetscLogDouble ts_##LABEL = 0.0, te_##LABEL = 0.0, tot_##LABEL = 0.0;
     #define ACCUM_TIMINGS_BEGIN(LABEL)  if(!mpi_rank){ PetscTime(&ts_##LABEL); }
     #define ACCUM_TIMINGS_END(LABEL)    if(!mpi_rank){ PetscTime(&te_##LABEL); \
         tot_##LABEL += (te_##LABEL - ts_##LABEL); }
