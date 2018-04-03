@@ -482,7 +482,7 @@ PetscErrorCode MatKronEyeConstruct(
     ierr = MatEnsureAssembled_MultipleMatGroups({BlockOut.Sz(), BlockOut.Sp()}); CHKERRQ(ierr);
 
     for(PetscInt i=0; i<2*TotSites; ++i){
-        ierr = MatDestroy(SubMatArray[i]); CHKERRQ(ierr);
+        ierr = MatDestroySubMatrices(1, &SubMatArray[i]); CHKERRQ(ierr);
     }
     ierr = PetscFree(idx); CHKERRQ(ierr);
     ierr = PetscFree(SubMatArray); CHKERRQ(ierr);
