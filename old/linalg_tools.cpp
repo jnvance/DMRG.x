@@ -1184,7 +1184,6 @@ PetscErrorCode MatCreateAIJ_FromSeqList(
     PetscMPIInt *sendcounts = nullptr;  /* The number of rows to scatter to each process */
     PetscMPIInt *displs = nullptr;      /* The starting row for each process */
     PetscMPIInt recvcount = 0;          /* Number of entries to receive from scatter */
-    PetscInt tot_nz = 0; /* Total number of non-zeros to be printed out */
 
     /* Matrix buffers for MatSetValues */
     PetscInt    *mat_cols;
@@ -1319,7 +1318,6 @@ PetscErrorCode MatCreateAIJ_FromSeqList(
                 sendcounts[Irank] += Tnnz[Irow];
             tot_nnz += sendcounts[Irank];
         }
-        tot_nz = tot_nnz;
 
         /* Scatter matrix data */
         ierr = MPI_Scatterv(mat_cols, sendcounts, displs, MPIU_INT, MPI_IN_PLACE, recvcount, MPIU_INT, 0, comm); CHKERRQ(ierr);
