@@ -782,6 +782,7 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     /* Assumes that output matrix is square */
     KronSumCtx ctx;
     ctx.Nrows = ctx.Ncols = num_states;
+    /* Split the ownership of rows using the default way in petsc */
     ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
     ctx.cstart = ctx.rstart;
     ctx.lcols = ctx.lrows;
@@ -803,6 +804,7 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
+    ierr = KronSumCalculatePreallocation(ctx); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 
@@ -939,9 +941,8 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
 #undef GetBlockMat
 #undef GetBlockMatFromTuple
 
-PetscErrorCode KronBlocks_t::KronSumPreallocate(
-    KronSumCtx& ctx,
-    Mat& MatOut
+PetscErrorCode KronBlocks_t::KronSumCalculatePreallocation(
+    KronSumCtx& ctx
     )
 {
     PetscErrorCode ierr = 0;
@@ -1065,8 +1066,20 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
     ierr = PetscFree(idx_arr); CHKERRQ(ierr);
     ierr = SavePreallocData(ctx);
 
+    FUNCTION_TIMINGS_END()
+    return(0);
+}
+
+PetscErrorCode KronBlocks_t::KronSumPreallocate(
+    KronSumCtx& ctx,
+    Mat& MatOut
+    )
+{
+    PetscErrorCode ierr = 0;
+    FUNCTION_TIMINGS_BEGIN()
+
     ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
-    ierr = MatSetSizes(MatOut, PETSC_DECIDE, PETSC_DECIDE, ctx.Nrows, ctx.Ncols); CHKERRQ(ierr);
+    ierr = MatSetSizes(MatOut, ctx.lrows, ctx.lcols, ctx.Nrows, ctx.Ncols); CHKERRQ(ierr);
     ierr = MatSetOptionsPrefix(MatOut, "H_"); CHKERRQ(ierr);
     ierr = MatSetFromOptions(MatOut); CHKERRQ(ierr);
     ierr = MatMPIAIJSetPreallocation(MatOut, 0, ctx.Dnnz, 0, ctx.Onnz); CHKERRQ(ierr);
@@ -1244,9 +1257,8 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 
     PetscInt ierr;
     PetscInt *Dnnz_arr, *Onnz_arr;
-    if(!mpi_rank){
-        ierr = PetscCalloc2(mpi_size, &Dnnz_arr, mpi_size, &Onnz_arr); CHKERRQ(ierr);
-    }
+    PetscInt arr_size = mpi_rank ? 0 : mpi_size;
+    ierr = PetscCalloc2(arr_size, &Dnnz_arr, arr_size, &Onnz_arr); CHKERRQ(ierr);
     ierr = MPI_Gather(&Dnnz, 1, MPIU_INT, Dnnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
     ierr = MPI_Gather(&Onnz, 1, MPIU_INT, Onnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
 
@@ -1268,8 +1280,6 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
     }
     fprintf(fp_prealloc,"]\n  }");
     fflush(fp_prealloc);
-    if(!mpi_rank){
-        ierr = PetscFree2(Dnnz_arr, Onnz_arr); CHKERRQ(ierr);
-    }
+    ierr = PetscFree2(Dnnz_arr, Onnz_arr); CHKERRQ(ierr);
     return(0);
 }

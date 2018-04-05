@@ -203,6 +203,14 @@ public:
         Mat& MatOut                                     /**< [out]  resultant matrix */
         );
 
+    PetscErrorCode KronSumSetRedistribute(
+        const PetscBool& do_redistribute_in = PETSC_TRUE
+        )
+    {
+        do_redistribute = do_redistribute_in;
+        return(0);
+    }
+
 private:
 
     MPI_Comm mpi_comm = PETSC_COMM_SELF;
@@ -242,6 +250,9 @@ private:
 
     /** Whether to store preallocation data for each processor */
     PetscBool do_saveprealloc = PETSC_FALSE;
+
+    /** Whether to redistribute the resulting KronSum */
+    PetscBool do_redistribute = PETSC_FALSE;
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)
@@ -324,6 +335,10 @@ private:
         const Mat& OpProdSumRR,
         const std::vector< Hamiltonians::Term >& TermsLR,
         KronSumCtx& SubMat
+        );
+
+    PetscErrorCode KronSumCalculatePreallocation(
+        KronSumCtx& ctx
         );
 
     PetscErrorCode KronSumPreallocate(
