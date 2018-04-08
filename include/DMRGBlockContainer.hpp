@@ -266,6 +266,7 @@ public:
 
                 if(!mpi_rank){
                     if(verbose) PrintLines();
+                    printf(" %s  %d/%d/%d\n", "WARMUP", LoopIdx, StepIdx, GlobIdx);
                     PrintBlocks(sys_ninit,env_numsites);
                 }
                 if(do_scratch_dir){
@@ -328,6 +329,7 @@ public:
             const PetscInt  outsys = iblock,     outenv = num_sites - iblock - 2;
             if(!mpi_rank){
                 if(verbose) PrintLines();
+                printf(" %s  %d/%d/%d\n", "SWEEP", LoopIdx, StepIdx, GlobIdx);
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -346,6 +348,7 @@ public:
             const PetscInt  outsys = num_sites - iblock - 2,    outenv = iblock;
             if(!mpi_rank){
                 if(verbose) PrintLines();
+                printf(" %s  %d/%d/%d\n", "SWEEP", LoopIdx, StepIdx, GlobIdx);
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
