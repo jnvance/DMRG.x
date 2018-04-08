@@ -342,7 +342,8 @@ private:
         );
 
     PetscErrorCode KronSumRedistribute(
-        KronSumCtx& ctx
+        KronSumCtx& ctx,
+        PetscBool& flg
         );
 
     PetscErrorCode KronSumPreallocate(

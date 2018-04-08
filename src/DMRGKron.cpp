@@ -801,14 +801,16 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     }
     #endif
 
+    TIMINGS_NEWLINE()
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
     if(do_redistribute){
-        ierr = KronSumRedistribute(ctx); CHKERRQ(ierr);
-        ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
-        ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
-        /* Destroy ctx local submatrices */
-        /* Perform KronSumPrepare and */
+        PetscBool flg;
+        ierr = KronSumRedistribute(ctx,flg); CHKERRQ(ierr);
+        if(flg){
+            ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+            ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
+        }
     }
     ierr = SavePreallocData(ctx);
     ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
@@ -851,7 +853,6 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     )
 {
     PetscErrorCode ierr = 0;
-    TIMINGS_NEWLINE()
     FUNCTION_TIMINGS_BEGIN()
 
     /*  Determine the local rows to be collected from each of the left and right block */
@@ -1078,7 +1079,8 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
 }
 
 PetscErrorCode KronBlocks_t::KronSumRedistribute(
-    KronSumCtx& ctx
+    KronSumCtx& ctx,
+    PetscBool& flg
     )
 {
     PetscErrorCode ierr = 0;
@@ -1121,6 +1123,7 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
     ierr = PetscMemzero(rstart_arr, sizeof(PetscInt) * arr_size); CHKERRQ(ierr);
 
     /* Recalculate boundaries */
+    flg = PETSC_TRUE;
     if(!mpi_rank){
 
         #if defined(DEBUG_REDIST)
@@ -1131,18 +1134,20 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
 
         std::vector< PetscInt > nnz_proc(mpi_size);
         for(PetscInt irow=0, iproc=0; irow<ctx.Nrows; ++irow){
-            nnz_proc.at(iproc) += Tnnz_arr[irow];
+            if(iproc>=mpi_size) break;
+
+            nnz_proc[iproc] += Tnnz_arr[irow];
             ++lrows_arr[iproc];
 
             #if defined(DEBUG_REDIST) && 0
-                printf("irow: %-5d iproc: %-5d  nrows_proc: %-5d  Tnnz: %-5d  nnz_proc: %-5d\n", irow, iproc, lrows_arr[iproc], Tnnz_arr[irow], nnz_proc.at(iproc));
+                printf("irow: %-5d iproc: %-5d  nrows_proc: %-5d  Tnnz: %-5d  nnz_proc: %-5d\n", irow, iproc, lrows_arr[iproc], Tnnz_arr[irow], nnz_proc[iproc]);
             #endif
 
-            if( nnz_proc.at(iproc) >= avg_nnz_proc ){
+            if( nnz_proc[iproc] >= avg_nnz_proc ){
 
                 #if defined(DEBUG_REDIST) && 0
                     printf("\ntriggered\n");
-                    printf("irow: %-5d iproc: %-5d  nrows_proc: %-5d  Tnnz: %-5d  nnz_proc: %-5d\n", irow, iproc, lrows_arr[iproc], Tnnz_arr[irow], nnz_proc.at(iproc));
+                    printf("irow: %-5d iproc: %-5d  nrows_proc: %-5d  Tnnz: %-5d  nnz_proc: %-5d\n", irow, iproc, lrows_arr[iproc], Tnnz_arr[irow], nnz_proc[iproc]);
                     printf("lrows_arr[%d] = %d\n", iproc, lrows_arr[iproc]);
                     printf("\n");
                 #endif
@@ -1156,8 +1161,29 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
             rstart_arr[p] = tot_lrows;
             tot_lrows += lrows_arr[p];
         }
-        if(ctx.Nrows!=tot_lrows) SETERRQ2(PETSC_COMM_SELF,1,"Incorrect total number or rows. "
+        if(ctx.Nrows!=tot_lrows){
+
+            printf("--------------------------------------------------\n");
+            printf("[0] Redistribution failed at GlobIdx: %d\n", GlobIdx);
+            printf("[0] >>> tot_nnz:      %d\n", tot_nnz);
+            printf("[0] >>> avg_nnz_proc: %d\n", avg_nnz_proc);
+            printf("[0] >>> nnz_proc: [ %d", nnz_proc[0]);
+                for(PetscInt p=1; p<mpi_size; ++p) printf(", %d", nnz_proc[p]);
+                printf(" ]\n");
+            #if 0 && defined(DEBUG_REDIST)
+            printf("[0] >>> Tnnz_arr: [ %d", Tnnz_arr[0]);
+                for(PetscInt i=1; i<ctx.Nrows; ++i) printf(", %d", Tnnz_arr[i]);
+                printf(" ]\n");
+            printf("--------------------------------------------------\n");
+            #endif
+
+            flg = PETSC_FALSE;
+
+            #if 0
+            SETERRQ2(PETSC_COMM_SELF,1,"Incorrect total number of rows. "
             "Expected %d. Got %d.", ctx.Nrows, tot_lrows);
+            #endif
+        }
 
         #if defined(DEBUG_REDIST)
         for(PetscInt p=0; p<mpi_size; ++p){
@@ -1165,26 +1191,29 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
         }
         #endif
     }
-    /* Scatter data on lrows and rstart */
-    ierr = MPI_Scatter(lrows_arr, 1, MPIU_INT, &ctx.lrows, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
-    ierr = MPI_Scatter(rstart_arr, 1, MPIU_INT, &ctx.rstart, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
-    ctx.cstart = ctx.rstart;
-    ctx.lcols = ctx.lrows;
-    ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
 
-    /* Destroy ctx data */
-    ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
-    ctx.ReqRowsL.clear();
-    ctx.ReqRowsR.clear();
-    ctx.MapRowsL.clear();
-    ctx.MapRowsR.clear();
-    ctx.Terms.clear();
-    ctx.Maxnnz.clear();
-    for(Mat *mat: ctx.LocalSubMats){
-        ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&flg, 1, MPI_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    if(flg){
+        /* Scatter data on lrows and rstart */
+        ierr = MPI_Scatter(lrows_arr, 1, MPIU_INT, &ctx.lrows, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Scatter(rstart_arr, 1, MPIU_INT, &ctx.rstart, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ctx.cstart = ctx.rstart;
+        ctx.lcols = ctx.lrows;
+        ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
+
+        /* Destroy ctx data */
+        ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
+        ctx.ReqRowsL.clear();
+        ctx.ReqRowsR.clear();
+        ctx.MapRowsL.clear();
+        ctx.MapRowsR.clear();
+        ctx.Terms.clear();
+        ctx.Maxnnz.clear();
+        for(Mat *mat: ctx.LocalSubMats){
+            ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
+        }
+        ctx.LocalSubMats.clear();
     }
-    ctx.LocalSubMats.clear();
-
     ierr = PetscFree2(Tnnz_arr, Onnz_arr); CHKERRQ(ierr);
     ierr = PetscFree2(lrows_arr, rstart_arr); CHKERRQ(ierr);
 
