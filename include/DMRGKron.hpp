@@ -337,7 +337,11 @@ private:
         KronSumCtx& SubMat
         );
 
-    PetscErrorCode KronSumCalculatePreallocation(
+    PetscErrorCode KronSumCalcPreallocation(
+        KronSumCtx& ctx
+        );
+
+    PetscErrorCode KronSumRedistribute(
         KronSumCtx& ctx
         );
 

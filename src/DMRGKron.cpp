@@ -802,9 +802,17 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     #endif
 
     ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+    ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
+    if(do_redistribute){
+        ierr = KronSumRedistribute(ctx); CHKERRQ(ierr);
+        ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+        ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
+        /* Destroy ctx local submatrices */
+        /* Perform KronSumPrepare and */
+    }
+    ierr = SavePreallocData(ctx);
     ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
-    ierr = KronSumCalculatePreallocation(ctx); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 
@@ -941,7 +949,7 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
 #undef GetBlockMat
 #undef GetBlockMatFromTuple
 
-PetscErrorCode KronBlocks_t::KronSumCalculatePreallocation(
+PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
     KronSumCtx& ctx
     )
 {
@@ -1064,9 +1072,120 @@ PetscErrorCode KronBlocks_t::KronSumCalculatePreallocation(
         }
     }
     ierr = PetscFree(idx_arr); CHKERRQ(ierr);
-    ierr = SavePreallocData(ctx);
 
     FUNCTION_TIMINGS_END()
+    return(0);
+}
+
+PetscErrorCode KronBlocks_t::KronSumRedistribute(
+    KronSumCtx& ctx
+    )
+{
+    PetscErrorCode ierr = 0;
+
+    /* Gather all lrows and rstart to root process */
+    PetscInt *lrows_arr, *rstart_arr;
+    const PetscInt arr_size = mpi_rank ? 0 : mpi_size;
+    ierr = PetscCalloc2(arr_size, &lrows_arr, arr_size, &rstart_arr); CHKERRQ(ierr);
+    ierr = MPI_Gather(&ctx.lrows,  1, MPIU_INT, lrows_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ierr = MPI_Gather(&ctx.rstart, 1, MPIU_INT, rstart_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+
+    /* Gather preallocation data to root process */
+    PetscInt *Tnnz_arr, *Onnz_arr;
+    const PetscInt tot_size = mpi_rank ? 0 : ctx.Nrows;
+    ierr = PetscCalloc2(tot_size, &Tnnz_arr, tot_size, &Onnz_arr); CHKERRQ(ierr);
+    ierr = MPI_Gatherv(ctx.Dnnz, ctx.lrows, MPIU_INT, Tnnz_arr, lrows_arr, rstart_arr, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    ierr = MPI_Gatherv(ctx.Onnz, ctx.lrows, MPIU_INT, Onnz_arr, lrows_arr, rstart_arr, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    for(PetscInt irow = 0; irow < tot_size; ++irow) Tnnz_arr[irow] += Onnz_arr[irow];
+
+    // #define DEBUG_REDIST
+    #if defined(DEBUG_REDIST)
+    if(!mpi_rank){
+        printf("-------\n");
+        for(PetscInt p=0; p<mpi_size; ++p){
+            PetscInt tot_nnz = 0;
+            for(PetscInt irow=rstart_arr[p]; irow<rstart_arr[p]+lrows_arr[p]; ++irow) tot_nnz += Tnnz_arr[irow];
+            printf("[%d] lrows: %3d   rstart: %3d   nnz: %d\n", p, lrows_arr[p], rstart_arr[p], tot_nnz);
+        }
+        printf("excess: %d\n", ctx.Nrows % mpi_size);
+        printf("-------\n");
+    }
+    #endif
+
+    PetscInt tot_nnz = 0;
+    for(PetscInt irow = 0; irow < tot_size; ++irow) tot_nnz += Tnnz_arr[irow];
+    const PetscInt avg_nnz_proc = tot_nnz / mpi_size;
+
+    ierr = PetscMemzero(lrows_arr,  sizeof(PetscInt) * arr_size); CHKERRQ(ierr);
+    ierr = PetscMemzero(rstart_arr, sizeof(PetscInt) * arr_size); CHKERRQ(ierr);
+
+    /* Recalculate boundaries */
+    if(!mpi_rank){
+
+        #if defined(DEBUG_REDIST)
+            printf("tot_nnz:      %d\n", tot_nnz);
+            printf("avg_nnz_proc: %d\n", avg_nnz_proc);
+            printf("-------\n");
+        #endif
+
+        std::vector< PetscInt > nnz_proc(mpi_size);
+        for(PetscInt irow=0, iproc=0; irow<ctx.Nrows; ++irow){
+            nnz_proc.at(iproc) += Tnnz_arr[irow];
+            ++lrows_arr[iproc];
+
+            #if defined(DEBUG_REDIST) && 0
+                printf("irow: %-5d iproc: %-5d  nrows_proc: %-5d  Tnnz: %-5d  nnz_proc: %-5d\n", irow, iproc, lrows_arr[iproc], Tnnz_arr[irow], nnz_proc.at(iproc));
+            #endif
+
+            if( nnz_proc.at(iproc) >= avg_nnz_proc ){
+
+                #if defined(DEBUG_REDIST) && 0
+                    printf("\ntriggered\n");
+                    printf("irow: %-5d iproc: %-5d  nrows_proc: %-5d  Tnnz: %-5d  nnz_proc: %-5d\n", irow, iproc, lrows_arr[iproc], Tnnz_arr[irow], nnz_proc.at(iproc));
+                    printf("lrows_arr[%d] = %d\n", iproc, lrows_arr[iproc]);
+                    printf("\n");
+                #endif
+
+                ++iproc;
+            }
+        }
+
+        PetscInt tot_lrows = 0;
+        for(PetscInt p=0; p<mpi_size; ++p){
+            rstart_arr[p] = tot_lrows;
+            tot_lrows += lrows_arr[p];
+        }
+        if(ctx.Nrows!=tot_lrows) SETERRQ2(PETSC_COMM_SELF,1,"Incorrect total number or rows. "
+            "Expected %d. Got %d.", ctx.Nrows, tot_lrows);
+
+        #if defined(DEBUG_REDIST)
+        for(PetscInt p=0; p<mpi_size; ++p){
+            printf("[%d] lrows: %3d   rstart: %3d   nnz: %d\n", p, lrows_arr[p], rstart_arr[p], nnz_proc[p]);
+        }
+        #endif
+    }
+    /* Scatter data on lrows and rstart */
+    ierr = MPI_Scatter(lrows_arr, 1, MPIU_INT, &ctx.lrows, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ierr = MPI_Scatter(rstart_arr, 1, MPIU_INT, &ctx.rstart, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ctx.cstart = ctx.rstart;
+    ctx.lcols = ctx.lrows;
+    ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
+
+    /* Destroy ctx data */
+    ierr = PetscFree2(ctx.Dnnz, ctx.Onnz); CHKERRQ(ierr);
+    ctx.ReqRowsL.clear();
+    ctx.ReqRowsR.clear();
+    ctx.MapRowsL.clear();
+    ctx.MapRowsR.clear();
+    ctx.Terms.clear();
+    ctx.Maxnnz.clear();
+    for(Mat *mat: ctx.LocalSubMats){
+        ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
+    }
+    ctx.LocalSubMats.clear();
+
+    ierr = PetscFree2(Tnnz_arr, Onnz_arr); CHKERRQ(ierr);
+    ierr = PetscFree2(lrows_arr, rstart_arr); CHKERRQ(ierr);
     return(0);
 }
 
@@ -1247,15 +1366,37 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     return(0);
 }
 
-PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
+#if 0
+PetscErrorCode KronBlocks_t::GatherPreallocDataToRoot(
+    const KronSumCtx& ctx,
+    PetscInt **p_Dnnz_arr,
+    PetscInt **p_Onnz_arr
+    )
 {
-    if(!do_saveprealloc) return(0);
-
+    /* TODO: Also gather the number of local rows of each process ?? */
     PetscInt Dnnz=0, Onnz=0;
     for(PetscInt irow=0; irow<ctx.lrows; ++irow) Dnnz += ctx.Dnnz[irow];
     for(PetscInt irow=0; irow<ctx.lrows; ++irow) Onnz += ctx.Onnz[irow];
 
-    PetscInt ierr;
+    PetscErrorCode ierr;
+    PetscInt arr_size = mpi_rank ? 0 : mpi_size;
+    ierr = PetscCalloc2(arr_size, p_Dnnz_arr, arr_size, p_Onnz_arr); CHKERRQ(ierr);
+    ierr = MPI_Gather(&Dnnz, 1, MPIU_INT, *p_Dnnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    ierr = MPI_Gather(&Onnz, 1, MPIU_INT, *p_Onnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    return(0);
+}
+#endif
+
+PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
+{
+    if(!do_saveprealloc) return(0);
+
+    /* Gather preallocation data to root process */
+    PetscInt Dnnz=0, Onnz=0;
+    for(PetscInt irow=0; irow<ctx.lrows; ++irow) Dnnz += ctx.Dnnz[irow];
+    for(PetscInt irow=0; irow<ctx.lrows; ++irow) Onnz += ctx.Onnz[irow];
+
+    PetscErrorCode ierr = 0;
     PetscInt *Dnnz_arr, *Onnz_arr;
     PetscInt arr_size = mpi_rank ? 0 : mpi_size;
     ierr = PetscCalloc2(arr_size, &Dnnz_arr, arr_size, &Onnz_arr); CHKERRQ(ierr);
