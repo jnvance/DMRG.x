@@ -1082,6 +1082,7 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
     )
 {
     PetscErrorCode ierr = 0;
+    FUNCTION_TIMINGS_BEGIN()
 
     /* Gather all lrows and rstart to root process */
     PetscInt *lrows_arr, *rstart_arr;
@@ -1186,6 +1187,8 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
 
     ierr = PetscFree2(Tnnz_arr, Onnz_arr); CHKERRQ(ierr);
     ierr = PetscFree2(lrows_arr, rstart_arr); CHKERRQ(ierr);
+
+    FUNCTION_TIMINGS_END()
     return(0);
 }
 
