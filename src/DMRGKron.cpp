@@ -1465,7 +1465,7 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 
     if(GlobIdx) fprintf(fp_prealloc,",\n");
     fprintf(fp_prealloc,"  {\n"
-                        "    \"GlobIdx\" : %lldd,\n"
+                        "    \"GlobIdx\" : %lld,\n"
                         "    \"Dnnz\" : [", LLD(GlobIdx));
     fprintf(fp_prealloc," %lld", LLD(Dnnz_arr[0]));
     for(PetscInt iproc=1; iproc<mpi_size; ++iproc){
