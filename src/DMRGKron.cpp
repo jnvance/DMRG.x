@@ -1165,6 +1165,8 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
 
             printf("--------------------------------------------------\n");
             printf("[0] Redistribution failed at GlobIdx: %d\n", GlobIdx);
+            printf("[0] >>> tot_lrows:    %d\n", tot_lrows);
+            printf("[0] >>> ctx.Nrows:    %d\n", ctx.Nrows);
             printf("[0] >>> tot_nnz:      %d\n", tot_nnz);
             printf("[0] >>> avg_nnz_proc: %d\n", avg_nnz_proc);
             printf("[0] >>> nnz_proc: [ %d", nnz_proc[0]);
