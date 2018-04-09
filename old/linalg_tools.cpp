@@ -652,13 +652,13 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     {
         char errormsg[80];
         sprintf(errormsg,"Matrix dimension mismatch. "
-                         "Number of rows (%d) is not equal to number of columns (%d).",
-                         mat_in_nrows, mat_in_ncols);
+                         "Number of rows (%lld) is not equal to number of columns (%lld).",
+                         LLD(mat_in_nrows), LLD(mat_in_ncols));
         SETERRQ(comm, 1, errormsg);
     }
 
     #ifdef __DMRG_SUB_TIMINGS
-        PetscPrintf(comm,"%16s SVD size: %lu\n","",(unsigned long int)(mat_in_nrows));
+        PetscPrintf(comm,"%16s SVD size: %lld\n","",LLD(mat_in_nrows));
     #endif
 
     PetscInt mstates = mstates_in;
@@ -667,8 +667,8 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     {
         char errormsg[80];
         sprintf(errormsg,"Matrix dimension too small. "
-                         "Matrix size (%d) must at least be equal to mstates (%d).",
-                         mat_in_nrows, mstates);
+                         "Matrix size (%lld) must at least be equal to mstates (%lld).",
+                         LLD(mat_in_nrows), LLD(mstates));
         SETERRQ(comm, 1, errormsg);
     }
 
@@ -722,13 +722,13 @@ PetscErrorCode SVDLargestStates(const Mat& mat_in, const PetscInt mstates_in, Pe
     if (nconv < mstates)
     {
         char errormsg[80];
-        sprintf(errormsg,"Number of converged singular values (%d) is less than mstates (%d).", nconv, mstates);
+        sprintf(errormsg,"Number of converged singular values (%lld) is less than mstates (%lld).", LLD(nconv), LLD(mstates));
         SETERRQ(comm, 1, errormsg);
     }
 
     #ifdef __PRINT_SVD_CONVERGENCE
-        PetscPrintf(comm, "%12sSVD requested mstates: %d\n","",mstates);
-        PetscPrintf(comm, "%12sSVD no of conv states: %d\n","",nconv);
+        PetscPrintf(comm, "%12sSVD requested mstates: %lld\n","",LLD(mstates));
+        PetscPrintf(comm, "%12sSVD no of conv states: %lld\n","",LLD(nconv));
     #endif
 
     /**
@@ -855,13 +855,13 @@ PetscErrorCode SVDLargestStates_split(const Mat& mat_in, const PetscInt mstates_
     {
         char errormsg[80];
         sprintf(errormsg,"Matrix dimension mismatch. "
-                         "Number of rows (%d) is not equal to number of columns (%d).",
-                         mat_in_nrows, mat_in_ncols);
+                         "Number of rows (%lld) is not equal to number of columns (%lld).",
+                         LLD(mat_in_nrows), LLD(mat_in_ncols));
         SETERRQ(comm, 1, errormsg);
     }
 
     #ifdef __DMRG_SUB_TIMINGS
-        PetscPrintf(comm,"%16s SVD size: %lu\n","",(unsigned long int)(mat_in_nrows));
+        PetscPrintf(comm,"%16s SVD size: %lld\n","",LLD(mat_in_nrows));
     #endif
 
     PetscInt mstates = mstates_in;
@@ -870,8 +870,8 @@ PetscErrorCode SVDLargestStates_split(const Mat& mat_in, const PetscInt mstates_
     {
         char errormsg[80];
         sprintf(errormsg,"Matrix dimension too small. "
-                         "Matrix size (%d) must at least be equal to mstates (%d).",
-                         mat_in_nrows, mstates);
+                         "Matrix size (%lld) must at least be equal to mstates (%lld).",
+                         LLD(mat_in_nrows), LLD(mstates));
         SETERRQ(comm, 1, errormsg);
     }
 
@@ -925,13 +925,13 @@ PetscErrorCode SVDLargestStates_split(const Mat& mat_in, const PetscInt mstates_
     if (nconv < mstates)
     {
         char errormsg[80];
-        sprintf(errormsg,"Number of converged singular values (%d) is less than mstates (%d).", nconv, mstates);
+        sprintf(errormsg,"Number of converged singular values (%lld) is less than mstates (%lld).", LLD(nconv), LLD(mstates));
         SETERRQ(comm, 1, errormsg);
     }
 
     #ifdef __PRINT_SVD_CONVERGENCE
-        PetscPrintf(comm, "%12sSVD requested mstates: %d\n","",mstates);
-        PetscPrintf(comm, "%12sSVD no of conv states: %d\n","",nconv);
+        PetscPrintf(comm, "%12sSVD requested mstates: %lld\n","",LLD(mstates));
+        PetscPrintf(comm, "%12sSVD no of conv states: %lld\n","",LLD(nconv));
     #endif
 
     /**
@@ -1074,8 +1074,8 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
     {
         char errormsg[80];
         sprintf(errormsg,"Matrix dimension mismatch. "
-                         "Number of rows (%d) is not equal to number of columns (%d).",
-                         mat_in_nrows, mat_in_ncols);
+                         "Number of rows (%lld) is not equal to number of columns (%lld).",
+                         LLD(mat_in_nrows), LLD(mat_in_ncols));
         SETERRQ(comm, 1, errormsg);
     }
 
@@ -1104,14 +1104,14 @@ PetscErrorCode MatGetSVD(const Mat& mat_in, SVD& svd, PetscInt& nconv, PetscScal
     if (nconv < mat_in_nrows)
     {
         char errormsg[120];
-        sprintf(errormsg,"Number of converged singular values (%d) is less than requested (%d).", nconv, mat_in_nrows);
+        sprintf(errormsg,"Number of converged singular values (%lld) is less than requested (%lld).", LLD(nconv), LLD(mat_in_nrows));
         PetscPrintf(comm,"WARNING: %s\n", errormsg);
         // SETERRQ(comm, 1, errormsg);
     }
 
     #ifdef __PRINT_SVD_CONVERGENCE
-        PetscPrintf(comm, "%12sSVD requested mstates: %d\n","",mstates);
-        PetscPrintf(comm, "%12sSVD no of conv states: %d\n","",nconv);
+        PetscPrintf(comm, "%12sSVD requested mstates: %lld\n","",LLD(mstates));
+        PetscPrintf(comm, "%12sSVD no of conv states: %lld\n","",LLD(nconv));
     #endif
 
     #ifdef __PRINT_SVD_LARGEST

@@ -80,8 +80,8 @@ namespace Hamiltonians
         /** Prints out some information to stdout */
         void PrintOut() const {
             printf( "HAMILTONIAN: J1J2XYModel_SquareLattice\n");
-            printf( "  Lx  : %d\n", Lx);
-            printf( "  Ly  : %d\n", Ly);
+            printf( "  Lx  : %lld\n", LLD(Lx));
+            printf( "  Ly  : %lld\n", LLD(Ly));
             printf( "  J1  : %g\n", J1);
             printf( "  Jz1 : %g\n", Jz1);
             printf( "  J2  : %g\n", J2);
@@ -95,8 +95,8 @@ namespace Hamiltonians
             fprintf(fp, "  \"Hamiltonian\": {\n");
             fprintf(fp, "    \"label\":\"J1J2XYModel_SquareLattice\",\n");
             fprintf(fp, "    \"parameters\": {\n");
-            fprintf(fp, "      \"Lx\"  : %d,\n", Lx);
-            fprintf(fp, "      \"Ly\"  : %d,\n", Ly);
+            fprintf(fp, "      \"Lx\"  : %lld,\n", LLD(Lx));
+            fprintf(fp, "      \"Ly\"  : %lld,\n", LLD(Ly));
             fprintf(fp, "      \"J1\"  : %g,\n", J1);
             fprintf(fp, "      \"Jz1\" : %g,\n", Jz1);
             fprintf(fp, "      \"J2\"  : %g,\n", J2);

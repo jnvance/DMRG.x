@@ -1093,12 +1093,31 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
     ierr = MPI_Gather(&ctx.lrows,  1, MPIU_INT, lrows_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
     ierr = MPI_Gather(&ctx.rstart, 1, MPIU_INT, rstart_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
 
+    PetscMPIInt *lrows_arr_mpi, *rstart_arr_mpi;
+    #if defined(PETSC_USE_64BIT_INDICES)
+    {
+        /* Convert lrows_arr and rstart_arr into type PetscMPIInt */
+        ierr = PetscCalloc2(arr_size, &lrows_arr_mpi, arr_size, &rstart_arr_mpi); CHKERRQ(ierr);
+        for(PetscInt p=0; p<arr_size; ++p){
+            ierr = PetscMPIIntCast(lrows_arr[p],&lrows_arr_mpi[p]); CHKERRQ(ierr);
+        }
+        for(PetscInt p=0; p<arr_size; ++p){
+            ierr = PetscMPIIntCast(rstart_arr[p],&rstart_arr_mpi[p]); CHKERRQ(ierr);
+        }
+    }
+    #else
+    {
+        lrows_arr_mpi = lrows_arr;
+        rstart_arr_mpi = rstart_arr;
+    }
+    #endif
+
     /* Gather preallocation data to root process */
     PetscInt *Tnnz_arr, *Onnz_arr;
     const PetscInt tot_size = mpi_rank ? 0 : ctx.Nrows;
     ierr = PetscCalloc2(tot_size, &Tnnz_arr, tot_size, &Onnz_arr); CHKERRQ(ierr);
-    ierr = MPI_Gatherv(ctx.Dnnz, ctx.lrows, MPIU_INT, Tnnz_arr, lrows_arr, rstart_arr, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
-    ierr = MPI_Gatherv(ctx.Onnz, ctx.lrows, MPIU_INT, Onnz_arr, lrows_arr, rstart_arr, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    ierr = MPI_Gatherv(ctx.Dnnz, ctx.lrows, MPIU_INT, Tnnz_arr, lrows_arr_mpi, rstart_arr_mpi, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    ierr = MPI_Gatherv(ctx.Onnz, ctx.lrows, MPIU_INT, Onnz_arr, lrows_arr_mpi, rstart_arr_mpi, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
     for(PetscInt irow = 0; irow < tot_size; ++irow) Tnnz_arr[irow] += Onnz_arr[irow];
 
     // #define DEBUG_REDIST
@@ -1164,13 +1183,13 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
         if(ctx.Nrows!=tot_lrows){
 
             printf("--------------------------------------------------\n");
-            printf("[0] Redistribution failed at GlobIdx: %d\n", GlobIdx);
-            printf("[0] >>> tot_lrows:    %d\n", tot_lrows);
-            printf("[0] >>> ctx.Nrows:    %d\n", ctx.Nrows);
-            printf("[0] >>> tot_nnz:      %d\n", tot_nnz);
-            printf("[0] >>> avg_nnz_proc: %d\n", avg_nnz_proc);
-            printf("[0] >>> nnz_proc: [ %d", nnz_proc[0]);
-                for(PetscInt p=1; p<mpi_size; ++p) printf(", %d", nnz_proc[p]);
+            printf("[0] Redistribution failed at GlobIdx: %lld\n", LLD(GlobIdx));
+            printf("[0] >>> tot_lrows:    %lld\n", LLD(tot_lrows));
+            printf("[0] >>> ctx.Nrows:    %lld\n", LLD(ctx.Nrows));
+            printf("[0] >>> tot_nnz:      %lld\n", LLD(tot_nnz));
+            printf("[0] >>> avg_nnz_proc: %lld\n", LLD(avg_nnz_proc));
+            printf("[0] >>> nnz_proc: [ %lld", LLD(nnz_proc[0]));
+                for(PetscInt p=1; p<mpi_size; ++p) printf(", %lld", LLD(nnz_proc[p]));
                 printf(" ]\n");
             #if 0 && defined(DEBUG_REDIST)
             printf("[0] >>> Tnnz_arr: [ %d", Tnnz_arr[0]);
@@ -1218,6 +1237,11 @@ PetscErrorCode KronBlocks_t::KronSumRedistribute(
     }
     ierr = PetscFree2(Tnnz_arr, Onnz_arr); CHKERRQ(ierr);
     ierr = PetscFree2(lrows_arr, rstart_arr); CHKERRQ(ierr);
+    #if defined(PETSC_USE_64BIT_INDICES)
+    {
+        ierr = PetscFree2(lrows_arr_mpi, rstart_arr_mpi); CHKERRQ(ierr);
+    }
+    #endif
 
     FUNCTION_TIMINGS_END()
     return(0);
@@ -1441,17 +1465,17 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 
     if(GlobIdx) fprintf(fp_prealloc,",\n");
     fprintf(fp_prealloc,"  {\n"
-                        "    \"GlobIdx\" : %d,\n"
-                        "    \"Dnnz\" : [", GlobIdx);
-    fprintf(fp_prealloc," %d", Dnnz_arr[0]);
+                        "    \"GlobIdx\" : %lldd,\n"
+                        "    \"Dnnz\" : [", LLD(GlobIdx));
+    fprintf(fp_prealloc," %lld", LLD(Dnnz_arr[0]));
     for(PetscInt iproc=1; iproc<mpi_size; ++iproc){
-        fprintf(fp_prealloc,", %d",Dnnz_arr[iproc]);
+        fprintf(fp_prealloc,", %lld", LLD(Dnnz_arr[iproc]));
     }
     fprintf(fp_prealloc,"],\n"
                         "    \"Onnz\" : [");
-    fprintf(fp_prealloc," %d", Onnz_arr[0]);
+    fprintf(fp_prealloc," %lld", LLD(Onnz_arr[0]));
     for(PetscInt iproc=1; iproc<mpi_size; ++iproc){
-        fprintf(fp_prealloc,", %d",Onnz_arr[iproc]);
+        fprintf(fp_prealloc,", %lld", LLD(Onnz_arr[iproc]));
     }
     fprintf(fp_prealloc,"]\n  }");
     fflush(fp_prealloc);

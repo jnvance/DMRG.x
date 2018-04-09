@@ -22,7 +22,7 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
 #define PrintLines() printf("-----------------------------------------\n")
 #define PRINTLINES() printf("=========================================\n")
-#define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
+#define PrintBlocks(LEFT,RIGHT) printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT))
 
 /** Provides an alias of Side_t to follow the Sys-Env convention */
 typedef enum
@@ -241,9 +241,9 @@ public:
             }
 
             {
-                if(!mpi_rank && verbose) printf("  sys_ninit: %d\n", sys_ninit);
+                if(!mpi_rank && verbose) printf("  sys_ninit: %lld\n", LLD(sys_ninit));
                 for(PetscInt isys = 0; isys < sys_ninit; ++isys){
-                    if(!mpi_rank && verbose) printf("   block %d, num_sites %d\n", isys, sys_blocks[isys].NumSites());
+                    if(!mpi_rank && verbose) printf("   block %lld, num_sites %lld\n", LLD(isys), LLD(sys_blocks[isys].NumSites()));
                 }
             }
 
@@ -262,11 +262,11 @@ public:
                 full_cluster += env_add;
 
                 if(env_numsites < 1 || env_numsites > sys_ninit)
-                    SETERRQ1(mpi_comm,1,"Incorrect number of sites. Got %d.", env_numsites);
+                    SETERRQ1(mpi_comm,1,"Incorrect number of sites. Got %lld.",  LLD(env_numsites));
 
                 if(!mpi_rank){
                     if(verbose) PrintLines();
-                    printf(" %s  %d/%d/%d\n", "WARMUP", LoopIdx, StepIdx, GlobIdx);
+                    printf(" %s  %lld/%lld/%lld\n", "WARMUP",  LLD(LoopIdx),  LLD(StepIdx),  LLD(GlobIdx));
                     PrintBlocks(sys_ninit,env_numsites);
                 }
                 if(do_scratch_dir){
@@ -313,7 +313,7 @@ public:
     {
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
-        if(!mpi_rank) printf("SWEEP MStates=%d\n", MStates);
+        if(!mpi_rank) printf("SWEEP MStates=%lld\n", LLD(MStates));
 
         /*  Set a minimum number of blocks (min_block). Decide whether to set it statically or let
             the number correspond to the least number of sites needed to exactly build MStates. */
@@ -329,7 +329,7 @@ public:
             const PetscInt  outsys = iblock,     outenv = num_sites - iblock - 2;
             if(!mpi_rank){
                 if(verbose) PrintLines();
-                printf(" %s  %d/%d/%d\n", "SWEEP", LoopIdx, StepIdx, GlobIdx);
+                printf(" %s  %lld/%lld/%lld\n", "SWEEP", LLD(LoopIdx), LLD(StepIdx), LLD(GlobIdx));
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -348,7 +348,7 @@ public:
             const PetscInt  outsys = num_sites - iblock - 2,    outenv = iblock;
             if(!mpi_rank){
                 if(verbose) PrintLines();
-                printf(" %s  %d/%d/%d\n", "SWEEP", LoopIdx, StepIdx, GlobIdx);
+                printf(" %s  %lld/%lld/%lld\n", "SWEEP", LLD(LoopIdx), LLD(StepIdx), LLD(GlobIdx));
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -806,16 +806,16 @@ private:
         if(!mpi_rank && verbose){
             printf("\n");
             printf("  Superblock:\n");
-            printf("    NumStates:   %d\n", KronBlocks.NumStates());
-            printf("    NumSites:    %d\n", NumSitesTotal);
+            printf("    NumStates:   %lld\n", LLD(KronBlocks.NumStates()));
+            printf("    NumSites:    %lld\n", LLD(NumSitesTotal));
             printf("    Energy:      %-10.10g\n", gse_r);
             printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
             printf("  Sys Block Out\n"
-                   "    NumStates: %d\n"
-                   "    TrunError: %g\n", QN_L.NumStates(), TruncErr_L);
+                   "    NumStates: %lld\n"
+                   "    TrunError: %g\n", LLD(QN_L.NumStates()), TruncErr_L);
             printf("  Env Block Out\n"
-                   "    NumStates: %d\n"
-                   "    TrunError: %g\n", QN_R.NumStates(), TruncErr_R);
+                   "    NumStates: %lld\n"
+                   "    TrunError: %g\n", LLD(QN_R.NumStates()), TruncErr_R);
             printf("\n");
             printf("  Total Time:              %12.6f s\n", timings_data.Total);
             printf("    Add One Site:          %12.6f s \t%6.2f %%\n",
@@ -1305,21 +1305,21 @@ private:
         fprintf(fp_step,"%s", GlobIdx ? ",\n" : "");
         if(data_tabular){
             fprintf(fp_step,"    [ ");
-            fprintf(fp_step,"%d, ",     GlobIdx);                               /* 01 */
+            fprintf(fp_step,"%lld, ",   LLD(GlobIdx));                          /* 01 */
             fprintf(fp_step,"%s, ",     LoopType ? "\"Sweep\"" : "\"Warmup\""); /* 02 */
-            fprintf(fp_step,"%d, ",     LoopIdx);                               /* 03 */
-            fprintf(fp_step,"%d, ",     StepIdx);                               /* 04 */
-            fprintf(fp_step,"%d, ",     data.NumSites_Sys);                     /* 05 */
-            fprintf(fp_step,"%d, ",     data.NumSites_Env);                     /* 06 */
-            fprintf(fp_step,"%d, ",     data.NumSites_SysEnl);                  /* 07 */
-            fprintf(fp_step,"%d, ",     data.NumSites_EnvEnl);                  /* 08 */
-            fprintf(fp_step,"%d, ",     data.NumStates_Sys);                    /* 09 */
-            fprintf(fp_step,"%d, ",     data.NumStates_Env);                    /* 10 */
-            fprintf(fp_step,"%d, ",     data.NumStates_SysEnl);                 /* 11 */
-            fprintf(fp_step,"%d, ",     data.NumStates_EnvEnl);                 /* 12 */
-            fprintf(fp_step,"%d, ",     data.NumStates_SysRot);                 /* 13 */
-            fprintf(fp_step,"%d, ",     data.NumStates_EnvRot);                 /* 14 */
-            fprintf(fp_step,"%d, ",     data.NumStates_H);                      /* 15 */
+            fprintf(fp_step,"%lld, ",   LLD(LoopIdx));                          /* 03 */
+            fprintf(fp_step,"%lld, ",   LLD(StepIdx));                          /* 04 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_Sys));                /* 05 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_Env));                /* 06 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_SysEnl));             /* 07 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_EnvEnl));             /* 08 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_Sys));               /* 09 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_Env));               /* 10 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_SysEnl));            /* 11 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_EnvEnl));            /* 12 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_SysRot));            /* 13 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_EnvRot));            /* 14 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_H));                 /* 15 */
             fprintf(fp_step,"%.12g, ",  data.TruncErr_Sys);                     /* 16 */
             fprintf(fp_step,"%.12g, ",  data.TruncErr_Env);                     /* 17 */
             fprintf(fp_step,"%.12g",    data.GSEnergy);                         /* 18 */
@@ -1328,20 +1328,20 @@ private:
             return(0);
         }
         fprintf(fp_step,"  {\n");
-        fprintf(fp_step,"    \"GlobIdx\": %d,\n",          GlobIdx);
+        fprintf(fp_step,"    \"GlobIdx\": %lld,\n",        LLD(GlobIdx));
         fprintf(fp_step,"    \"LoopType\": \"%s\",\n",     LoopType ? "Sweep" : "Warmup");
-        fprintf(fp_step,"    \"LoopIdx\": %d,\n",          LoopIdx);
-        fprintf(fp_step,"    \"StepIdx\": %d,\n",          StepIdx);
-        fprintf(fp_step,"    \"NSites_Sys\": %d,\n",       data.NumSites_Sys);
-        fprintf(fp_step,"    \"NSites_Env\": %d,\n",       data.NumSites_Env);
-        fprintf(fp_step,"    \"NSites_SysEnl\": %d,\n",    data.NumSites_SysEnl);
-        fprintf(fp_step,"    \"NSites_EnvEnl\": %d,\n",    data.NumSites_EnvEnl);
-        fprintf(fp_step,"    \"NStates_Sys\": %d,\n",      data.NumStates_Sys);
-        fprintf(fp_step,"    \"NStates_Env\": %d,\n",      data.NumStates_Env);
-        fprintf(fp_step,"    \"NStates_SysEnl\": %d,\n",   data.NumStates_SysEnl);
-        fprintf(fp_step,"    \"NStates_EnvEnl\": %d,\n",   data.NumStates_EnvEnl);
-        fprintf(fp_step,"    \"NStates_SysRot\": %d,\n",   data.NumStates_SysRot);
-        fprintf(fp_step,"    \"NStates_EnvRot\": %d,\n",   data.NumStates_EnvRot);
+        fprintf(fp_step,"    \"LoopIdx\": %lld,\n",        LLD(LoopIdx));
+        fprintf(fp_step,"    \"StepIdx\": %lld,\n",        LLD(StepIdx));
+        fprintf(fp_step,"    \"NSites_Sys\": %lld,\n",     LLD(data.NumSites_Sys));
+        fprintf(fp_step,"    \"NSites_Env\": %lld,\n",     LLD(data.NumSites_Env));
+        fprintf(fp_step,"    \"NSites_SysEnl\": %lld,\n",  LLD(data.NumSites_SysEnl));
+        fprintf(fp_step,"    \"NSites_EnvEnl\": %lld,\n",  LLD(data.NumSites_EnvEnl));
+        fprintf(fp_step,"    \"NStates_Sys\": %lld,\n",    LLD(data.NumStates_Sys));
+        fprintf(fp_step,"    \"NStates_Env\": %lld,\n",    LLD(data.NumStates_Env));
+        fprintf(fp_step,"    \"NStates_SysEnl\": %lld,\n", LLD(data.NumStates_SysEnl));
+        fprintf(fp_step,"    \"NStates_EnvEnl\": %lld,\n", LLD(data.NumStates_EnvEnl));
+        fprintf(fp_step,"    \"NStates_SysRot\": %lld,\n", LLD(data.NumStates_SysRot));
+        fprintf(fp_step,"    \"NStates_EnvRot\": %lld,\n", LLD(data.NumStates_EnvRot));
         fprintf(fp_step,"    \"TruncErr_Sys\": %.20g,\n",  data.TruncErr_Sys);
         fprintf(fp_step,"    \"TruncErr_Env\": %.20g,\n",  data.TruncErr_Env);
         fprintf(fp_step,"    \"GSEnergy\": %.20g\n",       data.GSEnergy);
@@ -1378,7 +1378,7 @@ private:
         fprintf(fp_timings,"%s", GlobIdx ? ",\n" : "");
         if(data_tabular){
             fprintf(fp_timings,"    [ ");
-            fprintf(fp_timings,"%d, ",    GlobIdx);
+            fprintf(fp_timings,"%lld, ", LLD(GlobIdx));
             fprintf(fp_timings,"%.9g, ", data.Total);
             fprintf(fp_timings,"%.9g, ", data.tEnlr);
             fprintf(fp_timings,"%.9g, ", data.tKron);
@@ -1412,7 +1412,7 @@ private:
         if(mpi_rank) return(0);
         fprintf(fp_entanglement, "%s", GlobIdx ? ",\n" : "");
         fprintf(fp_entanglement, "  {\n");
-        fprintf(fp_entanglement, "    \"GlobIdx\": %d,\n", GlobIdx);
+        fprintf(fp_entanglement, "    \"GlobIdx\": %lld,\n", LLD(GlobIdx));
         fprintf(fp_entanglement, "    \"Sys\": [\n");
         {
             PetscInt idx_prev = 999999999;
@@ -1455,14 +1455,14 @@ private:
         if(mpi_rank) return(0);
 
         fprintf(fp_data,"  \"Warmup\": {\n");
-        fprintf(fp_data,"    \"MStates\": %d\n", warmup_mstates);
+        fprintf(fp_data,"    \"MStates\": %lld\n", LLD(warmup_mstates));
         fprintf(fp_data,"  },\n");
         fprintf(fp_data,"  \"Sweeps\": {\n");
         fprintf(fp_data,"    \"MStates\": [");
 
         PetscInt nsweeps = sweeps_mstates.size();
-        if(nsweeps>0) fprintf(fp_data," %d", sweeps_mstates[0]);
-        for(PetscInt i=1;i<nsweeps;++i) fprintf(fp_data,", %d", sweeps_mstates[i]);
+        if(nsweeps>0) fprintf(fp_data," %lld", LLD(sweeps_mstates[0]));
+        for(PetscInt i=1;i<nsweeps;++i) fprintf(fp_data,", %lld", LLD(sweeps_mstates[i]));
 
         fprintf(fp_data," ]\n");
         fprintf(fp_data,"  }");

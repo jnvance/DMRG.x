@@ -32,13 +32,13 @@ int main(int argc, char **argv)
         /* Print some info */
         if(!rank){
             printf( "WARMUP\n");
-            printf( "  NumStates to keep:       %d\n",mstates);
+            printf( "  NumStates to keep:       %lld\n", LLD(mstates));
             printf( "SWEEPS\n");
             printf( "  Use msweeps array:       %s\n",use_msweeps?"yes":"no");
-            printf( "  Number of sweeps:        %d\n",use_msweeps?num_msweeps:nsweeps);
+            printf( "  Number of sweeps:        %lld\n", LLD(use_msweeps?num_msweeps:nsweeps));
             printf( "  NumStates to keep:      ");
-            if(use_msweeps) for(const PetscInt& m: msweeps) printf(" %d",m);
-            else printf(" %d",mstates);
+            if(use_msweeps) for(const PetscInt& m: msweeps) printf(" %lld", LLD(m));
+            else printf(" %lld", LLD(mstates));
             printf("\n");
             printf("=========================================\n");
         }

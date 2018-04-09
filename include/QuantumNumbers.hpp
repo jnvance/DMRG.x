@@ -13,6 +13,15 @@
 #include <vector>
 #include <cassert>
 
+/* For back-compatibility with versions that use single precision integers */
+#if !defined(LLD)
+    #if defined(PETSC_USE_64BIT_INDICES)
+        #define LLD(INT) (INT)
+    #else
+        #define LLD(INT) ((long long)(INT))
+    #endif
+#endif
+
 /**
     @addtogroup QuantumNumbers
     @{ */
