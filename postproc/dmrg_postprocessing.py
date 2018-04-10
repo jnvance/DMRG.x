@@ -2,55 +2,87 @@ import os
 import numpy as np
 import json
 import matplotlib.pyplot as plt
+import copy
 from shutil import copyfile
 
-warnings = True
-
-def LoadJSONTable(file):
+def LoadJSONFile(file,appendStr,funcName,count=0):
+    """
+    Loads data from a JSON file and corrects unfinished runs by appending a string to the file.
+    """
+    filemod = file[:-5]+"-mod"+".json"
     try:
-        data = json.load(open(file))
+        if count == 0:
+            data = json.load(open(file))
+        elif count == 1:
+            data = json.load(open(filemod))
+        else:
+            raise ValueError('LoadJSONFile was not able to correct the file "{}" with an appended "{}". '
+                'Check the file manually.'.format(file,appendStr))
         return data
     except json.JSONDecodeError:
-        # most likely the run did not complete
-        # and the file needs to be closed by "]}"
-        origcopy = file+".orig"
-        copyfile(file,origcopy)
-        if warnings:
-            print("LoadJSONTable: File \"{}\" copied to \"{}\" and overwritten.".format(file, origcopy))
-        fh = open(file, "a")
-        fh.write("]}")
+        copyfile(file,filemod)
+        fh = open(filemod, "a")
+        fh.write(appendStr)
         fh.close()
-        return LoadJSONTable(file)
+        return LoadJSONFile(file,appendStr,funcName,count+1)
 
+def LoadJSONTable(file):
+    """
+    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
+    appending "]}".
+    """
+    return LoadJSONFile(file,"]}","LoadJSONTable")
+
+def LoadJSONArray(file):
+    """
+    Loads data from a JSON file represented as an array of dictionary entries and corrects
+    unfinished runs by appending "]".
+    """
+    return LoadJSONFile(file,"]","LoadJSONArray")
 
 class Data:
-    'Post-processing a single DMRG run'
+    """
+    Post-processing of a single DMRG run
+    """
 
-    def __init__(self, base_dir, jobs_dir='', label=None, load_warmup=True, load_sweeps=True, ):
-
+    def __init__(self, base_dir, jobs_dir='', label=None, load_warmup=True, load_sweeps=True):
+        """ Initializes the object.
+        """
         self._base_dir = os.path.join(jobs_dir,base_dir)
-
-        steps = LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
-        self._stepsHeaders = steps['headers']
-        self._idxEnergy = self._stepsHeaders.index('GSEnergy')
-        self._idxNSysEnl = self._stepsHeaders.index('NSites_SysEnl')
-        self._idxNEnvEnl = self._stepsHeaders.index('NSites_EnvEnl')
-        self._idxLoopidx = self._stepsHeaders.index('LoopIdx')
-        self._steps = steps['table']
         self._label = label
+        self._steps = None
+        self._timings = None
+        self._hamPrealloc = None
 
-        Timings = LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
-        self.TimingsHeaders = Timings['headers']
-        self._idxTimeTot = self.TimingsHeaders.index('Total')
-        self.Timings = Timings['table']
+    #
+    #   Steps data
+    #
+    def _LoadSteps(self):
+        """ Loads data from DMRGSteps.json and extracts
+        """
+        if self._steps is None:
+            steps = LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
+            self._stepsHeaders = steps['headers']
+            self._idxEnergy = self._stepsHeaders.index('GSEnergy')
+            self._idxNSysEnl = self._stepsHeaders.index('NSites_SysEnl')
+            self._idxNEnvEnl = self._stepsHeaders.index('NSites_EnvEnl')
+            self._idxLoopidx = self._stepsHeaders.index('LoopIdx')
+            self._steps = steps['table']
+
+    def Steps(self):
+        self._LoadSteps()
+        return copy.deepcopy(self._steps)
+
+    def StepsHeaders(self):
+        self._LoadSteps()
+        return copy.deepcopy(self._stepsHeaders)
 
     def EnergyPerSite(self):
+        self._LoadSteps()
         return np.array([row[self._idxEnergy]/(row[self._idxNSysEnl]+row[self._idxNEnvEnl]) for row in self._steps])
 
-    def TotalTime(self):
-        return np.array([row[self._idxTimeTot] for row in self.Timings])
-
     def PlotEnergyPerSite(self,**kwargs):
+        self._LoadSteps()
         energy_iter = np.array(self.EnergyPerSite())
         self._p = plt.plot(energy_iter,label=self._label,**kwargs)
         # color = self._p[-1].get_color()
@@ -60,6 +92,35 @@ class Data:
         plt.xlabel('DMRG Steps')
         plt.ylabel(r'$E_0/N$')
 
+    def PlotLoopBars(self,**kwargs):
+        self._LoadSteps()
+        LoopIdx = [row[self._idxLoopidx] for row in self._steps]
+        dm = np.where([LoopIdx[i] - LoopIdx[i-1] for i in range(1,len(LoopIdx))])[0]
+        for d in dm:
+            plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
+
+    #
+    #   Timings data
+    #
+    def _LoadTimings(self):
+        if self._timings is None:
+            timings = LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
+            self._timingsHeaders = timings['headers']
+            self._idxTimeTot = self._timingsHeaders.index('Total')
+            self._timings = timings['table']
+
+    def Timings(self):
+        self._LoadTimings()
+        return copy.deepcopy(self._timings)
+
+    def TimingsHeaders(self):
+        self._LoadTimings()
+        return copy.deepcopy(self._timingsHeaders)
+
+    def TotalTime(self):
+        self._LoadTimings()
+        return np.array([row[self._idxTimeTot] for row in self._timings])
+
     def PlotTotalTime(self,**kwargs):
         totTime = self.TotalTime()
         self._p = plt.plot(totTime,label=self._label,**kwargs)
@@ -67,14 +128,25 @@ class Data:
         plt.xlabel('DMRG Steps')
         plt.ylabel('Time Elapsed per Step (s)')
 
-    def PlotLoopBars(self,**kwargs):
-        LoopIdx = [row[self._idxLoopidx] for row in self._steps]
-        dm = np.where([LoopIdx[i] - LoopIdx[i-1] for i in range(1,len(LoopIdx))])[0]
-        for d in dm:
-            plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
+    #
+    #   Preallocation data
+    #
+    def PreallocData(self):
+        if self._hamPrealloc is None:
+            self._hamPrealloc = LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
+        return self._hamPrealloc
+
+    def PlotPreallocData(self,n,**kwargs):
+        Dnnz = np.array(self.PreallocData()[n]["Dnnz"])
+        Onnz = np.array(self.PreallocData()[n]["Onnz"])
+        self._p = plt.plot(Dnnz,label='Dnnz: {}'.format(n),marker='o',**kwargs)
+        color = self._p[-1].get_color()
+        self._p = plt.plot(Onnz,label='Onnz: {}'.format(n),color=color,marker='^',**kwargs)
 
 class DataSeries:
-    'Post-processing for multiple DMRG runs'
+    """
+    Post-processing for multiple DMRG runs
+    """
 
     def __init__(self, base_dir_list, *args, label_list=None, **kwargs):
         if label_list==None:
