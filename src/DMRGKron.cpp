@@ -1067,7 +1067,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
             for (i=0; i<ctx.cstart; i++)        onnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
             for (i=ctx.cstart; i<ctx.cend; i++) dnnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
             for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
-            ctx.Dnnz[lrow] = dnnz + (dnnz+1 < ctx.lcols ? 1 : 0);
+            ctx.Dnnz[lrow] = dnnz + (PetscAbsScalar(val_arr[lrow+ctx.rstart]) < ks_tol ? 1 : 0);
             ctx.Onnz[lrow] = onnz;
             nelts = dnnz + onnz;
             if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
