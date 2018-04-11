@@ -108,7 +108,7 @@ public:
         num_sites = Ham.NumSites();
 
         if((num_sites) < 2) throw std::runtime_error("There must be at least two total sites.");
-        if((num_sites) % 2)  throw std::runtime_error("Total number of sites must be even.");
+        if((num_sites) % 2) throw std::runtime_error("Total number of sites must be even.");
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
@@ -685,11 +685,11 @@ private:
             flg = PETSC_FALSE;
             ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_terms",&flg,NULL); CHKERRQ(ierr);
             if(flg){
-                if(!mpi_rank) printf(" H(%d)\n", NumSitesTotal);
+                if(!mpi_rank) printf(" H(%lld)\n", LLD(NumSitesTotal));
                 for(const Hamiltonians::Term& term: Terms)
                 {
-                    if(!mpi_rank) printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
-                        (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+                    if(!mpi_rank) printf("%.2f %2s(%2lld) %2s(%2lld)\n", term.a, (OpString.find(term.Iop)->second).c_str(), LLD(term.Isite),
+                        (OpString.find(term.Jop)->second).c_str(), LLD(term.Jsite) );
                 }
             }
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
