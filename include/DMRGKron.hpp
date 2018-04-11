@@ -211,6 +211,13 @@ public:
         return(0);
     }
 
+    PetscErrorCode KronSumSetToleranceFromOptions()
+    {
+        PetscErrorCode ierr;
+        ierr = PetscOptionsGetReal(NULL,NULL,"-ks_tol",&ks_tol,NULL); CHKERRQ(ierr);
+        return(0);
+    }
+
 private:
 
     MPI_Comm mpi_comm = PETSC_COMM_SELF;
@@ -253,6 +260,9 @@ private:
 
     /** Whether to redistribute the resulting KronSum */
     PetscBool do_redistribute = PETSC_FALSE;
+
+    /** Tolerance */
+    PetscReal ks_tol = 0.0;
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)

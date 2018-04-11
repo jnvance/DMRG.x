@@ -671,6 +671,7 @@ private:
         #endif
 
         ierr = KronBlocks.KronSumSetRedistribute(PETSC_TRUE); CHKERRQ(ierr);
+        ierr = KronBlocks.KronSumSetToleranceFromOptions(); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
 
         ierr = PetscTime(&tkron); CHKERRQ(ierr);

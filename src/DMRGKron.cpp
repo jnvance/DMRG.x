@@ -1401,6 +1401,17 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                     }
                 }
             }
+
+            if(ks_tol > 0)
+            {
+                PetscReal val_abs;
+                for(PetscInt i=0; i<Nvals; i++){
+                    val_abs = PetscAbsScalar(val_arr[i]);
+                    if(val_abs < 0.0) SETERRQ(PETSC_COMM_SELF,1,"Incorrect!");
+                    if(val_abs < ks_tol) val_arr[i] = 0.0;
+                }
+            }
+
             ACCUM_TIMINGS_END(MatLoop)
             ACCUM_TIMINGS_BEGIN(MatSetValues)
             ierr = MatSetValues(MatOut, 1, &Irow, Nvals, idx_arr, val_arr, INSERT_VALUES); CHKERRQ(ierr);
