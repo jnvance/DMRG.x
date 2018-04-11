@@ -940,8 +940,6 @@ PetscErrorCode KronBlocks_t::KronSumPrepare(
     ierr = ISDestroy(&isrow_R); CHKERRQ(ierr);
     ierr = ISDestroy(&iscol_L); CHKERRQ(ierr);
     ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
-    /* Set to maximum value in case preallocation is not called */
-    ctx.MaxElementsPerRow = ctx.Ncols;
 
     FUNCTION_TIMINGS_END()
     return(0);
@@ -958,14 +956,16 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
     FUNCTION_TIMINGS_BEGIN()
 
     /*  Prepare a full dense row  */
+    PetscInt Nvals = ctx.lrows > 0 ? ctx.Ncols : 1;
     PetscScalar *val_arr;
-    ierr = PetscCalloc1(ctx.Ncols, &val_arr); CHKERRQ(ierr);
+
+    ierr = PetscCalloc1(Nvals, &val_arr); CHKERRQ(ierr);
 
     /*  Go through each local row, then go through each term in ctx
         and determine the number of entries that go into each row   */
-    ctx.MaxElementsPerRow = 0;
-    ctx.MinIdx = ctx.Ncols;
+    ctx.MinIdx = ctx.Ncols-1;
     ctx.MaxIdx = 0;
+    ctx.Nnz = 0;
     ierr = PetscCalloc2(ctx.lrows, &ctx.Dnnz, ctx.lrows, &ctx.Onnz); CHKERRQ(ierr);
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
@@ -973,7 +973,8 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
         in quantum numbers */
     std::map< Op_t, PetscInt > fws_LOP = {};
     std::map< Op_t, PetscInt > Row_NumStates_ROP = {};
-    if(ctx.lrows){
+    if(ctx.lrows)
+    {
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
         for( ; KIter.Loop(); ++KIter)
         {
@@ -986,10 +987,9 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
             const PetscInt LocRow_R = ctx.MapRowsR[Row_R];
 
             PetscBool flg[2];
-            PetscInt nz_L, nz_R, bks_L, bks_R, col_NStatesR, fws_O;
+            PetscInt nz_L, nz_R, bks_L, bks_R, col_NStatesR, fws_O, MinIdx, MaxIdx;
             const PetscInt *idx_L, *idx_R;
             const PetscScalar *v_L, *v_R;
-            PetscInt nelts = 0;
 
             if(KIter.UpdatedBlock())
             {
@@ -1010,7 +1010,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
             }
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
-            ierr = PetscMemzero(val_arr, ctx.Ncols*sizeof(val_arr[0])); CHKERRQ(ierr);
+            ierr = PetscMemzero(val_arr, Nvals*sizeof(val_arr[0])); CHKERRQ(ierr);
             for(const KronSumTerm& term: ctx.Terms)
             {
                 if(term.a == PetscScalar(0.0)) continue;
@@ -1049,17 +1049,14 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
                         val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
                 }
-                nelts += nz_L*nz_R;
-            }
-            /* Determine the smallest and largest indices for this row */
-            if(nelts){
-                PetscInt i = 0;
-                while(i < ctx.Ncols && (val_arr[i]==0.0)) i++;
-                if(i < ctx.MinIdx)  ctx.MinIdx = i;
 
-                i = ctx.Ncols-1;
-                while(i > 0 && (val_arr[i]==0.0)) i--;
-                if(i > ctx.MaxIdx)  ctx.MaxIdx = i;
+                /* Determine the smallest and largest indices for this row */
+                if (nz_L*nz_R > 0){
+                    MinIdx = ( (idx_L[0] - bks_L) * col_NStatesR + (idx_R[0] - bks_R) + fws_O );
+                    MaxIdx = ( (idx_L[nz_L-1] - bks_L) * col_NStatesR + (idx_R[nz_R-1] - bks_R) + fws_O );
+                    if(MinIdx < ctx.MinIdx) ctx.MinIdx = MinIdx;
+                    if(MaxIdx > ctx.MaxIdx) ctx.MaxIdx = MaxIdx;
+                }
             }
 
             /* Sum up all columns in the diagonal and off-diagonal */
@@ -1069,8 +1066,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
             for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
             ctx.Dnnz[lrow] = dnnz + (PetscAbsScalar(val_arr[lrow+ctx.rstart]) < ks_tol ? 1 : 0);
             ctx.Onnz[lrow] = onnz;
-            nelts = dnnz + onnz;
-            if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
+            ctx.Nnz += ctx.Dnnz[lrow] + ctx.Onnz[lrow];
         }
     }
     ierr = PetscFree(val_arr); CHKERRQ(ierr);
@@ -1307,12 +1303,14 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     /*  Preallocate largest needed workspace */
     PetscInt *idx_arr;
     PetscScalar *val_arr;
-    PetscInt Nvals = (ctx.lrows > 0) ? (ctx.MaxIdx+1)-ctx.MinIdx : 0;
+    PetscInt Nvals = (ctx.lrows > 0) ? ((ctx.MaxIdx+1)-ctx.MinIdx) : 1;
+    if(Nvals <= 0) SETERRQ1(PETSC_COMM_SELF,1,"Incorrect value of Nvals. Must be positive. Got %lld.", LLD(Nvals));
     ierr = PetscCalloc1(Nvals, &idx_arr); CHKERRQ(ierr);
     ierr = PetscCalloc1(Nvals, &val_arr); CHKERRQ(ierr);
 
     /* Fill in all indices */
     for(PetscInt i=0; i < Nvals; ++i) idx_arr[i] = ctx.MinIdx + i;
+    ctx.Nfiltered = 0;
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
         assumes that the right block is a valid operator type such that the resulting matrix term is block-diagonal
@@ -1324,7 +1322,8 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     ACCUM_TIMINGS_SETUP(MatSetValues)
     ACCUM_TIMINGS_SETUP(MatLoop)
     INTERVAL_TIMINGS_BEGIN()
-    if(ctx.lrows){
+    if(ctx.lrows > 0)
+    {
         KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
         for( ; KIter.Loop(); ++KIter)
         {
@@ -1404,7 +1403,10 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             }
 
             for(PetscInt i=0; i<Nvals; i++){
-                if(PetscAbsScalar(val_arr[i]) < ks_tol) val_arr[i] = 0.0;
+                if(PetscAbsScalar(val_arr[i]) < ks_tol){
+                    val_arr[i] = 0.0;
+                    ++ctx.Nfiltered;
+                }
             }
 
             ACCUM_TIMINGS_END(MatLoop)

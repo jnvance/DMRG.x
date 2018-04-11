@@ -330,9 +330,6 @@ private:
         /** Preallocation data of the output matrix for local off-diagonal diagonal rows */
         PetscInt *Onnz;
 
-        /** Maximum number of elements across all local rows of MatOut */
-        PetscInt MaxElementsPerRow = 0;
-
         /** Smallest non-zero index in the current set of local rows */
         PetscInt MinIdx=0;
 
@@ -342,7 +339,9 @@ private:
         /** Predicted maximum number of elements on each local row */
         std::vector< PetscInt > Maxnnz;
 
-        PetscInt ks_tol_removed;
+        PetscInt Nfiltered=0;
+
+        PetscInt Nnz=0;
 
     } KronSumCtx;
 
