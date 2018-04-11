@@ -262,7 +262,11 @@ private:
     PetscBool do_redistribute = PETSC_FALSE;
 
     /** Tolerance */
-    PetscReal ks_tol = 0.0;
+    #if defined(PETSC_USE_REAL_DOUBLE)
+    PetscReal ks_tol = 1.0e-16;
+    #else
+    #error Only double precision real numbers supported.
+    #endif
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)
@@ -330,13 +334,15 @@ private:
         PetscInt MaxElementsPerRow = 0;
 
         /** Smallest non-zero index in the current set of local rows */
-        PetscInt MinIdx;
+        PetscInt MinIdx=0;
 
         /** Largest non-zero index in the current set of local rows */
-        PetscInt MaxIdx;
+        PetscInt MaxIdx=0;
 
         /** Predicted maximum number of elements on each local row */
         std::vector< PetscInt > Maxnnz;
+
+        PetscInt ks_tol_removed;
 
     } KronSumCtx;
 

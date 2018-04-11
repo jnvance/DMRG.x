@@ -957,9 +957,9 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
     PetscErrorCode ierr = 0;
     FUNCTION_TIMINGS_BEGIN()
 
-    /*  Prepare a full dense row which will indicate whether a non-zero entry is to be entered */
-    PetscInt *idx_arr;
-    ierr = PetscCalloc1(ctx.Ncols, &idx_arr); CHKERRQ(ierr);
+    /*  Prepare a full dense row  */
+    PetscScalar *val_arr;
+    ierr = PetscCalloc1(ctx.Ncols, &val_arr); CHKERRQ(ierr);
 
     /*  Go through each local row, then go through each term in ctx
         and determine the number of entries that go into each row   */
@@ -989,7 +989,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
             PetscInt nz_L, nz_R, bks_L, bks_R, col_NStatesR, fws_O;
             const PetscInt *idx_L, *idx_R;
             const PetscScalar *v_L, *v_R;
-            PetscInt nelts;
+            PetscInt nelts = 0;
 
             if(KIter.UpdatedBlock())
             {
@@ -1010,7 +1010,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
             }
 
             /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
-            ierr = PetscMemzero(idx_arr, ctx.Ncols*sizeof(idx_arr[0])); CHKERRQ(ierr);
+            ierr = PetscMemzero(val_arr, ctx.Ncols*sizeof(val_arr[0])); CHKERRQ(ierr);
             for(const KronSumTerm& term: ctx.Terms)
             {
                 if(term.a == PetscScalar(0.0)) continue;
@@ -1046,33 +1046,34 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
                 {
                     for(size_t r=0; r<nz_R; ++r)
                     {
-                        idx_arr[ (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O ] = 1;
+                        val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
                 }
+                nelts += nz_L*nz_R;
             }
-            /* Sum up all columns in the diagonal and off-diagonal */
-            PetscInt dnnz = 0, onnz=0, i;
-            for (i=0; i<ctx.cstart; i++)        onnz += idx_arr[i];
-            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += idx_arr[i];
-            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += idx_arr[i];
-            ctx.Dnnz[lrow] = dnnz;
-            ctx.Onnz[lrow] = onnz;
-            nelts = dnnz + onnz;
-            if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
-
             /* Determine the smallest and largest indices for this row */
             if(nelts){
                 PetscInt i = 0;
-                while(i < ctx.Ncols && !idx_arr[i]) i++;
+                while(i < ctx.Ncols && (val_arr[i]==0.0)) i++;
                 if(i < ctx.MinIdx)  ctx.MinIdx = i;
 
                 i = ctx.Ncols-1;
-                while(i > 0 && !idx_arr[i]) i--;
+                while(i > 0 && (val_arr[i]==0.0)) i--;
                 if(i > ctx.MaxIdx)  ctx.MaxIdx = i;
             }
+
+            /* Sum up all columns in the diagonal and off-diagonal */
+            PetscInt dnnz = 0, onnz=0, i;
+            for (i=0; i<ctx.cstart; i++)        onnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
+            for (i=ctx.cstart; i<ctx.cend; i++) dnnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
+            for (i=ctx.cend; i<ctx.Ncols; i++)  onnz += !(PetscAbsScalar(val_arr[i]) < ks_tol);
+            ctx.Dnnz[lrow] = dnnz + (dnnz+1 < ctx.lcols ? 1 : 0);
+            ctx.Onnz[lrow] = onnz;
+            nelts = dnnz + onnz;
+            if (nelts > ctx.MaxElementsPerRow) ctx.MaxElementsPerRow = nelts;
         }
     }
-    ierr = PetscFree(idx_arr); CHKERRQ(ierr);
+    ierr = PetscFree(val_arr); CHKERRQ(ierr);
 
     FUNCTION_TIMINGS_END()
     return(0);
@@ -1402,14 +1403,8 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                 }
             }
 
-            if(ks_tol > 0)
-            {
-                PetscReal val_abs;
-                for(PetscInt i=0; i<Nvals; i++){
-                    val_abs = PetscAbsScalar(val_arr[i]);
-                    if(val_abs < 0.0) SETERRQ(PETSC_COMM_SELF,1,"Incorrect!");
-                    if(val_abs < ks_tol) val_arr[i] = 0.0;
-                }
+            for(PetscInt i=0; i<Nvals; i++){
+                if(PetscAbsScalar(val_arr[i]) < ks_tol) val_arr[i] = 0.0;
             }
 
             ACCUM_TIMINGS_END(MatLoop)
