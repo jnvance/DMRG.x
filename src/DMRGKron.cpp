@@ -740,32 +740,6 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         }
     }
 
-    #if defined(PETSC_USE_DEBUG)
-        PetscBool print_H_terms = PETSC_FALSE;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_terms",&print_H_terms,NULL); CHKERRQ(ierr);
-        if(!mpi_rank && print_H_terms) {
-            printf(" nsites_left=%d nsites_right=%d nsites_out=%d\n", nsites_left, nsites_right, nsites_out);
-            printf(" TermsLL\n");
-            for(const Hamiltonians::Term& term: TermsLL)
-            {
-                printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
-                    (OpString.find(term.Jop)->second).c_str(), term.Jsite );
-            }
-            printf(" TermsLR\n");
-            for(const Hamiltonians::Term& term: TermsLR)
-            {
-                printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
-                    (OpString.find(term.Jop)->second).c_str(), term.Jsite );
-            }
-            printf(" TermsRR\n");
-            for(const Hamiltonians::Term& term: TermsRR)
-            {
-                printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
-                    (OpString.find(term.Jop)->second).c_str(), term.Jsite );
-            }
-        }
-    #endif
-
     /* Assumes that output matrix is square */
     KronSumCtx ctx;
     ctx.Nrows = ctx.Ncols = num_states;
@@ -775,27 +749,14 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     ctx.lcols = ctx.lrows;
     ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
 
-    /* Use the Hamiltonian directly for OpProdSumLL/RR */
-    const Mat OpProdSumLL = LeftBlock.H;
-    const Mat OpProdSumRR = RightBlock.H;
-
-    #if defined(PETSC_USE_DEBUG)
-    PetscBool __flg = PETSC_FALSE;
-    ierr = PetscOptionsGetBool(NULL,NULL,"-print_OpProdSum",&__flg,NULL); CHKERRQ(ierr);
-    if(__flg){
-        ierr = MatPeek(OpProdSumLL, "OpProdSumLL"); CHKERRQ(ierr);
-        ierr = MatPeek(OpProdSumRR, "OpProdSumRR"); CHKERRQ(ierr);
-    }
-    #endif
-
     TIMINGS_NEWLINE()
-    ierr = KronSumGetSubmatrices(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+    ierr = KronSumGetSubmatrices(LeftBlock.H, RightBlock.H, TermsLR, ctx); CHKERRQ(ierr);
     ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
     if(do_redistribute){
         PetscBool flg;
         ierr = KronSumRedistribute(ctx,flg); CHKERRQ(ierr);
         if(flg){
-            ierr = KronSumGetSubmatrices(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+            ierr = KronSumGetSubmatrices(LeftBlock.H, RightBlock.H, TermsLR, ctx); CHKERRQ(ierr);
             ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
         }
     }
