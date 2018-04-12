@@ -760,7 +760,7 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
             ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
         }
     }
-    ierr = SavePreallocData(ctx);
+    ierr = SavePreallocData(ctx); CHKERRQ(ierr);
     ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
