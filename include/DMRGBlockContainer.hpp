@@ -84,6 +84,12 @@ struct TimingsData
     PetscLogDouble  Total;
 };
 
+/** Defines a single operator to be used for performing measurements */
+struct Op{
+    Op_t OpType;
+    PetscInt idx;
+};
+
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {
@@ -180,6 +186,14 @@ public:
     ~DMRGBlockContainer()
     {
         PetscErrorCode ierr = Destroy(); assert(!ierr);
+    }
+
+    /** Sets up measurement of correlation functions at the end of each sweep */
+    PetscErrorCode SetUpCorrelation(
+        const std::vector< Op >& OpList
+        )
+    {
+        return(0);
     }
 
     /** Performs the warmup stage of DMRG.
@@ -740,6 +754,8 @@ private:
         }
         #endif
 
+        /* TODO: Perform evaluation of inter-block correlation functions here */
+
         if(no_symm){
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
             SETERRQ(mpi_comm,PETSC_ERR_SUP,"Unsupported option: no_symm.");
@@ -752,6 +768,8 @@ private:
         PetscReal       TruncErr_L, TruncErr_R;
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
         /* TODO: Add an option to accept flg for redundant blocks */
+
+        /* TODO: Perform evaluation of intra-block correlation functions */
 
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);

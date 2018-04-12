@@ -43,6 +43,13 @@ int main(int argc, char **argv)
             printf("=========================================\n");
         }
 
+        /* Explicitly give a list of operators.
+         * For example, the second left-most column <Sz_{Lx} Sz_{Lx+1} ... Sz_{2Lx-1}> */
+        std::vector< Op > OpList = {};
+        PetscInt Lx = DMRG.HamiltonianRef().Lx();
+        for(PetscInt idx = Lx; idx < 2*Lx; ++idx) OpList.push_back({OpSz,idx});
+        ierr = DMRG.SetUpCorrelation(OpList); CHKERRQ(ierr);
+
         /* Perform DMRG steps */
         ierr = DMRG.Warmup(mstates); CHKERRQ(ierr);
         if(use_msweeps){
