@@ -345,7 +345,7 @@ private:
 
     } KronSumCtx;
 
-    PetscErrorCode KronSumPrepare(
+    PetscErrorCode KronSumGetSubmatrices(
         const Mat& OpProdSumLL,
         const Mat& OpProdSumRR,
         const std::vector< Hamiltonians::Term >& TermsLR,

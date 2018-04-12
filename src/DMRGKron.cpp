@@ -802,13 +802,13 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     #endif
 
     TIMINGS_NEWLINE()
-    ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+    ierr = KronSumGetSubmatrices(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
     ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
     if(do_redistribute){
         PetscBool flg;
         ierr = KronSumRedistribute(ctx,flg); CHKERRQ(ierr);
         if(flg){
-            ierr = KronSumPrepare(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
+            ierr = KronSumGetSubmatrices(OpProdSumLL, OpProdSumRR, TermsLR, ctx); CHKERRQ(ierr);
             ierr = KronSumCalcPreallocation(ctx); CHKERRQ(ierr);
         }
     }
@@ -845,7 +845,7 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
             GetBlockMat((BLOCK), std::get<0>(TUPLE), std::get<1>(TUPLE))
 
 
-PetscErrorCode KronBlocks_t::KronSumPrepare(
+PetscErrorCode KronBlocks_t::KronSumGetSubmatrices(
     const Mat& OpProdSumLL,
     const Mat& OpProdSumRR,
     const std::vector< Hamiltonians::Term >& TermsLR,
