@@ -31,10 +31,14 @@ public:
     KronBlocks_t(
         Block::SpinOneHalf& LeftBlock,
         Block::SpinOneHalf& RightBlock,
-        const std::vector<PetscReal>& QNSectors = {} /**< [in] list of quantum number sectors for keeping selected states */
+        const std::vector<PetscReal>& QNSectors, /**< [in] list of quantum number sectors for keeping selected states */
+        FILE *fp_prealloc,
+        const PetscInt& GlobIdx
         ):
+        GlobIdx(GlobIdx),
         LeftBlock(LeftBlock),
-        RightBlock(RightBlock)
+        RightBlock(RightBlock),
+        fp_prealloc(fp_prealloc)
     {
         /* Require blocks to be initialized */
         if(!LeftBlock.Initialized()) throw std::runtime_error("Left input block not initialized.");
@@ -111,7 +115,9 @@ public:
         kb_offset.push_back(sum);
         num_states = sum;
 
-    }
+        do_saveprealloc = PetscBool(fp_prealloc!=NULL);
+        MPIU_Allreduce(MPI_IN_PLACE, &do_saveprealloc, 1, MPI_INT, MPI_SUM, PETSC_COMM_WORLD);
+    };
 
     /** Returns the total number blocks */
     size_t size() const { return KronBlocks.size(); }
@@ -197,10 +203,27 @@ public:
         Mat& MatOut                                     /**< [out]  resultant matrix */
         );
 
+    PetscErrorCode KronSumSetRedistribute(
+        const PetscBool& do_redistribute_in = PETSC_TRUE
+        )
+    {
+        do_redistribute = do_redistribute_in;
+        return(0);
+    }
+
+    PetscErrorCode KronSumSetToleranceFromOptions()
+    {
+        PetscErrorCode ierr;
+        ierr = PetscOptionsGetReal(NULL,NULL,"-ks_tol",&ks_tol,NULL); CHKERRQ(ierr);
+        return(0);
+    }
+
 private:
 
     MPI_Comm mpi_comm = PETSC_COMM_SELF;
     PetscMPIInt mpi_rank, mpi_size;
+
+    const PetscInt GlobIdx;
 
     /** Storage for kronblocks */
     std::vector<KronBlock_t> KronBlocks;
@@ -228,6 +251,22 @@ private:
 
     /** Reference to the right block object */
     Block::SpinOneHalf& RightBlock;
+
+    /** File to store preallocation data for each processor */
+    FILE *fp_prealloc;
+
+    /** Whether to store preallocation data for each processor */
+    PetscBool do_saveprealloc = PETSC_FALSE;
+
+    /** Whether to redistribute the resulting KronSum */
+    PetscBool do_redistribute = PETSC_FALSE;
+
+    /** Tolerance */
+    #if defined(PETSC_USE_REAL_DOUBLE)
+    PetscReal ks_tol = 1.0e-16;
+    #else
+    #error Only double precision real numbers supported.
+    #endif
 
     /** Comparison function to sort KronBlocks in descending order of quantum numbers */
     static bool DescendingQN(const KronBlock_t& a, const KronBlock_t& b)
@@ -283,7 +322,7 @@ private:
         std::vector< KronSumTerm > Terms;
 
         /** List of unique submatrices to be destroyed later */
-        std::vector< Mat > LocalSubMats;
+        std::vector< Mat* > LocalSubMats;
 
         /** Preallocation data of the output matrix for local diagonal rows */
         PetscInt *Dnnz;
@@ -291,25 +330,35 @@ private:
         /** Preallocation data of the output matrix for local off-diagonal diagonal rows */
         PetscInt *Onnz;
 
-        /** Maximum number of elements across all local rows of MatOut */
-        PetscInt MaxElementsPerRow;
+        /** Smallest non-zero index in the current set of local rows */
+        PetscInt MinIdx=0;
+
+        /** Largest non-zero index in the current set of local rows */
+        PetscInt MaxIdx=0;
 
         /** Predicted maximum number of elements on each local row */
         std::vector< PetscInt > Maxnnz;
-    } KronSumCtx;
 
-    PetscErrorCode KronSumPrepareTerms(
-        const std::vector< Hamiltonians::Term >& TermsLL,
-        const std::vector< Hamiltonians::Term >& TermsRR,
-        Mat& OpProdSumLL,
-        Mat& OpProdSumRR
-        );
+        PetscInt Nfiltered=0;
+
+        PetscInt Nnz=0;
+
+    } KronSumCtx;
 
     PetscErrorCode KronSumPrepare(
         const Mat& OpProdSumLL,
         const Mat& OpProdSumRR,
         const std::vector< Hamiltonians::Term >& TermsLR,
         KronSumCtx& SubMat
+        );
+
+    PetscErrorCode KronSumCalcPreallocation(
+        KronSumCtx& ctx
+        );
+
+    PetscErrorCode KronSumRedistribute(
+        KronSumCtx& ctx,
+        PetscBool& flg
         );
 
     PetscErrorCode KronSumPreallocate(
@@ -322,6 +371,7 @@ private:
         Mat& MatOut
         );
 
+    PetscErrorCode SavePreallocData(const KronSumCtx& ctx);
 };
 
 

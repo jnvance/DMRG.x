@@ -85,7 +85,7 @@ PetscErrorCode QuantumNumbers::OpBlockToGlobalRange(
         SETERRQ2(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Given BlockIdx (%d) out of bounds [0, %d).", BlockIdx, num_sectors);
 
     PetscInt BlockIdx_out = BlockIdx + BlockShift;
-    if(BlockIdx_out < 0 || BlockIdx_out >= num_states){
+    if(BlockIdx_out < 0 || BlockIdx_out >= num_sectors){
         flg = PETSC_FALSE;
         return 0;
     }

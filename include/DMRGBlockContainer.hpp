@@ -20,6 +20,10 @@
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
+#define PrintLines() printf("-----------------------------------------\n")
+#define PRINTLINES() printf("=========================================\n")
+#define PrintBlocks(LEFT,RIGHT) printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT))
+
 /** Provides an alias of Side_t to follow the Sys-Env convention */
 typedef enum
 {
@@ -63,6 +67,7 @@ struct StepData
     PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
     PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
     PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
+    PetscInt    NumStates_H;        /**< Number of states used in constructing the superblock Hamiltonian */
     PetscScalar GSEnergy;
     PetscReal   TruncErr_Sys;
     PetscReal   TruncErr_Env;
@@ -79,6 +84,12 @@ struct TimingsData
     PetscLogDouble  Total;
 };
 
+/** Defines a single operator to be used for performing measurements */
+struct Op{
+    Op_t OpType;
+    PetscInt idx;
+};
+
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {
@@ -86,7 +97,7 @@ template<class Block, class Hamiltonian> class DMRGBlockContainer
 public:
 
     /** Initializes the container object with blocks of one site on each of the system and environment */
-    DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
+    explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
     {
         PetscInt ierr = 0;
 
@@ -103,7 +114,7 @@ public:
         num_sites = Ham.NumSites();
 
         if((num_sites) < 2) throw std::runtime_error("There must be at least two total sites.");
-        if((num_sites) % 2)  throw std::runtime_error("Total number of sites must be even.");
+        if((num_sites) % 2) throw std::runtime_error("Total number of sites must be even.");
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
@@ -129,59 +140,60 @@ public:
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
         }
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("StepData.dat")).c_str(), "w", &fp_step); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); assert(!ierr);
+        ierr = SaveStepHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_step,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("TimingsData.dat")).c_str(), "w", &fp_timings); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Timings.json")).c_str(), "w", &fp_timings); assert(!ierr);
+        ierr = SaveTimingsHeaders(); assert(!ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
-        /*  Print some info to stdout */
-        if(verbose && !mpi_rank){
-            printf(
-                "=========================================\n"
-                "DENSITY MATRIX RENORMALIZATION GROUP\n"
-                "-----------------------------------------\n");
-            if(do_scratch_dir){
-                printf(
-                "Scratch Directory:     %s\n", scratch_dir.c_str());
-            }
-            printf(
-                "Data Directory:        %s\n", opt_data_dir ? data_dir.c_str() : "." );
-            printf(
-                "=========================================\n");
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("EntanglementSpectra.json")).c_str(), "w", &fp_entanglement); assert(!ierr);
+        if(!mpi_rank) fprintf(fp_entanglement,"[\n");
+
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGRun.json")).c_str(), "w", &fp_data); assert(!ierr);
+        if(!mpi_rank){
+            fprintf(fp_data,"{\n");
+            Ham.SaveOut(fp_data);
+            fprintf(fp_data,",\n");
         }
+
+        /* do_save_prealloc: default value is FALSE */
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); assert(!ierr);
+        if(do_save_prealloc){
+            ierr = PetscFOpen(mpi_comm, (data_dir+std::string("HamiltonianPrealloc.json")).c_str(), "w", &fp_prealloc); assert(!ierr);
+            if(!mpi_rank) fprintf(fp_prealloc,"[\n");
+        }
+
+        /*  Print some info to stdout */
+        if(!mpi_rank){
+            printf( "=========================================\n"
+                    "DENSITY MATRIX RENORMALIZATION GROUP\n"
+                    "-----------------------------------------\n");
+            Ham.PrintOut();
+            printf( "-----------------------------------------\n");
+            printf( "DIRECTORIES\n");
+            if(do_scratch_dir) printf(
+                    "  Scratch: %s\n", scratch_dir.c_str());
+            printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
+            printf( "=========================================\n");
+        }
+        LoopType = WarmupStep;
+        init = PETSC_TRUE;
     }
 
     /** Destroys all created blocks */
     ~DMRGBlockContainer()
     {
-        PetscInt ierr = 0;
-        ierr = SingleSite.Destroy(); assert(!ierr);
-        for(Block blk: sys_blocks) { ierr = blk.Destroy(); assert(!ierr); }
-        for(Block blk: env_blocks) { ierr = blk.Destroy(); assert(!ierr); }
-        if(!mpi_rank) fprintf(fp_step,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_step); assert(!ierr);
-        if(!mpi_rank) fprintf(fp_timings,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_timings); assert(!ierr);
+        PetscErrorCode ierr = Destroy(); assert(!ierr);
     }
 
-    /** Get parameters from command line options */
-    PetscErrorCode SetFromOptions()
+    /** Sets up measurement of correlation functions at the end of each sweep */
+    PetscErrorCode SetUpCorrelation(
+        const std::vector< Op >& OpList
+        )
     {
-        PetscErrorCode ierr;
-        ierr = Ham.SetFromOptions(); CHKERRQ(ierr);
         return(0);
-    }
-
-    #define PrintLines() printf("-----------------------------------------\n")
-    #define PRINTLINES() printf("=========================================\n")
-    #define PrintBlocks(LEFT,RIGHT) printf(" [%d]-* *-[%d]\n",(LEFT),(RIGHT))
-
-    /** Returns the path to the directory for the storage of a specific system block */
-    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
-        std::ostringstream oss;
-        oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
-        return oss.str();
     }
 
     /** Performs the warmup stage of DMRG.
@@ -193,7 +205,7 @@ public:
     {
         PetscErrorCode ierr = 0;
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
-        if(!mpi_rank && verbose) printf("WARMUP\n");
+        if(!mpi_rank) printf("WARMUP\n");
 
         /*  Initialize array of blocks */
         num_sys_blocks = num_sites - 1;
@@ -209,6 +221,8 @@ public:
                     std::string path = BlockDir("Sys",iblock);
                     ierr = Makedir(path); CHKERRQ(ierr);
                 }
+                ierr = Makedir(BlockDir("SysEnl",0)); CHKERRQ(ierr);
+                ierr = Makedir(BlockDir("EnvEnl",0)); CHKERRQ(ierr);
             }
             for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                 std::string path = BlockDir("Sys",iblock);
@@ -230,8 +244,8 @@ public:
             if (nsites_cluster % 2) nsites_cluster *= 2;
 
             /*  Prepare an exact representation of blocks of sites incremented up to the cluster size */
-            if(!mpi_rank && verbose){
-                PrintLines();
+            if(!mpi_rank){
+                if(verbose) PrintLines();
                 printf(" Preparing initial blocks.\n");
             }
             while(sys_ninit < nsites_cluster){
@@ -241,9 +255,9 @@ public:
             }
 
             {
-                if(!mpi_rank && verbose) printf("  sys_ninit: %d\n", sys_ninit);
+                if(!mpi_rank && verbose) printf("  sys_ninit: %lld\n", LLD(sys_ninit));
                 for(PetscInt isys = 0; isys < sys_ninit; ++isys){
-                    if(!mpi_rank && verbose) printf("   block %d, num_sites %d\n", isys, sys_blocks[isys].NumSites());
+                    if(!mpi_rank && verbose) printf("   block %lld, num_sites %lld\n", LLD(isys), LLD(sys_blocks[isys].NumSites()));
                 }
             }
 
@@ -262,10 +276,11 @@ public:
                 full_cluster += env_add;
 
                 if(env_numsites < 1 || env_numsites > sys_ninit)
-                    SETERRQ1(mpi_comm,1,"Incorrect number of sites. Got %d.", env_numsites);
+                    SETERRQ1(mpi_comm,1,"Incorrect number of sites. Got %lld.",  LLD(env_numsites));
 
-                if(!mpi_rank && verbose){
-                    PrintLines();
+                if(!mpi_rank){
+                    if(verbose) PrintLines();
+                    printf(" %s  %lld/%lld/%lld\n", "WARMUP",  LLD(LoopIdx),  LLD(StepIdx),  LLD(GlobIdx));
                     PrintBlocks(sys_ninit,env_numsites);
                 }
                 if(do_scratch_dir){
@@ -282,7 +297,6 @@ public:
                     if(!mpi_rank && verbose) printf("  Number of system blocks: %d\n", sys_ninit);
                 #endif
             }
-            ++LoopIdx;
         }
 
         if(sys_ninit != num_sites/2)
@@ -293,14 +307,15 @@ public:
         }
         env_ninit = 0;
         warmed_up = PETSC_TRUE;
+        warmup_mstates = MStates;
 
         if(verbose){
             PetscPrintf(mpi_comm,
                 "  Initialized system blocks: %d\n"
                 "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
-            if(!mpi_rank) PRINTLINES();
         }
-
+        if(!mpi_rank) PRINTLINES();
+        ++LoopIdx;
         return(0);
     }
 
@@ -312,7 +327,7 @@ public:
     {
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
-        if(!mpi_rank && verbose) printf("SWEEP MStates=%d\n", MStates);
+        if(!mpi_rank) printf("SWEEP MStates=%lld\n", LLD(MStates));
 
         /*  Set a minimum number of blocks (min_block). Decide whether to set it statically or let
             the number correspond to the least number of sites needed to exactly build MStates. */
@@ -326,8 +341,9 @@ public:
         {
             const PetscInt  insys  = iblock-1,   inenv  = num_sites - iblock - 3;
             const PetscInt  outsys = iblock,     outenv = num_sites - iblock - 2;
-            if(!mpi_rank && verbose){
-                PrintLines();
+            if(!mpi_rank){
+                if(verbose) PrintLines();
+                printf(" %s  %lld/%lld/%lld\n", "SWEEP", LLD(LoopIdx), LLD(StepIdx), LLD(GlobIdx));
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -344,8 +360,9 @@ public:
         {
             const PetscInt  insys  = num_sites - iblock - 3,    inenv  = iblock-1;
             const PetscInt  outsys = num_sites - iblock - 2,    outenv = iblock;
-            if(!mpi_rank && verbose){
-                PrintLines();
+            if(!mpi_rank){
+                if(verbose) PrintLines();
+                printf(" %s  %lld/%lld/%lld\n", "SWEEP", LLD(LoopIdx), LLD(StepIdx), LLD(GlobIdx));
                 PrintBlocks(insys+1,inenv+1);
             }
             if(do_scratch_dir){
@@ -355,15 +372,44 @@ public:
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
                                     sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
         }
+        sweeps_mstates.push_back(MStates);
         ++LoopIdx;
-
-        if(!mpi_rank && verbose) PRINTLINES();
+        if(!mpi_rank) PRINTLINES();
 
         return(0);
     };
 
     /** Destroys the container object */
-    PetscErrorCode Destroy();
+    PetscErrorCode Destroy(){
+        if(!init) return(0);
+        PetscInt ierr = 0;
+        ierr = SingleSite.Destroy(); CHKERRQ(ierr);
+        for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+        for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_step,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_step,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_timings,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
+
+        if(!mpi_rank) fprintf(fp_entanglement,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_entanglement); CHKERRQ(ierr);
+
+        ierr = SaveLoopsData();
+        if(!mpi_rank) fprintf(fp_data,"\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
+
+        if(do_save_prealloc){
+            if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
+            ierr = PetscFClose(mpi_comm, fp_prealloc); assert(!ierr);
+        }
+
+        init = PETSC_FALSE;
+        return(0);
+    }
 
     /** Accesses the specified system block */
     const Block& SysBlock(const PetscInt& BlockIdx) const {
@@ -383,6 +429,11 @@ public:
     /** Returns that number of sites recorded in the Hamiltonian object */
     PetscInt NumSites() const { return num_sites; }
 
+    /** Returns whether verbose printing is active */
+    PetscBool Verbose() const { return verbose; }
+
+    const Hamiltonian& HamiltonianRef() const { return Ham; }
+
 private:
 
     /** MPI Communicator */
@@ -394,6 +445,9 @@ private:
     /** MPI size of mpi_comm */
     PetscMPIInt mpi_size;
 
+    /** Tells whether the object is initialized */
+    PetscBool   init = PETSC_FALSE;
+
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
 
@@ -402,6 +456,13 @@ private:
 
     /** Tells whether no quantum number symmetries will be implemented */
     PetscBool   no_symm = PETSC_FALSE;
+
+    /** Number of states requested for warmup */
+    PetscInt    warmup_mstates = 0;
+
+    /** Records the number of states requested for each sweep, where each entry is a single
+        call to Sweep() */
+    std::vector<PetscInt> sweeps_mstates;
 
     /** Total number of sites */
     PetscInt    num_sites;
@@ -446,11 +507,26 @@ private:
         This is automatically set when indicating -scratch_dir */
     PetscBool do_scratch_dir = PETSC_FALSE;
 
+    /** Tells whether data should be saved in tabular form, instead of verbose json */
+    PetscBool data_tabular = PETSC_TRUE;
+
+    /** Tells whether to save preallocation data for the superblock Hamiltonian */
+    PetscBool do_save_prealloc = PETSC_FALSE;
+
     /** File to store basic data (energy, number of sites, etc) */
     FILE *fp_step;
 
     /** File to store timings data for each section of a single iteration */
     FILE *fp_timings;
+
+    /** File to store the entanglement spectrum of the reduced density matrices for a single iteration */
+    FILE *fp_entanglement;
+
+    /** File to store timings data for each section of a single iteration */
+    FILE *fp_data;
+
+    /** File to store preallocation data of the superblock Hamiltonian */
+    FILE *fp_prealloc = NULL;
 
     /** Global index key which must be unique for each record */
     PetscInt GlobIdx = 0;
@@ -476,6 +552,7 @@ private:
     {
         PetscErrorCode ierr;
         PetscLogDouble t0, tenlr, tkron, tdiag, trdms, trotb;
+        TimingsData timings_data;
         ierr = PetscTime(&t0); CHKERRQ(ierr);
 
         /* Fill-in data from input blocks */
@@ -500,9 +577,15 @@ private:
             const std::vector< Hamiltonians::Term > TermsEnv = Ham.H(NumSitesEnvEnl);
             ierr = KronEye_Explicit(EnvBlock, AddSite, TermsEnv, EnvBlockEnl); CHKERRQ(ierr);
             ierr = EnvBlock.EnsureSaved(); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.InitializeSave(BlockDir("EnvEnl",0)); CHKERRQ(ierr);
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
+        ierr = SysBlockEnl.InitializeSave(BlockDir("SysEnl",0)); CHKERRQ(ierr);
+
+        ierr = PetscTime(&tenlr); CHKERRQ(ierr);
+        timings_data.tEnlr = tenlr-t0;
+        if(!mpi_rank && verbose) printf("* Add One Site:          %12.6f s\n", timings_data.tEnlr);
 
         step_data.NumSites_SysEnl = SysBlockEnl.NumSites();
         step_data.NumSites_EnvEnl = EnvBlockEnl.NumSites();
@@ -532,8 +615,8 @@ private:
         if(no_symm) {
             QNSectors = {};
         }
-        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, QNSectors);
-
+        KronBlocks_t KronBlocks(SysBlockEnl, EnvBlockEnl, QNSectors, fp_prealloc, GlobIdx);
+        step_data.NumStates_H = KronBlocks.NumStates();
         #if defined(PETSC_USE_DEBUG)
         {
             PetscBool flg = PETSC_FALSE;
@@ -603,9 +686,13 @@ private:
         }
         #endif
 
-        ierr = PetscTime(&tenlr); CHKERRQ(ierr);
+        ierr = KronBlocks.KronSumSetRedistribute(PETSC_TRUE); CHKERRQ(ierr);
+        ierr = KronBlocks.KronSumSetToleranceFromOptions(); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
+
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
+        timings_data.tKron = tkron-tenlr;
+        if(!mpi_rank && verbose)  printf("* Build Superblock H:    %12.6f s\n", timings_data.tKron);
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -615,11 +702,11 @@ private:
             flg = PETSC_FALSE;
             ierr = PetscOptionsGetBool(NULL,NULL,"-print_H_terms",&flg,NULL); CHKERRQ(ierr);
             if(flg){
-                if(!mpi_rank) printf(" H(%d)\n", NumSitesTotal);
+                if(!mpi_rank) printf(" H(%lld)\n", LLD(NumSitesTotal));
                 for(const Hamiltonians::Term& term: Terms)
                 {
-                    if(!mpi_rank) printf("%.2f %2s(%2d) %2s(%2d)\n", term.a, (OpString.find(term.Iop)->second).c_str(), term.Isite,
-                        (OpString.find(term.Jop)->second).c_str(), term.Jsite );
+                    if(!mpi_rank) printf("%.2f %2s(%2lld) %2s(%2lld)\n", term.a, (OpString.find(term.Iop)->second).c_str(), LLD(term.Isite),
+                        (OpString.find(term.Jop)->second).c_str(), LLD(term.Jsite) );
                 }
             }
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
@@ -651,15 +738,10 @@ private:
         }
         step_data.GSEnergy = gse_r;
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+
         ierr = PetscTime(&tdiag); CHKERRQ(ierr);
-        if(!mpi_rank && verbose)
-        {
-            printf("  Superblock:\n");
-            printf("    NumStates:   %d\n", KronBlocks.NumStates());
-            printf("    NumSites:    %d\n", NumSitesTotal);
-            printf("    Energy:      %-10.10g\n", gse_r);
-            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
-        }
+        timings_data.tDiag = tdiag-tkron;
+        if(!mpi_rank && verbose) printf("* Solve Ground State:    %12.6f s\n", timings_data.tDiag);
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -671,6 +753,8 @@ private:
             }
         }
         #endif
+
+        /* TODO: Perform evaluation of inter-block correlation functions here */
 
         if(no_symm){
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
@@ -685,26 +769,27 @@ private:
         ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
         /* TODO: Add an option to accept flg for redundant blocks */
 
-        if(!mpi_rank && verbose){
-            printf("  Sys Block Trunc Error: %g\n"
-                   "  Env Block Trunc Error: %g\n", TruncErr_L, TruncErr_R);
-        }
+        /* TODO: Perform evaluation of intra-block correlation functions */
+
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
-
-        /*  Initialize the new blocks and copy the new blocks */
 
         /* (Block) Initialize the new blocks
             copy enlarged blocks to out blocks but overwrite the matrices */
         ierr = SysBlockOut.Destroy(); CHKERRQ(ierr);
         ierr = EnvBlockOut.Destroy(); CHKERRQ(ierr);
+
         ierr = PetscTime(&trdms); CHKERRQ(ierr);
+        timings_data.tRdms = trdms-tdiag;
+        if(!mpi_rank && verbose) printf("* Eigendec. of RDMs:     %12.6f s\n", timings_data.tRdms);
 
         ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
+        ierr = SysBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
         ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
         ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
         if(!flg){
             ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
             ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
@@ -730,18 +815,28 @@ private:
 
         ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
         ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
-        ierr = PetscTime(&trotb); CHKERRQ(ierr);
 
-        TimingsData timings_data;
+        ierr = PetscTime(&trotb); CHKERRQ(ierr);
+        timings_data.tRotb = trotb-trdms;
+        if(!mpi_rank && verbose) printf("* Rotation of Operators: %12.6f s\n", timings_data.tRotb);
+
+        // TimingsData timings_data;
         timings_data.Total = trotb - t0;
         timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
-        timings_data.tEnlr = tenlr-t0;
-        timings_data.tKron = tkron-tenlr;
-        timings_data.tDiag = tdiag-tkron;
-        timings_data.tRdms = trdms-tdiag;
-        timings_data.tRotb = trotb-trdms;
 
         if(!mpi_rank && verbose){
+            printf("\n");
+            printf("  Superblock:\n");
+            printf("    NumStates:   %lld\n", LLD(KronBlocks.NumStates()));
+            printf("    NumSites:    %lld\n", LLD(NumSitesTotal));
+            printf("    Energy:      %-10.10g\n", gse_r);
+            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
+            printf("  Sys Block Out\n"
+                   "    NumStates: %lld\n"
+                   "    TrunError: %g\n", LLD(QN_L.NumStates()), TruncErr_L);
+            printf("  Env Block Out\n"
+                   "    NumStates: %lld\n"
+                   "    TrunError: %g\n", LLD(QN_R.NumStates()), TruncErr_R);
             printf("\n");
             printf("  Total Time:              %12.6f s\n", timings_data.Total);
             printf("    Add One Site:          %12.6f s \t%6.2f %%\n",
@@ -903,6 +998,11 @@ private:
                 printf("\n\n");
             }
             #endif
+
+            /*  Dump unsorted (grouped) entanglement spectra to file */
+            ierr = SaveEntanglementSpectra(
+                eigen_L, KronBlocks.LeftBlockRef().Magnetization.ListRef(),
+                eigen_R, KronBlocks.RightBlockRef().Magnetization.ListRef()); CHKERRQ(ierr);
 
             /*  Sort the eigenvalue lists in descending order */
             std::stable_sort(eigen_L.begin(), eigen_L.end(), greater_eigval);
@@ -1180,6 +1280,43 @@ private:
         return(0);
     }
 
+    /** Returns the path to the directory for the storage of a specific system block */
+    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
+        std::ostringstream oss;
+        oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
+        return oss.str();
+    }
+
+    /* Save headers for tabular step */
+    PetscErrorCode SaveStepHeaders()
+    {
+        if(mpi_rank || !data_tabular) return(0);
+        fprintf(fp_step,"{\n");
+        fprintf(fp_step,"  \"headers\" : [");
+        fprintf(fp_step,    "\"GlobIdx\", ");                                   /* 01 */
+        fprintf(fp_step,    "\"LoopType\", ");                                  /* 02 */
+        fprintf(fp_step,    "\"LoopIdx\", ");                                   /* 03 */
+        fprintf(fp_step,    "\"StepIdx\", ");                                   /* 04 */
+        fprintf(fp_step,    "\"NSites_Sys\", ");                                /* 05 */
+        fprintf(fp_step,    "\"NSites_Env\", ");                                /* 06 */
+        fprintf(fp_step,    "\"NSites_SysEnl\", ");                             /* 07 */
+        fprintf(fp_step,    "\"NSites_EnvEnl\", ");                             /* 08 */
+        fprintf(fp_step,    "\"NStates_Sys\", ");                               /* 09 */
+        fprintf(fp_step,    "\"NStates_Env\", ");                               /* 10 */
+        fprintf(fp_step,    "\"NStates_SysEnl\", ");                            /* 11 */
+        fprintf(fp_step,    "\"NStates_EnvEnl\", ");                            /* 12 */
+        fprintf(fp_step,    "\"NStates_SysRot\", ");                            /* 13 */
+        fprintf(fp_step,    "\"NStates_EnvRot\", ");                            /* 14 */
+        fprintf(fp_step,    "\"NumStates_H\", ");                               /* 15 */
+        fprintf(fp_step,    "\"TruncErr_Sys\", ");                              /* 16 */
+        fprintf(fp_step,    "\"TruncErr_Env\", ");                              /* 17 */
+        fprintf(fp_step,    "\"GSEnergy\"");                                    /* 18 */
+        fprintf(fp_step,"  ],\n");
+        fprintf(fp_step,"  \"table\" : ");
+        fflush(fp_step);
+        return(0);
+    }
+
     /** Save step data to file */
     PetscErrorCode SaveStepData(
         const StepData& data
@@ -1187,26 +1324,69 @@ private:
     {
         if(mpi_rank) return(0);
         fprintf(fp_step,"%s", GlobIdx ? ",\n" : "");
+        if(data_tabular){
+            fprintf(fp_step,"    [ ");
+            fprintf(fp_step,"%lld, ",   LLD(GlobIdx));                          /* 01 */
+            fprintf(fp_step,"%s, ",     LoopType ? "\"Sweep\"" : "\"Warmup\""); /* 02 */
+            fprintf(fp_step,"%lld, ",   LLD(LoopIdx));                          /* 03 */
+            fprintf(fp_step,"%lld, ",   LLD(StepIdx));                          /* 04 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_Sys));                /* 05 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_Env));                /* 06 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_SysEnl));             /* 07 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumSites_EnvEnl));             /* 08 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_Sys));               /* 09 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_Env));               /* 10 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_SysEnl));            /* 11 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_EnvEnl));            /* 12 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_SysRot));            /* 13 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_EnvRot));            /* 14 */
+            fprintf(fp_step,"%lld, ",   LLD(data.NumStates_H));                 /* 15 */
+            fprintf(fp_step,"%.12g, ",  data.TruncErr_Sys);                     /* 16 */
+            fprintf(fp_step,"%.12g, ",  data.TruncErr_Env);                     /* 17 */
+            fprintf(fp_step,"%.12g",    data.GSEnergy);                         /* 18 */
+            fprintf(fp_step,"]");
+            fflush(fp_step);
+            return(0);
+        }
         fprintf(fp_step,"  {\n");
-        fprintf(fp_step,"    \"GlobIdx\": %d,\n",          GlobIdx);
+        fprintf(fp_step,"    \"GlobIdx\": %lld,\n",        LLD(GlobIdx));
         fprintf(fp_step,"    \"LoopType\": \"%s\",\n",     LoopType ? "Sweep" : "Warmup");
-        fprintf(fp_step,"    \"LoopIdx\": %d,\n",          LoopIdx);
-        fprintf(fp_step,"    \"StepIdx\": %d,\n",          StepIdx);
-        fprintf(fp_step,"    \"NSites_Sys\": %d,\n",       data.NumSites_Sys);
-        fprintf(fp_step,"    \"NSites_Env\": %d,\n",       data.NumSites_Env);
-        fprintf(fp_step,"    \"NSites_SysEnl\": %d,\n",    data.NumSites_SysEnl);
-        fprintf(fp_step,"    \"NSites_EnvEnl\": %d,\n",    data.NumSites_EnvEnl);
-        fprintf(fp_step,"    \"NStates_Sys\": %d,\n",      data.NumStates_Sys);
-        fprintf(fp_step,"    \"NStates_Env\": %d,\n",      data.NumStates_Env);
-        fprintf(fp_step,"    \"NStates_SysEnl\": %d,\n",   data.NumStates_SysEnl);
-        fprintf(fp_step,"    \"NStates_EnvEnl\": %d,\n",   data.NumStates_EnvEnl);
-        fprintf(fp_step,"    \"NStates_SysRot\": %d,\n",   data.NumStates_SysRot);
-        fprintf(fp_step,"    \"NStates_EnvRot\": %d,\n",   data.NumStates_EnvRot);
+        fprintf(fp_step,"    \"LoopIdx\": %lld,\n",        LLD(LoopIdx));
+        fprintf(fp_step,"    \"StepIdx\": %lld,\n",        LLD(StepIdx));
+        fprintf(fp_step,"    \"NSites_Sys\": %lld,\n",     LLD(data.NumSites_Sys));
+        fprintf(fp_step,"    \"NSites_Env\": %lld,\n",     LLD(data.NumSites_Env));
+        fprintf(fp_step,"    \"NSites_SysEnl\": %lld,\n",  LLD(data.NumSites_SysEnl));
+        fprintf(fp_step,"    \"NSites_EnvEnl\": %lld,\n",  LLD(data.NumSites_EnvEnl));
+        fprintf(fp_step,"    \"NStates_Sys\": %lld,\n",    LLD(data.NumStates_Sys));
+        fprintf(fp_step,"    \"NStates_Env\": %lld,\n",    LLD(data.NumStates_Env));
+        fprintf(fp_step,"    \"NStates_SysEnl\": %lld,\n", LLD(data.NumStates_SysEnl));
+        fprintf(fp_step,"    \"NStates_EnvEnl\": %lld,\n", LLD(data.NumStates_EnvEnl));
+        fprintf(fp_step,"    \"NStates_SysRot\": %lld,\n", LLD(data.NumStates_SysRot));
+        fprintf(fp_step,"    \"NStates_EnvRot\": %lld,\n", LLD(data.NumStates_EnvRot));
         fprintf(fp_step,"    \"TruncErr_Sys\": %.20g,\n",  data.TruncErr_Sys);
         fprintf(fp_step,"    \"TruncErr_Env\": %.20g,\n",  data.TruncErr_Env);
         fprintf(fp_step,"    \"GSEnergy\": %.20g\n",       data.GSEnergy);
         fprintf(fp_step,"  }");
         fflush(fp_step);
+        return(0);
+    }
+
+    /* Save headers for tabular step */
+    PetscErrorCode SaveTimingsHeaders()
+    {
+        if(mpi_rank || !data_tabular) return(0);
+        fprintf(fp_timings,"{\n");
+        fprintf(fp_timings,"  \"headers\" : [");
+        fprintf(fp_timings,"\"GlobIdx\", ");
+        fprintf(fp_timings,"\"Total\", ");
+        fprintf(fp_timings,"\"Enlr\", ");
+        fprintf(fp_timings,"\"Kron\", ");
+        fprintf(fp_timings,"\"Diag\", ");
+        fprintf(fp_timings,"\"Rdms\", ");
+        fprintf(fp_timings,"\"Rotb\" ");
+        fprintf(fp_timings,"],\n");
+        fprintf(fp_timings,"  \"table\" : ");
+        fflush(fp_timings);
         return(0);
     }
 
@@ -1217,6 +1397,19 @@ private:
     {
         if(mpi_rank) return(0);
         fprintf(fp_timings,"%s", GlobIdx ? ",\n" : "");
+        if(data_tabular){
+            fprintf(fp_timings,"    [ ");
+            fprintf(fp_timings,"%lld, ", LLD(GlobIdx));
+            fprintf(fp_timings,"%.9g, ", data.Total);
+            fprintf(fp_timings,"%.9g, ", data.tEnlr);
+            fprintf(fp_timings,"%.9g, ", data.tKron);
+            fprintf(fp_timings,"%.9g, ", data.tDiag);
+            fprintf(fp_timings,"%.9g, ", data.tRdms);
+            fprintf(fp_timings,"%.9g ",  data.tRotb);
+            fprintf(fp_timings,"]");
+            fflush(fp_timings);
+            return(0);
+        }
         fprintf(fp_timings,"  {\n");
         fprintf(fp_timings,"    \"Total\": %.9g,\n", data.Total);
         fprintf(fp_timings,"    \"Enlr\":  %.9g,\n", data.tEnlr);
@@ -1228,6 +1421,77 @@ private:
         fflush(fp_timings);
         return(0);
     }
+
+    /** Save the entanglement spectra to file */
+    PetscErrorCode SaveEntanglementSpectra(
+        const std::vector< Eigen_t >& eigen_L,
+        const std::vector< PetscReal >& qn_L,
+        const std::vector< Eigen_t >& eigen_R,
+        const std::vector< PetscReal >& qn_R
+        )
+    {
+        if(mpi_rank) return(0);
+        fprintf(fp_entanglement, "%s", GlobIdx ? ",\n" : "");
+        fprintf(fp_entanglement, "  {\n");
+        fprintf(fp_entanglement, "    \"GlobIdx\": %lld,\n", LLD(GlobIdx));
+        fprintf(fp_entanglement, "    \"Sys\": [\n");
+        {
+            PetscInt idx_prev = 999999999;
+            for(const Eigen_t &eig: eigen_L){
+                if(idx_prev!=eig.blkIdx){
+                    if(idx_prev != 999999999) fprintf(fp_entanglement," ]},\n");
+                    fprintf(fp_entanglement,"      {");
+                    fprintf(fp_entanglement,"\"sector\": %g, \"vals\": [ %g",qn_L[eig.blkIdx], eig.eigval);
+                } else {
+                    fprintf(fp_entanglement,", %g", eig.eigval);
+                }
+                idx_prev = eig.blkIdx;
+            }
+            fprintf(fp_entanglement," ]}\n");
+        }
+        fprintf(fp_entanglement,"    ],\n");
+        fprintf(fp_entanglement,"    \"Env\": [\n");
+        {
+            PetscInt idx_prev = 999999999;
+            for(const Eigen_t &eig: eigen_R){
+                if(idx_prev!=eig.blkIdx){
+                    if(idx_prev != 999999999) fprintf(fp_entanglement," ]},\n");
+                    fprintf(fp_entanglement,"      {");
+                    fprintf(fp_entanglement,"\"sector\": %g, \"vals\": [ %g",qn_R[eig.blkIdx], eig.eigval);
+                } else {
+                    fprintf(fp_entanglement,", %g", eig.eigval);
+                }
+                idx_prev = eig.blkIdx;
+            }
+            fprintf(fp_entanglement," ]}\n");
+        }
+        fprintf(fp_entanglement,"    ]\n");
+        fprintf(fp_entanglement,"  }");
+        fflush(fp_entanglement);
+        return(0);
+    }
+
+    PetscErrorCode SaveLoopsData()
+    {
+        if(mpi_rank) return(0);
+
+        fprintf(fp_data,"  \"Warmup\": {\n");
+        fprintf(fp_data,"    \"MStates\": %lld\n", LLD(warmup_mstates));
+        fprintf(fp_data,"  },\n");
+        fprintf(fp_data,"  \"Sweeps\": {\n");
+        fprintf(fp_data,"    \"MStates\": [");
+
+        PetscInt nsweeps = sweeps_mstates.size();
+        if(nsweeps>0) fprintf(fp_data," %lld", LLD(sweeps_mstates[0]));
+        for(PetscInt i=1;i<nsweeps;++i) fprintf(fp_data,", %lld", LLD(sweeps_mstates[i]));
+
+        fprintf(fp_data," ]\n");
+        fprintf(fp_data,"  }");
+        fflush(fp_data);
+        return(0);
+    }
+
+
 };
 
 /**

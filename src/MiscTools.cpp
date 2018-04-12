@@ -88,7 +88,7 @@ PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscIn
 {
     PetscErrorCode ierr = 0;
 
-#if 1
+#if 0
     /* The petsc way */
     PetscInt Nsize = N;
     PetscInt Lrows = PETSC_DECIDE;
