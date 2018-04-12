@@ -704,18 +704,13 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     ierr = RightBlock.CheckOperatorBlocks(); CHKERRQ(ierr); /* NOTE: Possibly costly operation */
 
     /*  Classify the terms according to whether an intra-block or inter-block product will be performed */
-    std::vector< Hamiltonians::Term > TermsLL, TermsRR; /* Intra-block */
     std::vector< Hamiltonians::Term > TermsLR; /* Inter-block */
     for( const Hamiltonians::Term& term: Terms ){
-        if      ((0 <= term.Isite && term.Isite < nsites_left) && (0 <= term.Jsite && term.Jsite < nsites_left)){
-            TermsLL.push_back(term);
-        }
-        else if ((0 <= term.Isite && term.Isite < nsites_left) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){
+        if ((0 <= term.Isite && term.Isite < nsites_left) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){
             TermsLR.push_back(term);
         }
-        else if ((nsites_left <= term.Isite && term.Isite < nsites_out) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){
-            TermsRR.push_back(term);
-        }
+        else if ((0 <= term.Isite && term.Isite < nsites_left) && (0 <= term.Jsite && term.Jsite < nsites_left)){}
+        else if ((nsites_left <= term.Isite && term.Isite < nsites_out) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){}
         else {
             SETERRQ4(mpi_comm, 1, "Invalid term: Isite=%d Jsite=%d for nsites_left=%d and nsites_right=%d.",
                 term.Isite, term.Jsite, nsites_left, nsites_right);
@@ -727,30 +722,22 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     for (Hamiltonians::Term& term: TermsLR){
         term.Jsite = nsites_out - 1 - term.Jsite;
     }
-    for (Hamiltonians::Term& term: TermsRR){
-        term.Isite = nsites_out - 1 - term.Isite;
-        term.Jsite = nsites_out - 1 - term.Jsite;
-    }
 
     /*  Check whether there is any need to create the Sm matrices */
     PetscBool CreateSmL = PETSC_FALSE, CreateSmR = PETSC_FALSE;
-    for( const Hamiltonians::Term& term: TermsLL){
-        if(term.Iop == OpSm || term.Jop == OpSm) { CreateSmL = PETSC_TRUE; break; }
+    for(const Hamiltonians::Term& term: TermsLR){
+        if(term.Iop == OpSm){
+            CreateSmL = PETSC_TRUE;
+            ierr = LeftBlock.CreateSm(); CHKERRQ(ierr);
+            break;
+        }
     }
-    for( const Hamiltonians::Term& term: TermsRR){
-        if(term.Iop == OpSm || term.Jop == OpSm) { CreateSmR = PETSC_TRUE; break; }
-    }
-    if(!CreateSmL) for( const Hamiltonians::Term& term: TermsLR){
-        if(term.Iop == OpSm) { CreateSmL = PETSC_TRUE; break; }
-    }
-    if(!CreateSmR) for( const Hamiltonians::Term& term: TermsLR){
-        if(term.Jop == OpSm) { CreateSmR = PETSC_TRUE; break; }
-    }
-    if(CreateSmL){
-        ierr = LeftBlock.CreateSm(); CHKERRQ(ierr);
-    }
-    if(CreateSmR){
-        ierr = RightBlock.CreateSm(); CHKERRQ(ierr);
+    for(const Hamiltonians::Term& term: TermsLR){
+        if(term.Jop == OpSm){
+            CreateSmR = PETSC_TRUE;
+            ierr = RightBlock.CreateSm(); CHKERRQ(ierr);
+            break;
+        }
     }
 
     #if defined(PETSC_USE_DEBUG)
