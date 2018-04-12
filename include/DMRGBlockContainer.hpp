@@ -17,6 +17,7 @@
 #include <sstream>
 #include <iomanip>
 #include "DMRGKron.hpp"
+#include "DMRGKronShell.hpp"
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
@@ -688,7 +689,9 @@ private:
 
         ierr = KronBlocks.KronSumSetRedistribute(PETSC_TRUE); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumSetToleranceFromOptions(); CHKERRQ(ierr);
+        ierr = KronBlocks.KronSumSetShellMatrixFromOptions(); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
+        if(!H) SETERRQ(mpi_comm,1,"H is null.");
 
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
         timings_data.tKron = tkron-tenlr;

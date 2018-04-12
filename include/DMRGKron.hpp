@@ -258,6 +258,14 @@ public:
         Mat& MatOut                                     /**< [out]  resultant matrix */
         );
 
+    /** Decide whether to create an implicit MATSHELL matrix */
+    PetscErrorCode KronSumSetShellMatrixFromOptions()
+    {
+        PetscErrorCode ierr;
+        ierr = PetscOptionsGetBool(NULL,NULL,"-shell",&do_shell,NULL); CHKERRQ(ierr);
+        return(0);
+    }
+
     PetscErrorCode KronSumSetRedistribute(
         const PetscBool& do_redistribute_in = PETSC_TRUE
         )
@@ -315,6 +323,9 @@ private:
 
     /** Whether to redistribute the resulting KronSum */
     PetscBool do_redistribute = PETSC_FALSE;
+
+    /** Whether to create an implicit MATSHELL matrix */
+    PetscBool do_shell = PETSC_FALSE;
 
     /** Tolerance */
     #if defined(PETSC_USE_REAL_DOUBLE)
