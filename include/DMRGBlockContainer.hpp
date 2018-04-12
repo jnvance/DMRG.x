@@ -91,7 +91,7 @@ template<class Block, class Hamiltonian> class DMRGBlockContainer
 public:
 
     /** Initializes the container object with blocks of one site on each of the system and environment */
-    DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
+    explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
     {
         PetscInt ierr = 0;
 
@@ -172,7 +172,7 @@ public:
             printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
             printf( "=========================================\n");
         }
-
+        LoopType = WarmupStep;
         init = PETSC_TRUE;
     }
 
@@ -417,6 +417,8 @@ public:
 
     /** Returns whether verbose printing is active */
     PetscBool Verbose() const { return verbose; }
+
+    const Hamiltonian& HamiltonianRef() const { return Ham; }
 
 private:
 
