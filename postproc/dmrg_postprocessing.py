@@ -67,6 +67,7 @@ class Data:
             self._idxNSysEnl = self._stepsHeaders.index('NSites_SysEnl')
             self._idxNEnvEnl = self._stepsHeaders.index('NSites_EnvEnl')
             self._idxLoopidx = self._stepsHeaders.index('LoopIdx')
+            self._idxNStatesH = self._stepsHeaders.index('NumStates_H')
             self._steps = steps['table']
 
     def Steps(self):
@@ -80,6 +81,14 @@ class Data:
     def EnergyPerSite(self):
         self._LoadSteps()
         return np.array([row[self._idxEnergy]/(row[self._idxNSysEnl]+row[self._idxNEnvEnl]) for row in self._steps])
+
+    def NumStatesSuperblock(self,n=None):
+        self._LoadSteps()
+        if n is None:
+            self._NStatesH = np.array([row[self._idxNStatesH] for row in self._steps])
+            return self._NStatesH
+        else:
+            return self._steps[n][self._idxNStatesH]
 
     def PlotEnergyPerSite(self,**kwargs):
         self._LoadSteps()
@@ -131,17 +140,28 @@ class Data:
     #
     #   Preallocation data
     #
-    def PreallocData(self):
+    def PreallocData(self,n=None,key=None):
         if self._hamPrealloc is None:
             self._hamPrealloc = LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
-        return self._hamPrealloc
+        if n is None:
+            return self._hamPrealloc
+        else:
+            if key is None:
+                return self._hamPrealloc[n]
+            else:
+                if key=="Tnnz":
+                    return np.array(self._hamPrealloc[n]["Dnnz"]) + np.array(self._hamPrealloc[n]["Onnz"])
+                else:
+                    return self._hamPrealloc[n][key]
 
-    def PlotPreallocData(self,n,**kwargs):
-        Dnnz = np.array(self.PreallocData()[n]["Dnnz"])
-        Onnz = np.array(self.PreallocData()[n]["Onnz"])
-        self._p = plt.plot(Dnnz,label='Dnnz: {}'.format(n),marker='o',**kwargs)
-        color = self._p[-1].get_color()
-        self._p = plt.plot(Onnz,label='Onnz: {}'.format(n),color=color,marker='^',**kwargs)
+    def PlotPreallocData(self,n,totals_only=True,**kwargs):
+        Dnnz = np.array(self.PreallocData(n)["Dnnz"])
+        Onnz = np.array(self.PreallocData(n)["Onnz"])
+        self._p = plt.plot(Dnnz+Onnz,label='Tnnz: {}'.format(n),marker='o',**kwargs)
+        if not totals_only:
+            color = self._p[-1].get_color()
+            self._p = plt.plot(Dnnz,label='Dnnz: {}'.format(n),color=color,marker='s',**kwargs)
+            self._p = plt.plot(Onnz,label='Onnz: {}'.format(n),color=color,marker='^',**kwargs)
 
 class DataSeries:
     """
