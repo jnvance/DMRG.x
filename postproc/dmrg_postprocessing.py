@@ -53,6 +53,7 @@ class Data:
         self._steps = None
         self._timings = None
         self._hamPrealloc = None
+        self._entSpectra = None
 
     #
     #   Steps data
@@ -70,13 +71,17 @@ class Data:
             self._idxNStatesH = self._stepsHeaders.index('NumStates_H')
             self._steps = steps['table']
 
-    def Steps(self):
+    def Steps(self,header=None):
         self._LoadSteps()
-        return copy.deepcopy(self._steps)
+        if header is None:
+            return copy.deepcopy(self._steps)
+        else:
+            idx = self._stepsHeaders.index(header)
+            return np.array([row[idx] for row in self._steps])
 
     def StepsHeaders(self):
         self._LoadSteps()
-        return copy.deepcopy(self._stepsHeaders)
+        return self._stepsHeaders
 
     def EnergyPerSite(self):
         self._LoadSteps()
@@ -162,6 +167,30 @@ class Data:
             color = self._p[-1].get_color()
             self._p = plt.plot(Dnnz,label='Dnnz: {}'.format(n),color=color,marker='s',**kwargs)
             self._p = plt.plot(Onnz,label='Onnz: {}'.format(n),color=color,marker='^',**kwargs)
+
+    #
+    #   Entanglement Spectra
+    #
+    def _LoadSpectra(self):
+        if self._entSpectra is None:
+            spectra = LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
+            # determine which global indices are the ends of a sweep
+
+            self._entSpectra = spectra
+
+    def EntanglementSpectra(self):
+        ''' Loads the entanglement spectrum at the end of each sweep '''
+        self._LoadSpectra()
+        StepIdx = self.Steps("StepIdx")
+        LoopIdx = self.Steps("LoopIdx")
+        EndSweepIdx = np.where(StepIdx==max(StepIdx[np.where(LoopIdx>0)]))
+        return [self._entSpectra[row]['Sys'] for row in EndSweepIdx[0]]
+
+    def EntanglementEntropy(self):
+        ''' Calculates the entanglement entropy using eigenvalues from all sectors '''
+        a = self.EntanglementSpectra()
+        l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
+        return [np.sum(np.log(li)*li) for li in l]
 
 class DataSeries:
     """
