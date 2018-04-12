@@ -1432,27 +1432,6 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     return(0);
 }
 
-#if 0
-PetscErrorCode KronBlocks_t::GatherPreallocDataToRoot(
-    const KronSumCtx& ctx,
-    PetscInt **p_Dnnz_arr,
-    PetscInt **p_Onnz_arr
-    )
-{
-    /* TODO: Also gather the number of local rows of each process ?? */
-    PetscInt Dnnz=0, Onnz=0;
-    for(PetscInt irow=0; irow<ctx.lrows; ++irow) Dnnz += ctx.Dnnz[irow];
-    for(PetscInt irow=0; irow<ctx.lrows; ++irow) Onnz += ctx.Onnz[irow];
-
-    PetscErrorCode ierr;
-    PetscInt arr_size = mpi_rank ? 0 : mpi_size;
-    ierr = PetscCalloc2(arr_size, p_Dnnz_arr, arr_size, p_Onnz_arr); CHKERRQ(ierr);
-    ierr = MPI_Gather(&Dnnz, 1, MPIU_INT, *p_Dnnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
-    ierr = MPI_Gather(&Onnz, 1, MPIU_INT, *p_Onnz_arr, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
-    return(0);
-}
-#endif
-
 PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 {
     if(!do_saveprealloc) return(0);
