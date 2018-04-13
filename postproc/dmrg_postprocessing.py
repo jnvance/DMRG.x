@@ -26,6 +26,13 @@ def LoadJSONFile(file,appendStr,funcName,count=0):
         fh.close()
         return LoadJSONFile(file,appendStr,funcName,count+1)
 
+def LoadJSONDict(file):
+    """
+    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
+    appending "}".
+    """
+    return LoadJSONFile(file,"}","LoadJSONDict")
+
 def LoadJSONTable(file):
     """
     Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
@@ -50,10 +57,23 @@ class Data:
         """
         self._base_dir = os.path.join(jobs_dir,base_dir)
         self._label = label
+        self._run = None
+        self._sweepIdx = None
         self._steps = None
         self._timings = None
         self._hamPrealloc = None
         self._entSpectra = None
+
+    #
+    #   Run data
+    #
+    def _LoadRun(self):
+        if self._run is None:
+            self._run = LoadJSONArray(os.path.join(self._base_dir,'DMRGRun.json'))
+        return self._run
+
+    def RunData(self):
+        return self._LoadRun()
 
     #
     #   Steps data
@@ -84,9 +104,11 @@ class Data:
         return self._stepsHeaders
 
     def SweepIdx(self):
-        StepIdx = self.Steps("StepIdx")
-        LoopIdx = self.Steps("LoopIdx")
-        return np.where(StepIdx==max(StepIdx[np.where(LoopIdx>0)]))[0]
+        if self._sweepIdx is None:
+            StepIdx = self.Steps("StepIdx")
+            LoopIdx = self.Steps("LoopIdx")
+            self._sweepIdx = np.where(StepIdx==max(StepIdx[np.where(LoopIdx>0)]))[0]
+        return self._sweepIdx
 
     def EnergyPerSite(self):
         self._LoadSteps()
@@ -192,7 +214,7 @@ class Data:
         ''' Calculates the entanglement entropy using eigenvalues from all sectors '''
         a = self.EntanglementSpectra()
         l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
-        return [np.sum(np.log(li)*li) for li in l]
+        return [-np.sum(np.log(li)*li) for li in l]
 
 class DataSeries:
     """
@@ -200,7 +222,7 @@ class DataSeries:
     """
 
     def __init__(self, base_dir_list, *args, label_list=None, **kwargs):
-        if label_list==None:
+        if label_list is None:
             self.DataList = [ Data(base_dir, *args, label=base_dir, **kwargs) for base_dir in base_dir_list ]
         else:
             self.DataList = [ Data(base_dir, *args, label=label, **kwargs) for (base_dir, label) in zip(base_dir_list,label_list) ]
