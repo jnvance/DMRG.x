@@ -707,6 +707,7 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     std::vector< Hamiltonians::Term > TermsLR; /* Inter-block */
     for( const Hamiltonians::Term& term: Terms ){
         if ((0 <= term.Isite && term.Isite < nsites_left) && (nsites_left <= term.Jsite && term.Jsite < nsites_out)){
+            if(term.a == PetscScalar(0.0)) continue;
             TermsLR.push_back(term);
         }
         else if ((0 <= term.Isite && term.Isite < nsites_left) && (0 <= term.Jsite && term.Jsite < nsites_left)){}
@@ -1330,8 +1331,6 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
             ACCUM_TIMINGS_BEGIN(MatLoop)
             for(const KronSumTerm& term: ctx.Terms)
             {
-                if(term.a == PetscScalar(0.0)) continue;
-
                 if(term.OpTypeA != OpEye){
                     ierr = (*term.A->ops->getrow)(term.A, LocRow_L, &nz_L, (PetscInt**)&idx_L, (PetscScalar**)&v_L); CHKERRQ(ierr);
                     bks_L =  LeftBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_L, term.OpTypeA, flg[SideLeft]);
