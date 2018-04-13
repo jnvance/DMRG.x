@@ -83,6 +83,11 @@ class Data:
         self._LoadSteps()
         return self._stepsHeaders
 
+    def SweepIdx(self):
+        StepIdx = self.Steps("StepIdx")
+        LoopIdx = self.Steps("LoopIdx")
+        return np.where(StepIdx==max(StepIdx[np.where(LoopIdx>0)]))[0]
+
     def EnergyPerSite(self):
         self._LoadSteps()
         return np.array([row[self._idxEnergy]/(row[self._idxNSysEnl]+row[self._idxNEnvEnl]) for row in self._steps])
@@ -181,10 +186,7 @@ class Data:
     def EntanglementSpectra(self):
         ''' Loads the entanglement spectrum at the end of each sweep '''
         self._LoadSpectra()
-        StepIdx = self.Steps("StepIdx")
-        LoopIdx = self.Steps("LoopIdx")
-        EndSweepIdx = np.where(StepIdx==max(StepIdx[np.where(LoopIdx>0)]))
-        return [self._entSpectra[row]['Sys'] for row in EndSweepIdx[0]]
+        return [self._entSpectra[row]['Sys'] for row in self.SweepIdx()]
 
     def EntanglementEntropy(self):
         ''' Calculates the entanglement entropy using eigenvalues from all sectors '''
