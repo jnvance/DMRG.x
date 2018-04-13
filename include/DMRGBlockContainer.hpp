@@ -742,6 +742,10 @@ private:
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
         step_data.GSEnergy = gse_r;
+
+        if(do_shell){
+            ierr = MatDestroy_KronSumShell(&H); CHKERRQ(ierr);
+        }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
 
         ierr = PetscTime(&tdiag); CHKERRQ(ierr);

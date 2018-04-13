@@ -724,7 +724,8 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         term.Jsite = nsites_out - 1 - term.Jsite;
     }
 
-    /*  Check whether there is any need to create the Sm matrices */
+    /*  Check whether there is any need to create the Sm matrices
+        TODO: Implement interface to selectively create only the needed Sm matrices */
     PetscBool CreateSmL = PETSC_FALSE, CreateSmR = PETSC_FALSE;
     for(const Hamiltonians::Term& term: TermsLR){
         if(term.Iop == OpSm){
@@ -932,6 +933,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
     ctx.MinIdx = ctx.Ncols-1;
     ctx.MaxIdx = 0;
     ctx.Nnz = 0;
+    ctx.Nelts = 0;
     ierr = PetscCalloc2(ctx.lrows, &ctx.Dnnz, ctx.lrows, &ctx.Onnz); CHKERRQ(ierr);
 
     /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
@@ -1023,6 +1025,7 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
                     if(MinIdx < ctx.MinIdx) ctx.MinIdx = MinIdx;
                     if(MaxIdx > ctx.MaxIdx) ctx.MaxIdx = MaxIdx;
                 }
+                ctx.Nelts += nz_L*nz_R;
             }
 
             /* Sum up all columns in the diagonal and off-diagonal */
@@ -1436,11 +1439,233 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 
 /*--- Definitions for shell matrices ---*/
 
+PetscErrorCode KronBlocks_t::KronSumSetUpShellTerms(KronSumShellCtx *shellctx)
+{
+    PetscErrorCode ierr;
+    FUNCTION_TIMINGS_BEGIN()
+    INTERVAL_TIMINGS_SETUP()
+
+    KronSumCtx& ctx = *(shellctx->p_ctx);
+
+    /* Fill in the context and allocate space  */
+    shellctx->one = 1.00;
+    shellctx->Nterms    = ctx.Terms.size();
+    shellctx->Nrowterms = (shellctx->Nterms) * (ctx.lrows);
+    ierr = PetscCalloc1(ctx.lrows, &(shellctx->Rows_L)); CHKERRQ(ierr);
+    ierr = PetscCalloc1(ctx.lrows, &(shellctx->Rows_R)); CHKERRQ(ierr);
+    ierr = PetscCalloc1(shellctx->Nrowterms, &(shellctx->kstr)); CHKERRQ(ierr);
+
+    /* Fill in the coefficients of the terms */
+    ierr = PetscCalloc1(shellctx->Nterms, &(shellctx->term_a)); CHKERRQ(ierr);
+    for(PetscInt it = 0; it < shellctx->Nterms; ++it){
+        (shellctx->term_a)[it] = ctx.Terms[it].a;
+    }
+
+    /*  Lookup for the forward shift depending on the operator type of the left block. This automatically
+        assumes that the right block is a valid operator type such that the resulting matrix term is block-diagonal
+        in quantum numbers */
+    std::map< Op_t, PetscInt > fws_LOP = {};
+    std::map< Op_t, PetscInt > Row_NumStates_ROP = {};
+    PetscInt irt = 0;
+    ACCUM_TIMINGS_SETUP(KronIterSetup)
+    ACCUM_TIMINGS_SETUP(MatLoop)
+    if(ctx.lrows > 0)
+    {
+        KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
+        for( ; KIter.Loop(); ++KIter)
+        {
+            ACCUM_TIMINGS_BEGIN(KronIterSetup)
+            const PetscInt lrow = KIter.Steps();
+            const PetscInt Row_BlockIdx_L = KIter.BlockIdxLeft();
+            const PetscInt Row_BlockIdx_R = KIter.BlockIdxRight();
+            const PetscInt Row_L = shellctx->Rows_L[lrow] = KIter.GlobalIdxLeft();
+            const PetscInt Row_R = shellctx->Rows_R[lrow] = KIter.GlobalIdxRight();
+            const PetscInt LocRow_L = ctx.MapRowsL.at(Row_L);
+            const PetscInt LocRow_R = ctx.MapRowsR.at(Row_R);
+
+            PetscBool flg[2];
+
+            if(KIter.UpdatedBlock())
+            {
+                /* Searchable by the operator type of the left block */
+                fws_LOP = {
+                    {OpEye, KIter.BlockStartIdx(OpSz)},
+                    {OpSz , KIter.BlockStartIdx(OpSz)},
+                    {OpSp , Offsets(Row_BlockIdx_L + 1, Row_BlockIdx_R - 1),},
+                    {OpSm , Offsets(Row_BlockIdx_L - 1, Row_BlockIdx_R + 1)}
+                };
+                /* Searchable by the operator type on the right block */
+                Row_NumStates_ROP = {
+                    {OpEye, KIter.NumStatesRight()},
+                    {OpSz,  KIter.NumStatesRight()},
+                    {OpSp,  RightBlock.Magnetization.Sizes(Row_BlockIdx_R+1)},
+                    {OpSm,  RightBlock.Magnetization.Sizes(Row_BlockIdx_R-1)}
+                };
+            }
+            ACCUM_TIMINGS_END(KronIterSetup)
+
+            /* Loop through each term in this row. Treat the identity separately by directly declaring the matrix element */
+            ACCUM_TIMINGS_BEGIN(MatLoop)
+            for(const KronSumTerm& term: ctx.Terms)
+            {
+                KronSumTermRow& kstr = shellctx->kstr[irt];
+
+                if(term.OpTypeA != OpEye){
+                    ierr = (*term.A->ops->getrow)(term.A, LocRow_L,
+                        &(kstr.nz_L), (PetscInt**)&(kstr.idx_L), (PetscScalar**)&(kstr.v_L)); CHKERRQ(ierr);
+                    kstr.bks_L =  LeftBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_L, term.OpTypeA, flg[SideLeft]);
+                } else {
+                    kstr.nz_L = 1;
+                    kstr.idx_L = &(shellctx->Rows_L[lrow]);
+                    kstr.v_L = &(shellctx->one);
+                    kstr.bks_L =  LeftBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_L, OpSz, flg[SideLeft]);
+                }
+
+                if(term.OpTypeB != OpEye){
+                    ierr = (*term.B->ops->getrow)(term.B, LocRow_R,
+                        &(kstr.nz_R), (PetscInt**)&(kstr.idx_R), (PetscScalar**)&(kstr.v_R)); CHKERRQ(ierr);
+                    kstr.bks_R = RightBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_R, term.OpTypeB, flg[SideRight]);
+                } else {
+                    kstr.nz_R = 1;
+                    kstr.idx_R = &(shellctx->Rows_R[lrow]);
+                    kstr.v_R = &(shellctx->one);
+                    kstr.bks_R = RightBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_R, OpSz, flg[SideRight]);
+                }
+
+                if( (!flg[SideLeft]) || (!flg[SideRight]) || (kstr.nz_L*kstr.nz_R == 0)){
+                    kstr.skip = PETSC_TRUE;
+                } else {
+                    kstr.fws_O = fws_LOP.at(term.OpTypeA);
+                    kstr.col_NStatesR = Row_NumStates_ROP.at(term.OpTypeB);
+                    if(kstr.col_NStatesR==-1) SETERRQ(PETSC_COMM_SELF,1,"Accessed incorrect value.");
+                    kstr.skip = PETSC_FALSE;
+                }
+
+                ++irt;
+            }
+            ACCUM_TIMINGS_END(MatLoop)
+        }
+
+        if(irt!=(shellctx->Nrowterms)) SETERRQ2(PETSC_COMM_SELF,1,
+            "Wrong index irt. Expected %lld. Got %lld.", LLD(shellctx->Nrowterms), LLD(irt));
+
+    }
+
+    ACCUM_TIMINGS_PRINT(KronIterSetup,  "  KronIterSetup")
+    ACCUM_TIMINGS_PRINT(MatLoop,        "  MatLoop")
+
+    FUNCTION_TIMINGS_END()
+    FUNCTION_TIMINGS_PRINT_SPACE()
+    return(0);
+}
+
+
+PETSC_EXTERN PetscErrorCode MatMult_KronSumShell(Mat A, Vec x, Vec y)
+{
+    PetscErrorCode ierr;
+    KronSumShellCtx *shellctx;
+    ierr = MatShellGetContext(A,(void**)&shellctx); CHKERRQ(ierr);
+    KronSumCtx& ctx = *(shellctx->p_ctx);
+    ierr = VecScatterBegin(shellctx->vsctx, x, shellctx->x_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+    ierr = VecScatterEnd(shellctx->vsctx, x, shellctx->x_seq, INSERT_VALUES, SCATTER_FORWARD); CHKERRQ(ierr);
+
+    const PetscScalar *xvals;
+    PetscScalar *yvals;
+    ierr = VecGetArrayRead(shellctx->x_seq, &xvals); CHKERRQ(ierr);
+    ierr = VecGetArray(y, &yvals); CHKERRQ(ierr);
+    ierr = PetscMemzero(yvals, (ctx.lrows)*sizeof(PetscScalar)); CHKERRQ(ierr);
+
+    PetscInt irt=-1,idx;
+    PetscScalar yval, temp;
+    for(PetscInt ir = 0; ir < ctx.lrows; ++ir)
+    {
+        yval = 0.0;
+        for(PetscInt it = 0; it < shellctx->Nterms; ++it)
+        {
+            ++irt;
+            const KronSumTermRow& kstr = shellctx->kstr[irt];
+            if(kstr.skip) continue;
+
+            for(PetscInt l=0; l<kstr.nz_L; ++l)
+            {
+                /* TODO: fuse fws_O-bks_R */
+                idx = (kstr.idx_L[l] - kstr.bks_L) * kstr.col_NStatesR + kstr.fws_O - kstr.bks_R;
+                temp = shellctx->term_a[it] * kstr.v_L[l];
+                for(PetscInt r=0; r<kstr.nz_R; ++r)
+                {
+                    yval += temp * kstr.v_R[r] * xvals[idx + kstr.idx_R[r]];
+                }
+            }
+        }
+        yvals[ir] = yval;
+    }
+
+    ierr = VecRestoreArrayRead(shellctx->x_seq, &xvals);
+    ierr = VecRestoreArray(y, &yvals);
+    return(0);
+}
+
 PetscErrorCode KronBlocks_t::KronSumConstructShell(
     const std::vector< Hamiltonians::Term >& TermsLR,
     Mat& MatOut
     )
 {
+    PetscErrorCode ierr = 0;
 
+    KronSumShellCtx *shellctx;
+    ierr = PetscNew(&shellctx); CHKERRQ(ierr);
+
+    shellctx->p_ctx = new KronSumCtx();
+    KronSumCtx& ctx = *(shellctx->p_ctx);
+
+    /* Assumes that output matrix is square */
+    ctx.Nrows = ctx.Ncols = num_states;
+    /* Split the ownership of rows using the default way in petsc */
+    ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+    ctx.cstart = ctx.rstart;
+    ctx.lcols = ctx.lrows;
+    ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
+
+    TIMINGS_NEWLINE()
+    ierr = KronSumGetSubmatrices(LeftBlock.H, RightBlock.H, TermsLR, ctx); CHKERRQ(ierr);
+    ierr = LeftBlock.EnsureSaved(); CHKERRQ(ierr);
+    ierr = RightBlock.EnsureSaved(); CHKERRQ(ierr);
+    ierr = KronSumSetUpShellTerms(shellctx); CHKERRQ(ierr);
+    /* Create vector scatter object */
+    Vec x_mpi;
+    ierr = VecCreateMPI(mpi_comm, ctx.lrows, ctx.Nrows, &x_mpi); CHKERRQ(ierr);
+    ierr = VecScatterCreateToAll(x_mpi, &shellctx->vsctx, &shellctx->x_seq); CHKERRQ(ierr);
+    ierr = VecDestroy(&x_mpi); CHKERRQ(ierr);
+
+    /* Create the matrix */
+    ierr = MatCreateShell(mpi_comm, ctx.lrows, ctx.lcols, ctx.Nrows, ctx.Ncols, (void*)shellctx, &MatOut); CHKERRQ(ierr);
+
+    ierr = MatShellSetOperation(MatOut, MATOP_MULT, (void(*)())MatMult_KronSumShell); CHKERRQ(ierr);
+
+    return(0);
+}
+
+PetscErrorCode MatDestroy_KronSumShell(Mat *p_mat)
+{
+    PetscErrorCode ierr;
+    KronSumShellCtx *shellctx;
+    ierr = MatShellGetContext(*p_mat,(void**)&shellctx); CHKERRQ(ierr);
+    KronSumCtx& ctx = *(shellctx->p_ctx);
+
+    ierr = PetscFree(shellctx->term_a); CHKERRQ(ierr);
+    ierr = PetscFree(shellctx->kstr); CHKERRQ(ierr);
+    ierr = PetscFree(shellctx->Rows_L); CHKERRQ(ierr);
+    ierr = PetscFree(shellctx->Rows_R); CHKERRQ(ierr);
+    ierr = VecDestroy(&(shellctx->x_seq)); CHKERRQ(ierr);
+    ierr = VecScatterDestroy(&(shellctx->vsctx)); CHKERRQ(ierr);
+    /*  Destroy local submatrices and temporary matrices */
+    for(Mat *mat: ctx.LocalSubMats){
+        ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
+    }
+
+    delete shellctx->p_ctx;
+    shellctx->p_ctx = NULL;
+    ierr = PetscFree(shellctx); CHKERRQ(ierr);
+    shellctx = NULL;
     return(0);
 }

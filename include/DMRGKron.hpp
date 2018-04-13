@@ -73,6 +73,16 @@ struct KronSumCtx {
     PetscInt Nfiltered=0;
 
     PetscInt Nnz=0;
+
+    PetscInt Nelts=0;
+};
+
+
+struct KronSumTermRow {
+    PetscBool   skip;
+    PetscInt    nz_L, nz_R, bks_L, bks_R, col_NStatesR, fws_O;
+    PetscInt    *idx_L, *idx_R;
+    PetscScalar *v_L, *v_R;
 };
 
 /** Context for the shell matrix object */
@@ -80,8 +90,25 @@ struct KronSumShellCtx {
 
     /** Contains the usual ctx object for explicit matrices. This must be allocated and deallocated
         with `new` and `delete`, respectively. */
-    KronSumCtx *ctx;
+    KronSumCtx      *p_ctx;
+
+    /** Contains the KronSumTermRow's needed for calculating the terms of the full matrix */
+    KronSumTermRow  *kstr;
+    PetscInt        Nterms;
+    PetscInt        Nrowterms;
+
+    PetscInt        *Rows_L;
+    PetscInt        *Rows_R;
+    PetscScalar     *term_a;
+
+    PetscScalar     one;
+
+    /* Mat-Vec multiplication */
+    VecScatter      vsctx;
+    Vec             x_seq;
 };
+
+PetscErrorCode MatDestroy_KronSumShell(Mat *p_mat);
 
 /** A container of ordered KronBlock_t objects representing a Kronecker product structure */
 class KronBlocks_t
@@ -370,6 +397,10 @@ private:
     PetscErrorCode KronSumConstructShell(
         const std::vector< Hamiltonians::Term >& TermsLR,
         Mat& MatOut
+        );
+
+    PetscErrorCode KronSumSetUpShellTerms(
+        KronSumShellCtx *shellctx
         );
 
     PetscErrorCode KronSumGetSubmatrices(
