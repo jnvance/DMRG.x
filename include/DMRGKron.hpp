@@ -75,6 +75,14 @@ struct KronSumCtx {
     PetscInt Nnz=0;
 };
 
+/** Context for the shell matrix object */
+struct KronSumShellCtx {
+
+    /** Contains the usual ctx object for explicit matrices. This must be allocated and deallocated
+        with `new` and `delete`, respectively. */
+    KronSumCtx *ctx;
+};
+
 /** A container of ordered KronBlock_t objects representing a Kronecker product structure */
 class KronBlocks_t
 {
@@ -259,10 +267,9 @@ public:
         );
 
     /** Decide whether to create an implicit MATSHELL matrix */
-    PetscErrorCode KronSumSetShellMatrixFromOptions()
+    PetscErrorCode KronSumSetShellMatrix(const PetscBool& do_shell_in)
     {
-        PetscErrorCode ierr;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-shell",&do_shell,NULL); CHKERRQ(ierr);
+        do_shell = do_shell_in;
         return(0);
     }
 
@@ -353,6 +360,16 @@ private:
     PetscErrorCode VerifySzAssumption(
         const std::vector< Mat >& Matrices,
         const Side_t& SideType
+        );
+
+    PetscErrorCode KronSumConstructExplicit(
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        Mat& MatOut
+        );
+
+    PetscErrorCode KronSumConstructShell(
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        Mat& MatOut
         );
 
     PetscErrorCode KronSumGetSubmatrices(

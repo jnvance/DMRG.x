@@ -740,6 +740,29 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
         }
     }
 
+    if(do_shell){
+        ierr = KronSumConstructShell(TermsLR, MatOut); CHKERRQ(ierr);
+    } else {
+        ierr = KronSumConstructExplicit(TermsLR, MatOut); CHKERRQ(ierr);
+    }
+
+    /*  Destroy Sm in advance to avoid clashes with modifications in Sp */
+    if(CreateSmL){
+        ierr = LeftBlock.DestroySm(); CHKERRQ(ierr);
+    }
+    if(CreateSmR){
+        ierr = RightBlock.DestroySm(); CHKERRQ(ierr);
+    }
+    return(0);
+}
+
+
+PetscErrorCode KronBlocks_t::KronSumConstructExplicit(
+    const std::vector< Hamiltonians::Term >& TermsLR,
+    Mat& MatOut
+    )
+{
+    PetscErrorCode ierr = 0;
     /* Assumes that output matrix is square */
     KronSumCtx ctx;
     ctx.Nrows = ctx.Ncols = num_states;
@@ -776,15 +799,9 @@ PetscErrorCode KronBlocks_t::KronSumConstruct(
     for(Mat *mat: ctx.LocalSubMats){
         ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
     }
-    /*  Destroy Sm in advance to avoid clashes with modifications in Sp */
-    if(CreateSmL){
-        ierr = LeftBlock.DestroySm(); CHKERRQ(ierr);
-    }
-    if(CreateSmR){
-        ierr = RightBlock.DestroySm(); CHKERRQ(ierr);
-    }
     return(0);
 }
+
 
 #define GetBlockMat(BLOCK,OP,ISITE)\
             ((OP)==OpSp ? (BLOCK).Sp(ISITE) : ((OP)==OpSm ? (BLOCK).Sm(ISITE) : ((OP)==OpSz ? (BLOCK).Sz(ISITE) : NULL)))
@@ -1415,5 +1432,16 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
     fprintf(fp_prealloc,"]\n  }");
     fflush(fp_prealloc);
     ierr = PetscFree2(Dnnz_arr, Onnz_arr); CHKERRQ(ierr);
+    return(0);
+}
+
+/*--- Definitions for shell matrices ---*/
+
+PetscErrorCode KronBlocks_t::KronSumConstructShell(
+    const std::vector< Hamiltonians::Term >& TermsLR,
+    Mat& MatOut
+    )
+{
+
     return(0);
 }

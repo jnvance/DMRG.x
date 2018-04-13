@@ -17,7 +17,6 @@
 #include <sstream>
 #include <iomanip>
 #include "DMRGKron.hpp"
-#include "DMRGKronShell.hpp"
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
@@ -120,7 +119,7 @@ public:
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
-
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); assert(!ierr);
         /*  The scratch space to save temporary data*/
         char path[512];
         PetscBool opt_do_scratch_dir;
@@ -514,6 +513,9 @@ private:
     /** Tells whether to save preallocation data for the superblock Hamiltonian */
     PetscBool do_save_prealloc = PETSC_FALSE;
 
+    /** Whether to create an implicit MATSHELL matrix for the superblock Hamiltonian */
+    PetscBool do_shell = PETSC_FALSE;
+
     /** File to store basic data (energy, number of sites, etc) */
     FILE *fp_step;
 
@@ -689,7 +691,7 @@ private:
 
         ierr = KronBlocks.KronSumSetRedistribute(PETSC_TRUE); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumSetToleranceFromOptions(); CHKERRQ(ierr);
-        ierr = KronBlocks.KronSumSetShellMatrixFromOptions(); CHKERRQ(ierr);
+        ierr = KronBlocks.KronSumSetShellMatrix(do_shell); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
         if(!H) SETERRQ(mpi_comm,1,"H is null.");
 
