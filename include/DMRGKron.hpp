@@ -210,7 +210,7 @@ public:
     };
 
     /** Returns the total number blocks */
-    size_t size() const { return KronBlocks.size(); }
+    PetscInt size() const { return PetscInt(KronBlocks.size()); }
 
     /** Returns a const reference to the KronBlocks object */
     const std::vector<KronBlock_t>& data() const { return KronBlocks; }

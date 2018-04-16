@@ -529,10 +529,10 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
     PetscErrorCode ierr;
-    for(size_t isite = 0; isite < num_sites; ++isite){
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = SaveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
     }
-    for(size_t isite = 0; isite < num_sites; ++isite){
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = SaveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
     }
     if(H){
@@ -552,10 +552,10 @@ PetscErrorCode Block::SpinOneHalf::Retrieve()
     if(init) SETERRQ(mpi_comm,1,"Destroy() must be called first.");
     PetscErrorCode ierr;
     PetscBool flg = PETSC_FALSE;
-    for(size_t isite = 0; isite < num_sites; ++isite){
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = RetrieveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
     }
-    for(size_t isite = 0; isite < num_sites; ++isite){
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = RetrieveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
     }
     ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);

@@ -9,9 +9,9 @@
 #include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
 #include <../src/mat/impls/aij/mpi/mpiaij.h> /* Mat_MPIAIJ */
 
-#define DMRG_KRON_TESTING 0
+// #define DMRG_KRON_DEBUG
 
-#if DMRG_KRON_TESTING
+#if defined(DMRG_KRON_DEBUG)
     #ifndef PRINT_RANK_BEGIN
     #define PRINT_RANK_BEGIN() \
         for(PetscMPIInt irank = 0; irank < mpi_size; ++irank){\
@@ -201,7 +201,8 @@ PetscErrorCode MatKronEyeConstruct(
             PetscBool flg[2];
             PetscInt nz_L, nz_R, col_NStatesR;
             const PetscInt *idx_L, *idx_R;
-            const PetscScalar *v_L, *v_R, *v_O;
+            const PetscScalar *v_L, *v_R;
+            // const PetscScalar *v_O;
 
             /* Precalculate the post-shift for Sz operators */
             const PetscInt fws_O_Sz = KIter.BlockStartIdx(OpSz);
@@ -267,7 +268,7 @@ PetscErrorCode MatKronEyeConstruct(
                             idx_L = &Row_LocIdx_L;
                             v_L = &one;
                             ierr = (*mat->ops->getrow)(mat, LocRow_R, &nz_R, (PetscInt**)&idx_R, (PetscScalar**)&v_R); CHKERRQ(ierr);
-                            v_O = v_R;
+                            // v_O = v_R;
                         }
                         else /* Left */
                         {
@@ -275,15 +276,15 @@ PetscErrorCode MatKronEyeConstruct(
                             nz_R = 1;
                             idx_R = &Row_LocIdx_R;
                             v_R = &one;
-                            v_O = v_L;
+                            // v_O = v_L;
                         }
 
                         /* Calculate the resulting indices */
                         PetscInt idx;
                         PetscInt& diag  = Dnnz(OpType, SideType, isite,lrow);
                         PetscInt& odiag = Onnz(OpType, SideType, isite,lrow);
-                        for(size_t l=0; l<nz_L; ++l){
-                            for(size_t r=0; r<nz_R; ++r)
+                        for(PetscInt l=0; l<nz_L; ++l){
+                            for(PetscInt r=0; r<nz_R; ++r)
                             {
                                 idx = (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O;
                                 if ( cstart <= idx && idx < cend ) ++diag;
@@ -423,8 +424,8 @@ PetscErrorCode MatKronEyeConstruct(
                         }
 
                         /* Calculate the resulting indices */
-                        for(size_t l=0; l<nz_L; ++l)
-                            for(size_t r=0; r<nz_R; ++r)
+                        for(PetscInt l=0; l<nz_L; ++l)
+                            for(PetscInt r=0; r<nz_R; ++r)
                                 idx[l*nz_R+r] = (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O;
 
                         /* Set the matrix elements for this row in the output matrix */
@@ -475,7 +476,7 @@ PetscErrorCode KronEye_Explicit(
     ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
 
     /*  For checking the accuracy of the routine. TODO: Remove later */
-    #if DMRG_KRON_TESTING
+    #if defined(DMRG_KRON_DEBUG)
         PRINT_RANK_BEGIN()
         std::cout << "***** Kron_Explicit *****" << std::endl;
         std::cout << "LeftBlock  qn_list:   ";
@@ -517,7 +518,7 @@ PetscErrorCode KronEye_Explicit(
     /*  Create a list of tuples of quantum numbers following the kronecker product structure */
     KronBlocks_t KronBlocks(LeftBlock, RightBlock, {}, NULL, -1);
 
-    #if DMRG_KRON_TESTING
+    #if defined(DMRG_KRON_DEBUG)
         PRINT_RANK_BEGIN()
         {
             PetscInt i = 0;
@@ -545,7 +546,7 @@ PetscErrorCode KronEye_Explicit(
     PetscInt nsectors_left  = LeftBlock.Magnetization.NumSectors();
     PetscInt nsectors_right = RightBlock.Magnetization.NumSectors();
     PetscInt nsectors_out   = nsectors_left * nsectors_right;
-    if(PetscUnlikely((size_t) KronBlocks.size() != nsectors_out ))
+    if(PetscUnlikely(KronBlocks.size() != nsectors_out ))
         SETERRQ2(mpi_comm, 1, "Mismatch in number of sectors. Expected %lu. Got %d.", KronBlocks.size(), nsectors_out);
 
     /*  Count the input and output number of states */
@@ -577,7 +578,7 @@ PetscErrorCode KronEye_Explicit(
     if(PetscUnlikely(nstates_out != QN_Size_total))
         SETERRQ2(mpi_comm, 1, "Mismatch in number of states. Expected %d. Got %d.", nstates_out, QN_Size_total);
 
-    #if DMRG_KRON_TESTING
+    #if defined(DMRG_KRON_DEBUG)
         PRINT_RANK_BEGIN()
         std::cout << "QN_List: "; for(auto q: QN_List) std::cout << q << " "; std::cout << std::endl;
         std::cout << "Total Sites: " << nsites_out << std::endl;
@@ -589,7 +590,7 @@ PetscErrorCode KronEye_Explicit(
     /*  Initialize the new block using the quantum number blocks */
     ierr = BlockOut.Initialize(mpi_comm, nsites_out, QN_List, QN_Size); CHKERRQ(ierr);
 
-    #if DMRG_KRON_TESTING
+    #if defined(DMRG_KRON_DEBUG)
         PRINT_RANK_BEGIN()
         std::cout << "Mag: QN_List: "; for(auto q: BlockOut.Magnetization.List()) std::cout << q << " "; std::cout << std::endl;
         std::cout << "Mag: QN_Size: "; for(auto q: BlockOut.Magnetization.Sizes()) std::cout << q << " "; std::cout << std::endl;
@@ -961,9 +962,9 @@ PetscErrorCode KronBlocks_t::KronSumCalcPreallocation(
                 col_NStatesR = Row_NumStates_ROP.at(term.OpTypeB);
                 if(col_NStatesR==-1) SETERRQ(PETSC_COMM_SELF,1,"Accessed incorrect value.");
 
-                for(size_t l=0; l<nz_L; ++l)
+                for(PetscInt l=0; l<nz_L; ++l)
                 {
-                    for(size_t r=0; r<nz_R; ++r)
+                    for(PetscInt r=0; r<nz_R; ++r)
                     {
                         val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
@@ -1311,9 +1312,9 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
                 fws_O = fws_LOP.at(term.OpTypeA) - ctx.MinIdx;
                 col_NStatesR = Row_NumStates_ROP.at(term.OpTypeB);
                 if(col_NStatesR==-1) SETERRQ(PETSC_COMM_SELF,1,"Accessed incorrect value.");
-                for(size_t l=0; l<nz_L; ++l)
+                for(PetscInt l=0; l<nz_L; ++l)
                 {
-                    for(size_t r=0; r<nz_R; ++r)
+                    for(PetscInt r=0; r<nz_R; ++r)
                     {
                         val_arr[( (idx_L[l] - bks_L) * col_NStatesR + (idx_R[r] - bks_R) + fws_O )] += term.a * v_L[l] * v_R[r];
                     }
