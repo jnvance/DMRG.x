@@ -793,12 +793,10 @@ private:
         if(!mpi_rank && verbose) printf("* Eigendec. of RDMs:     %12.6f s\n", timings_data.tRdms);
 
         ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
-        ierr = SysBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
         ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
         ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
         if(!flg){
             ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
-            ierr = EnvBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
             ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }

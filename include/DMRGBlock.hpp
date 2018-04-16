@@ -118,15 +118,21 @@ namespace Block {
         PetscErrorCode SaveOperator(
             const std::string& OpName,
             const size_t& isite,
-            Mat& Op
+            Mat& Op,
+            const MPI_Comm& comm_in=MPI_COMM_NULL
             );
 
-        /** Retrieves a single operator */
-        PetscErrorCode RetrieveOperator(
-            const std::string& OpName,
-            const size_t& isite,
-            Mat& Op
-            );
+        /* Number of subcommunicators to be used when performing the rotation. */
+        PetscInt nsubcomm = 1;
+
+        /* Tells the subcommunicator to use for rotating this site */
+        std::vector< PetscMPIInt > site_color;
+
+        /** List of possible methods for performing basis transformation */
+        enum RotMethod { mmmmult=0, matptap=1 };
+
+        /** Method to use for performing basis transformation. TODO: Get the method from command line */
+        RotMethod rot_method = mmmmult;
 
     public:
 
@@ -174,6 +180,14 @@ namespace Block {
         /** Save all the matrix operators to file and destroy the current storage */
         PetscErrorCode SaveAndDestroy();
 
+        /** Retrieves a single operator */
+        PetscErrorCode RetrieveOperator(
+            const std::string& OpName,
+            const size_t& isite,
+            Mat& Op,
+            const MPI_Comm& comm_in=MPI_COMM_NULL
+            );
+
         /** Retrieve all the matrix operators that were written to file by SaveAndDestroy() */
         PetscErrorCode Retrieve();
 
@@ -198,6 +212,9 @@ namespace Block {
 
         /** Indicates whether block has been initialized before using it */
         PetscBool Initialized() const { return init; }
+
+        /** Returns the saved state of all operators */
+        PetscBool Saved() const { return saved; }
 
         /** Gets the communicator associated to the block */
         MPI_Comm MPIComm() const { return mpi_comm; }
@@ -268,7 +285,7 @@ namespace Block {
 
         /** Rotates all operators from a source block using the given transposed rotation matrix */
         PetscErrorCode RotateOperators(
-            const SpinOneHalf& Source,  /**< [in] Block containing the original operators */
+            SpinOneHalf& Source,        /**< [in] Block containing the original operators (may modify save state) */
             const Mat& RotMatT          /**< [in] Transposed rotation matrix */
             );
 
