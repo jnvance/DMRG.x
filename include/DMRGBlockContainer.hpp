@@ -294,13 +294,13 @@ public:
                 ++sys_ninit;
 
                 #if defined(PETSC_USE_DEBUG)
-                    if(!mpi_rank && verbose) printf("  Number of system blocks: %d\n", sys_ninit);
+                    if(!mpi_rank && verbose) printf("  Number of system blocks: %lld\n", LLD(sys_ninit));
                 #endif
             }
         }
 
         if(sys_ninit != num_sites/2)
-            SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %d. Got %d.",num_sites/2, sys_ninit);
+            SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %lld. Got %lld.",LLD(num_sites/2), LLD(sys_ninit));
         /* Destroy environment blocks (if any) */
         for(PetscInt ienv = 0; ienv < env_ninit; ++ienv){
             ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
@@ -311,8 +311,8 @@ public:
 
         if(verbose){
             PetscPrintf(mpi_comm,
-                "  Initialized system blocks: %d\n"
-                "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
+                "  Initialized system blocks: %lld\n"
+                "  Target number of sites:    %lld\n\n", LLD(sys_ninit), LLD(num_sites));
         }
         if(!mpi_rank) PRINTLINES();
         ++LoopIdx;
@@ -978,7 +978,7 @@ private:
 
                 #if defined(PETSC_USE_DEBUG)
                 if(flg){
-                    printf(" KB QN: %-6g  Left :%3d  Right: %3d\n", KronBlocks.QN(idx), Idx_L, Idx_R)   ;
+                    printf(" KB QN: %-6g  Left :%3lld  Right: %3lld\n", KronBlocks.QN(idx), LLD(Idx_L), LLD(Idx_R))   ;
                     ierr = MatPeek(rdmd_L, "rdmd_L"); CHKERRQ(ierr);
                     ierr = MatPeek(rdmd_R, "rdmd_R"); CHKERRQ(ierr);
                     printf("\n");
@@ -1001,9 +1001,11 @@ private:
             #if defined(PETSC_USE_DEBUG)
             if(flg){
                 printf("\nBefore sorting\n");
-                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n");
-                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n\n");
             }
             #endif
@@ -1020,9 +1022,11 @@ private:
             #if defined(PETSC_USE_DEBUG)
             if(flg){
                 printf("\nAfter sorting\n");
-                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n");
-                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n\n");
             }
             #endif
@@ -1054,7 +1058,7 @@ private:
         ierr = MatSetUp(RotMatT_R); CHKERRQ(ierr);
 
         #if defined(PETSC_USE_DEBUG)
-            if(flg && !mpi_rank) printf("    m_L: %-d  m_R: %-d\n\n", m_L, m_R);
+            if(flg && !mpi_rank) printf("    m_L: %-lld  m_R: %-lld\n\n", LLD(m_L), LLD(m_R));
         #endif
 
         std::vector< PetscReal > qn_list_L, qn_list_R;
@@ -1071,9 +1075,11 @@ private:
             #if defined(PETSC_USE_DEBUG)
             if(flg) {
                 printf("\n\n");
-                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n");
-                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n\n");
             }
             #endif
@@ -1107,9 +1113,9 @@ private:
 
             #if defined(PETSC_USE_DEBUG)
             if(flg){
-                for(PetscInt i = 0; i < numBlocks_L; ++i) printf("    %g  %d\n", qn_list_L[i], qn_size_L[i]);
+                for(PetscInt i = 0; i < numBlocks_L; ++i) printf("    %g  %lld\n", qn_list_L[i], LLD(qn_size_L[i]));
                 printf("\n");
-                for(PetscInt i = 0; i < numBlocks_R; ++i) printf("    %g  %d\n", qn_list_R[i], qn_size_R[i]);
+                for(PetscInt i = 0; i < numBlocks_R; ++i) printf("    %g  %lld\n", qn_list_R[i], LLD(qn_size_R[i]));
             }
             #endif
         }

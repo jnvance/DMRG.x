@@ -748,12 +748,6 @@ PetscErrorCode KronBlocks_t::KronSumConstructExplicit(
     ierr = KronSumPreallocate(ctx, MatOut); CHKERRQ(ierr);
     ierr = KronSumFillMatrix(ctx, MatOut); CHKERRQ(ierr);
 
-    #if defined(PETSC_USE_DEBUG)
-    if(__flg){
-        ierr  = MatPeek(MatOut, "MatOut"); CHKERRQ(ierr);
-    }
-    #endif
-
     /*  Destroy local submatrices and temporary matrices */
     for(Mat *mat: ctx.LocalSubMats){
         ierr = MatDestroySubMatrices(1,&mat); CHKERRQ(ierr);
