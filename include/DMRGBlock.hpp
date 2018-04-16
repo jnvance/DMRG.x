@@ -10,6 +10,7 @@
 
 #include <petscmat.h>
 #include "QuantumNumbers.hpp"
+#include "MiscTools.hpp"
 #include "kron.hpp"
 #include "linalg_tools.hpp"
 #include <string>
