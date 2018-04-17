@@ -3,6 +3,15 @@
 /** Encodes the 2d coordinate on the square lattice to the 1d coordinate on the s-shaped snake */
 #define SSNAKE_2D_1D(ix,jy,_Lx,_Ly) (((ix)*(_Ly)+jy)*(1-((ix)%2)) + ((ix+1)*(_Ly) - (jy+1))*((ix)%2))
 
+PetscInt Hamiltonians::J1J2XYModel_SquareLattice::To1D(
+    const PetscInt ix,
+    const PetscInt jy
+    ) const
+{
+    return SSNAKE_2D_1D(ix,jy,_Lx,_Ly);
+}
+
+
 std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNearestNeighbors(
     const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
     ) const

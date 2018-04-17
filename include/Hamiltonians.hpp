@@ -112,6 +112,11 @@ namespace Hamiltonians
 
         PetscInt Ly() const { return _Ly; }
 
+        PetscInt To1D(
+            const PetscInt ix,
+            const PetscInt jy
+            ) const;
+
     private:
 
         /** Set from options */
