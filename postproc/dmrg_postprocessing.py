@@ -69,7 +69,7 @@ class Data:
     #
     def _LoadRun(self):
         if self._run is None:
-            self._run = LoadJSONArray(os.path.join(self._base_dir,'DMRGRun.json'))
+                self._run = LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
         return self._run
 
     def RunData(self):
@@ -214,7 +214,7 @@ class Data:
         ''' Calculates the entanglement entropy using eigenvalues from all sectors '''
         a = self.EntanglementSpectra()
         l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
-        return [-np.sum(np.log(li)*li) for li in l]
+        return [-np.sum( [np.log(lii)*lii  for lii in li if lii > 0] ) for li in l]
 
 class DataSeries:
     """
