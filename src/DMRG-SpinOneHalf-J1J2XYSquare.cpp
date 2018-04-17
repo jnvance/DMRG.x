@@ -49,7 +49,8 @@ int main(int argc, char **argv)
             PetscInt Lx = DMRG.HamiltonianRef().Lx();
             PetscInt Ly = DMRG.HamiltonianRef().Ly();
 
-            /*  The second left-most column <Sz_{1,0} Sz_{1,1} ... Sz_{1,Ly-1}> (Polyakov loop) */
+            /*  The second left-most column <Sz_{1,0} Sz_{1,1} ... Sz_{1,Ly-1}>. Equivalent to a Polyakov
+                loop when BCx is periodic */
             {
                 std::vector< Op > OpList;
                 std::string desc;
@@ -67,7 +68,6 @@ int main(int argc, char **argv)
 
             /*  We can also measure a Wilson loop of size (Lx-2)*(Ly-2) on the interior. */
             {
-
                 std::vector< Op > OpList;
                 std::string desc;
                 desc += "< ";
