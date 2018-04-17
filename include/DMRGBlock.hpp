@@ -34,6 +34,9 @@ static const std::map<Op_t, std::string> OpString =
     {OpSp, "Sp"}
 };
 
+#define OpToCStr(OP)    ((OpString.find(OP)->second).c_str())
+#define OpToStr(OP)     (OpString.find(OP)->second)
+
 /** Identifies the sides of the DMRG block */
 typedef enum
 {

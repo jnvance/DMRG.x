@@ -16,6 +16,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <string>
 #include "DMRGKron.hpp"
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
@@ -88,6 +89,15 @@ struct TimingsData
 struct Op{
     Op_t OpType;
     PetscInt idx;
+};
+
+struct Measurement {
+    std::vector< Op >   SysOps;
+    std::vector< Op >   EnvOps;
+    std::string         name;
+    std::string         desc1;
+    std::string         desc2;
+    std::string         desc3;
 };
 
 struct BasisTransformation {
@@ -204,11 +214,57 @@ public:
         PetscErrorCode ierr = Destroy(); assert(!ierr);
     }
 
-    /** Sets up measurement of correlation functions at the end of each sweep */
+    /** Sets up measurement of correlation functions at the end of each sweep. Sites are numbered according
+        to the superblock. This function is called once for each measurement. */
     PetscErrorCode SetUpCorrelation(
-        const std::vector< Op >& OpList
+        const std::vector< Op >& OpList,
+        const std::string& name,
+        const std::string& desc
         )
     {
+        /* Verify that the function is called before warm up and after initialization */
+        if(LoopType==SweepStep)
+            SETERRQ(mpi_comm,1,"Setup correlation functions should be called before starting the sweeps.");
+
+        /* Generate the measurement object */
+        Measurement m;
+        m.name = name;
+        m.desc1 = desc;
+        m.desc2 += "< ";
+        for(const Op& op: OpList) m.desc2 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
+        m.desc2 += ">";
+
+        /* Convert the input operators list into a measurement struct with site numbering according to blocks */
+        for(const Op& op: OpList){
+            if(0 <= op.idx && op.idx < num_sites/2){
+                m.SysOps.push_back(op);
+            }
+            else if(num_sites/2 <= op.idx && op.idx < num_sites ){
+                m.EnvOps.push_back({op.OpType, num_sites - 1 - op.idx});
+            }
+            else {
+                SETERRQ2(mpi_comm,1,"Operator index must be in the range [0,%D). Got %D.", num_sites, op.idx);
+            }
+        }
+
+        /* Optionally printout the description in terms of local block indices */
+        m.desc3 += "< ( ";
+        for(const Op& op: m.SysOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
+        if(m.SysOps.size()==0) m.desc3 += "1 ";
+        m.desc3 += ") \\otimes ( ";
+        for(const Op& op: m.EnvOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
+        if(m.EnvOps.size()==0) m.desc3 += "1 ";
+        m.desc3 += ") >";
+
+        /* Printout some information */
+        if(!mpi_rank){
+            std::cout << "  Measurement " << measurements.size() << ": " << m.name << std::endl;
+            std::cout << "    " << m.desc1 << std::endl;
+            std::cout << "    " << m.desc2 << std::endl;
+            std::cout << "    " << m.desc3 << std::endl;
+        }
+
+        measurements.push_back(m);
         return(0);
     }
 
@@ -558,6 +614,9 @@ private:
 
     /** Counter for the step inside this loop */
     PetscInt StepIdx = 0;
+
+    /** Stores the measurements to be performed at the end of each sweep */
+    std::vector< Measurement > measurements;
 
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */

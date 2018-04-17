@@ -31,24 +31,82 @@ int main(int argc, char **argv)
 
         /* Print some info */
         if(!rank){
-            printf( "WARMUP\n");
-            printf( "  NumStates to keep:       %lld\n", LLD(mstates));
-            printf( "SWEEPS\n");
-            printf( "  Use msweeps array:       %s\n",use_msweeps?"yes":"no");
-            printf( "  Number of sweeps:        %lld\n", LLD(use_msweeps?num_msweeps:nsweeps));
-            printf( "  NumStates to keep:      ");
-            if(use_msweeps) for(const PetscInt& m: msweeps) printf(" %lld", LLD(m));
-            else printf(" %lld", LLD(mstates));
-            printf("\n");
-            printf("=========================================\n");
+            std::cout
+                << "WARMUP\n"
+                << "  NumStates to keep:       " << mstates << "\n"
+                << "SWEEPS\n"
+                << "  Use msweeps array:       " << (use_msweeps?"yes":"no") << "\n"
+                << "  Number of sweeps:        " << (use_msweeps?num_msweeps:nsweeps) << "\n"
+                << "  NumStates to keep:      ";
+            if(use_msweeps) for(const PetscInt& m: msweeps) std::cout << " " << m;
+            else std::cout << " " << mstates;
+            std::cout << std::endl;
         }
 
-        /* Explicitly give a list of operators.
-         * For example, the second left-most column <Sz_{Lx} Sz_{Lx+1} ... Sz_{2Lx-1}> */
-        std::vector< Op > OpList = {};
-        PetscInt Lx = DMRG.HamiltonianRef().Lx();
-        for(PetscInt idx = Lx; idx < 2*Lx; ++idx) OpList.push_back({OpSz,idx});
-        ierr = DMRG.SetUpCorrelation(OpList); CHKERRQ(ierr);
+        {
+            if(!rank) std::cout << "MEASUREMENTS" << std::endl;
+            /*  Explicitly give a list of operators. */
+            PetscInt Lx = DMRG.HamiltonianRef().Lx();
+            PetscInt Ly = DMRG.HamiltonianRef().Ly();
+
+            /*  The second left-most column <Sz_{1,0} Sz_{1,1} ... Sz_{1,Ly-1}> (Polyakov loop) */
+            {
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                for(PetscInt j = 0; j < Ly; ++j){
+                    const PetscInt ix  = 1;
+                    const PetscInt jy  = j;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "Polyakov", desc); CHKERRQ(ierr);
+            }
+
+            /*  We can also measure a Wilson loop of size (Lx-2)*(Ly-2) on the interior. */
+            {
+
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                for(PetscInt j = 1; j < Ly-2; ++j){
+                    const PetscInt ix  = 1;
+                    const PetscInt jy  = j;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                for(PetscInt i = 1; i < Lx-2; ++i){
+                    const PetscInt ix  = i;
+                    const PetscInt jy  = Ly-2;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                for(PetscInt j = Ly-2; j > 1; --j){
+                    const PetscInt ix  = Lx-2;
+                    const PetscInt jy  = j;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                for(PetscInt i = Lx-2; i > 1; --i){
+                    const PetscInt ix  = i;
+                    const PetscInt jy  = 1;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "Wilson", desc); CHKERRQ(ierr);
+            }
+        }
+
+        if(!rank){
+            std::cout << "=========================================" << std::endl;
+        }
 
         /* Perform DMRG steps */
         ierr = DMRG.Warmup(mstates); CHKERRQ(ierr);
