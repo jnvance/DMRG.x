@@ -318,6 +318,13 @@ PetscErrorCode MatCreateAIJ_FromSeqList(
 
 
 /* TODO: Transfer to tools.hpp */
+#define CPP_CHKERR(err) \
+    do { \
+        if (PetscUnlikely(err)){\
+            PetscError(PETSC_COMM_SELF, __LINE__, PETSC_FUNCTION_NAME, __FILE__, err, PETSC_ERROR_IN_CXX, 0);\
+            }}\
+    while(0)
+
 #define CPP_CHKERRQ(err) \
     do { \
         if (PetscUnlikely(err)){\

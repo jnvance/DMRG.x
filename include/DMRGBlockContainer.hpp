@@ -90,6 +90,22 @@ struct Op{
     PetscInt idx;
 };
 
+struct BasisTransformation {
+    std::vector< Mat >  rdmd_list;      /**< diagonal blocks of the reduced density matrix */
+    Mat                 RotMatT;        /**< rotation matrix for the block */
+    QuantumNumbers      QN;             /**< quantum numbers context for the block */
+    PetscReal           TruncErr;       /**< total weights of discarded states for the block */
+
+    ~BasisTransformation()
+    {
+        PetscErrorCode ierr = 0;
+        for(Mat& mat: rdmd_list){
+            ierr = MatDestroy(&mat); CPP_CHKERR(ierr);
+        }
+        ierr = MatDestroy(&RotMatT); CPP_CHKERR(ierr);
+    }
+};
+
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {
@@ -763,8 +779,6 @@ private:
         }
         #endif
 
-        /* TODO: Perform evaluation of inter-block correlation functions here */
-
         if(no_symm){
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
             SETERRQ(mpi_comm,PETSC_ERR_SUP,"Unsupported option: no_symm.");
@@ -772,12 +786,15 @@ private:
 
         /*  Calculate the reduced density matrices in block-diagonal form, and from this we can calculate the
             (transposed) rotation matrix */
-        Mat             RotMatT_L, RotMatT_R;
-        QuantumNumbers  QN_L, QN_R;
-        PetscReal       TruncErr_L, TruncErr_R;
-        ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
-        /* TODO: Add an option to accept flg for redundant blocks */
+        BasisTransformation *BT_L, *BT_R;
+        BT_L = new BasisTransformation;
+        BT_R = new BasisTransformation;
+        ierr = GetTruncation(KronBlocks, gsv_r, MStates, *BT_L, *BT_R); CHKERRQ(ierr);
 
+        /* TODO: Add an option to accept flg for redundant blocks */
+        /* TODO: Retrieve reduced density matrices from this function */
+
+        /* TODO: Perform evaluation of inter-block correlation functions here */
         /* TODO: Perform evaluation of intra-block correlation functions */
 
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
@@ -792,19 +809,19 @@ private:
         timings_data.tRdms = trdms-tdiag;
         if(!mpi_rank && verbose) printf("* Eigendec. of RDMs:     %12.6f s\n", timings_data.tRdms);
 
-        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
-        ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
+        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), BT_L->QN); CHKERRQ(ierr);
+        ierr = SysBlockOut.RotateOperators(SysBlockEnl, BT_L->RotMatT); CHKERRQ(ierr);
         ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
         if(!flg){
-            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
-            ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
+            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), BT_R->QN); CHKERRQ(ierr);
+            ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, BT_R->RotMatT); CHKERRQ(ierr);
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
 
         step_data.NumStates_SysRot = SysBlockOut.NumStates();
         step_data.NumStates_EnvRot = EnvBlockOut.NumStates();
-        step_data.TruncErr_Sys = TruncErr_L;
-        step_data.TruncErr_Env = TruncErr_R;
+        step_data.TruncErr_Sys = BT_L->TruncErr;
+        step_data.TruncErr_Env = BT_R->TruncErr;
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -820,18 +837,19 @@ private:
         }
         #endif
 
-        ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
-        ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
-
         ierr = PetscTime(&trotb); CHKERRQ(ierr);
         timings_data.tRotb = trotb-trdms;
         if(!mpi_rank && verbose) printf("* Rotation of Operators: %12.6f s\n", timings_data.tRotb);
 
-        // TimingsData timings_data;
         timings_data.Total = trotb - t0;
         timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
 
         if(!mpi_rank && verbose){
+            const PetscReal pEnlr = 100*(timings_data.tEnlr)/timings_data.Total;
+            const PetscReal pKron = 100*(timings_data.tKron)/timings_data.Total;
+            const PetscReal pDiag = 100*(timings_data.tDiag)/timings_data.Total;
+            const PetscReal pRdms = 100*(timings_data.tRdms)/timings_data.Total;
+            const PetscReal pRotb = 100*(timings_data.tRotb)/timings_data.Total;
             printf("\n");
             printf("  Superblock:\n");
             printf("    NumStates:   %lld\n", LLD(KronBlocks.NumStates()));
@@ -840,28 +858,27 @@ private:
             printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
             printf("  Sys Block Out\n"
                    "    NumStates: %lld\n"
-                   "    TrunError: %g\n", LLD(QN_L.NumStates()), TruncErr_L);
+                   "    TrunError: %g\n", LLD(BT_L->QN.NumStates()), BT_L->TruncErr);
             printf("  Env Block Out\n"
                    "    NumStates: %lld\n"
-                   "    TrunError: %g\n", LLD(QN_R.NumStates()), TruncErr_R);
+                   "    TrunError: %g\n", LLD(BT_R->QN.NumStates()), BT_R->TruncErr);
             printf("\n");
             printf("  Total Time:              %12.6f s\n", timings_data.Total);
-            printf("    Add One Site:          %12.6f s \t%6.2f %%\n",
-                timings_data.tEnlr, 100*(timings_data.tEnlr)/timings_data.Total);
-            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n",
-                timings_data.tKron, 100*(timings_data.tKron)/timings_data.Total);
-            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n",
-                timings_data.tDiag, 100*(timings_data.tDiag)/timings_data.Total);
-            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n",
-                timings_data.tRdms, 100*(timings_data.tRdms)/timings_data.Total);
-            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n",
-                timings_data.tRotb, 100*(timings_data.tRotb)/timings_data.Total);
+            printf("    Add One Site:          %12.6f s \t%6.2f %%\n", timings_data.tEnlr, pEnlr);
+            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n", timings_data.tKron, pKron);
+            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n", timings_data.tDiag, pDiag);
+            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n", timings_data.tRdms, pRdms);
+            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n", timings_data.tRotb, pRotb);
             printf("\n");
         }
 
         /* Save data */
         ierr = SaveStepData(step_data); CHKERRQ(ierr);
         ierr = SaveTimingsData(timings_data); CHKERRQ(ierr);
+
+        /* Delete context */
+        delete BT_L;
+        delete BT_R;
 
         /* Increment counters */
         ++GlobIdx;
@@ -874,12 +891,8 @@ private:
         const KronBlocks_t& KronBlocks, /**< [in] Context for quantum numbers aware Kronecker product */
         const Vec& gsv_r,               /**< [in] Real part of the superblock ground state vector */
         const PetscInt& MStates,        /**< [in] the maximum number of states to keep */
-        Mat& RotMatT_L,                 /**< [out] rotation matrix for the system (left) block */
-        QuantumNumbers& QN_L,           /**< [out] quantum numbers context for the system (left) block */
-        PetscReal& TruncErr_L,          /**< [out] total weights of discarded states for the system (left) block */
-        Mat& RotMatT_R,                 /**< [out] rotation matrix for the environment (right) block */
-        QuantumNumbers& QN_R,           /**< [out] quantum numbers context for the environment (right) block */
-        PetscReal& TruncErr_R           /**< [out] total weights of discarded states for the environment (right) block */
+        BasisTransformation& BT_L,      /**< [out] basis transformation context for the system (left) block */
+        BasisTransformation& BT_R       /**< [out] basis transformation context for the environment (right) block */
         )
     {
         PetscErrorCode ierr;
@@ -914,7 +927,6 @@ private:
 
         std::vector< Eigen_t > eigen_L, eigen_R;        /* Container for eigenvalues of the RDMs */
         std::vector< EPS > eps_list_L, eps_list_R;      /* Container for EPS objects */
-        std::vector< Mat > rdmd_list_L, rdmd_list_R;    /* Container for block diagonals of RMDs */
         std::vector< Vec > rdmd_vecs_L, rdmd_vecs_R;    /* Container for the corresponding vectors */
 
         /*  Do eigendecomposition on root process  */
@@ -985,8 +997,8 @@ private:
 
                 eps_list_L.push_back(eps_L);
                 eps_list_R.push_back(eps_R);
-                rdmd_list_L.push_back(rdmd_L);
-                rdmd_list_R.push_back(rdmd_R);
+                BT_L.rdmd_list.push_back(rdmd_L);
+                BT_R.rdmd_list.push_back(rdmd_R);
 
                 /*  Prepare the vectors for getting the eigenvectors */
                 Vec v_L, v_R;
@@ -1045,9 +1057,11 @@ private:
         const PetscInt NStates_L = KronBlocks.LeftBlockRef().Magnetization.NumStates();
         const PetscInt NStates_R = KronBlocks.RightBlockRef().Magnetization.NumStates();
 
-        /*  The rotation matrices take have the dimension m x NStates so that it is actually*/
-        ierr = MatCreate(mpi_comm, &RotMatT_L); CHKERRQ(ierr);
-        ierr = MatCreate(mpi_comm, &RotMatT_R); CHKERRQ(ierr);
+        /*  The rotation matrices take have the dimension m x NStates */
+        ierr = MatCreate(mpi_comm, &BT_L.RotMatT); CHKERRQ(ierr);
+        ierr = MatCreate(mpi_comm, &BT_R.RotMatT); CHKERRQ(ierr);
+        Mat& RotMatT_L = BT_L.RotMatT;
+        Mat& RotMatT_R = BT_R.RotMatT;
         ierr = MatSetSizes(RotMatT_L, PETSC_DECIDE, PETSC_DECIDE, m_L, NStates_L); CHKERRQ(ierr);
         ierr = MatSetSizes(RotMatT_R, PETSC_DECIDE, PETSC_DECIDE, m_R, NStates_R); CHKERRQ(ierr);
         ierr = MatSetFromOptions(RotMatT_L); CHKERRQ(ierr);
@@ -1062,6 +1076,8 @@ private:
         std::vector< PetscReal > qn_list_L, qn_list_R;
         std::vector< PetscInt >  qn_size_L, qn_size_R;
         PetscInt numBlocks_L, numBlocks_R;
+        PetscReal& TruncErr_L = BT_L.TruncErr;
+        PetscReal& TruncErr_R = BT_R.TruncErr;
         if(!mpi_rank)
         {
             /* Take only the first m states and sort in ascending order of blkIdx */
@@ -1149,8 +1165,8 @@ private:
         }
         #endif
 
-        ierr = QN_L.Initialize(mpi_comm, qn_list_L, qn_size_L); CHKERRQ(ierr);
-        ierr = QN_R.Initialize(mpi_comm, qn_list_R, qn_size_R); CHKERRQ(ierr);
+        ierr = BT_L.QN.Initialize(mpi_comm, qn_list_L, qn_size_L); CHKERRQ(ierr);
+        ierr = BT_R.QN.Initialize(mpi_comm, qn_list_R, qn_size_R); CHKERRQ(ierr);
 
         for(EPS& eps: eps_list_L){
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
@@ -1158,12 +1174,12 @@ private:
         for(EPS& eps: eps_list_R){
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
-        for(Mat& mat: rdmd_list_L){
-            ierr = MatDestroy(&mat); CHKERRQ(ierr);
-        }
-        for(Mat& mat: rdmd_list_R){
-            ierr = MatDestroy(&mat); CHKERRQ(ierr);
-        }
+        // for(Mat& mat: rdmd_list_L){
+        //     ierr = MatDestroy(&mat); CHKERRQ(ierr);
+        // }
+        // for(Mat& mat: rdmd_list_R){
+        //     ierr = MatDestroy(&mat); CHKERRQ(ierr);
+        // }
         for(Vec& vec: rdmd_vecs_L){
             ierr = VecDestroy(&vec); CHKERRQ(ierr);
         }
