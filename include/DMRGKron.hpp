@@ -259,6 +259,12 @@ public:
     /** Returns a const reference to the right block object */
     const Block::SpinOneHalf& RightBlockRef() const { return RightBlock; }
 
+    /** Returns a non-const reference to the left block object */
+    Block::SpinOneHalf& LeftBlockRefMod(){ return LeftBlock; }
+
+    /** Returns a non-const reference to the right block object */
+    Block::SpinOneHalf& RightBlockRefMod(){ return RightBlock; }
+
     /** Returns the offsets for the KronBlock corresponding to a pair of left and right block indices */
     PetscInt Offsets(const PetscInt& lidx, const PetscInt& ridx) const {
         PetscInt idx = Map(lidx, ridx);
