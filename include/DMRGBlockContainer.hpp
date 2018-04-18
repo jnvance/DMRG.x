@@ -92,12 +92,21 @@ struct Op{
 };
 
 struct Measurement {
+    PetscInt            idx;
     std::vector< Op >   SysOps;
     std::vector< Op >   EnvOps;
     std::string         name;
     std::string         desc1;
     std::string         desc2;
     std::string         desc3;
+
+    PetscErrorCode PrintInfo(){
+        std::cout << "  Measurement " << idx << ": " << name << std::endl;
+        std::cout << "    " << desc1 << std::endl;
+        std::cout << "    " << desc2 << std::endl;
+        std::cout << "    " << desc3 << std::endl;
+        return(0);
+    }
 };
 
 struct BasisTransformation {
@@ -228,6 +237,7 @@ public:
 
         /* Generate the measurement object */
         Measurement m;
+        m.idx = measurements.size();
         m.name = name;
         m.desc1 = desc;
         m.desc2 += "< ";
@@ -247,7 +257,7 @@ public:
             }
         }
 
-        /* Optionally printout the description in terms of local block indices */
+        /* Also printout the description in terms of local block indices */
         m.desc3 += "< ( ";
         for(const Op& op: m.SysOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
         if(m.SysOps.size()==0) m.desc3 += "1 ";
@@ -257,12 +267,7 @@ public:
         m.desc3 += ") >";
 
         /* Printout some information */
-        if(!mpi_rank){
-            std::cout << "  Measurement " << measurements.size() << ": " << m.name << std::endl;
-            std::cout << "    " << m.desc1 << std::endl;
-            std::cout << "    " << m.desc2 << std::endl;
-            std::cout << "    " << m.desc3 << std::endl;
-        }
+        if(!mpi_rank) m.PrintInfo();
 
         measurements.push_back(m);
         return(0);
