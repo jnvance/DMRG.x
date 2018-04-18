@@ -591,7 +591,7 @@ private:
 
     /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
         This is automatically set when indicating -scratch_dir */
-    PetscBool do_scratch_dir = PETSC_FALSE;
+    PetscBool do_scratch_dir = PETSC_TRUE;
 
     /** Tells whether data should be saved in tabular form, instead of verbose json */
     PetscBool data_tabular = PETSC_TRUE;
@@ -600,7 +600,7 @@ private:
     PetscBool do_save_prealloc = PETSC_FALSE;
 
     /** Whether to create an implicit MATSHELL matrix for the superblock Hamiltonian */
-    PetscBool do_shell = PETSC_FALSE;
+    PetscBool do_shell = PETSC_TRUE;
 
     /** File to store basic data (energy, number of sites, etc) */
     FILE *fp_step;
