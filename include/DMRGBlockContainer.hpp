@@ -91,7 +91,9 @@ struct Op{
     PetscInt idx;
 };
 
-struct Measurement {
+/** Describes an n-point correlator whose expectation value will be measured at the end of each sweep.
+    Thus, Sys and Env here have reflection symmetry. */
+struct Correlator {
     PetscInt            idx;
     std::vector< Op >   SysOps;
     std::vector< Op >   EnvOps;
@@ -100,8 +102,8 @@ struct Measurement {
     std::string         desc2;
     std::string         desc3;
 
-    PetscErrorCode PrintInfo(){
-        std::cout << "  Measurement " << idx << ": " << name << std::endl;
+    PetscErrorCode PrintInfo() const {
+        std::cout << "  Correlator " << idx << ": " << name << std::endl;
         std::cout << "    " << desc1 << std::endl;
         std::cout << "    " << desc2 << std::endl;
         std::cout << "    " << desc3 << std::endl;
@@ -236,7 +238,7 @@ public:
             SETERRQ(mpi_comm,1,"Setup correlation functions should be called before starting the sweeps.");
 
         /* Generate the measurement object */
-        Measurement m;
+        Correlator m;
         m.idx = measurements.size();
         m.name = name;
         m.desc1 = desc;
@@ -255,6 +257,13 @@ public:
             else {
                 SETERRQ2(mpi_comm,1,"Operator index must be in the range [0,%D). Got %D.", num_sites, op.idx);
             }
+        }
+
+        /* Reflection symmetry: if the resulting SysOps is empty, swap with EnvOps */
+        if(m.SysOps.empty())
+        {
+            m.SysOps = m.EnvOps;
+            m.EnvOps.clear();
         }
 
         /* Also printout the description in terms of local block indices */
@@ -621,7 +630,7 @@ private:
     PetscInt StepIdx = 0;
 
     /** Stores the measurements to be performed at the end of each sweep */
-    std::vector< Measurement > measurements;
+    std::vector< Correlator > measurements;
 
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
