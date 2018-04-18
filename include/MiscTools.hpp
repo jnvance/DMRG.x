@@ -42,7 +42,9 @@
     #define ACCUM_TIMINGS_SETUP(LABEL)
     #define ACCUM_TIMINGS_BEGIN(LABEL)
     #define ACCUM_TIMINGS_END(LABEL)
+    #define ACCUM_TIMINGS_PRINT(LABEL, TEXT)
 #endif
 
+PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
 
 #endif // __DMRG_MISCTOOLS_HPP__
