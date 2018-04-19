@@ -112,16 +112,16 @@ struct Correlator {
 };
 
 struct BasisTransformation {
-    std::vector< Mat >  rdmd_list;      /**< diagonal blocks of the reduced density matrix */
-    Mat                 RotMatT;        /**< rotation matrix for the block */
-    QuantumNumbers      QN;             /**< quantum numbers context for the block */
-    PetscReal           TruncErr;       /**< total weights of discarded states for the block */
+    std::map< PetscInt, Mat >   rdmd_list;      /**< diagonal blocks of the reduced density matrix */
+    Mat                         RotMatT;        /**< rotation matrix for the block */
+    QuantumNumbers              QN;             /**< quantum numbers context for the block */
+    PetscReal                   TruncErr;       /**< total weights of discarded states for the block */
 
     ~BasisTransformation()
     {
         PetscErrorCode ierr = 0;
-        for(Mat& mat: rdmd_list){
-            ierr = MatDestroy(&mat); CPP_CHKERR(ierr);
+        for(auto& rdmd: rdmd_list){
+            ierr = MatDestroy(&(rdmd.second)); CPP_CHKERR(ierr);
         }
         ierr = MatDestroy(&RotMatT); CPP_CHKERR(ierr);
     }
@@ -456,7 +456,7 @@ public:
                 ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
-                                    sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
+                                    sys_blocks[outsys], sys_blocks[outenv], PetscBool(outsys==outenv)); CHKERRQ(ierr);
         }
         sweeps_mstates.push_back(MStates);
         ++LoopIdx;
@@ -639,7 +639,8 @@ private:
         Block& EnvBlock,            /**< [in] the old environment (right) block */
         const PetscInt& MStates,    /**< [in] the maximum number of states to keep */
         Block& SysBlockOut,         /**< [out] the new system (left) block */
-        Block& EnvBlockOut          /**< [out] the new environment (right) block */
+        Block& EnvBlockOut,         /**< [out] the new environment (right) block */
+        PetscBool do_measurements=PETSC_FALSE /**< [in] whether to do measurements for this step */
         )
     {
         PetscErrorCode ierr;
@@ -870,6 +871,8 @@ private:
         /* TODO: Perform evaluation of inter-block correlation functions here */
         /* TODO: Perform evaluation of intra-block correlation functions */
 
+        ierr = CalculateCorrelations_BlockDiag(KronBlocks, gsv_r, *BT_L, do_measurements); CHKERRQ(ierr);
+
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
 
@@ -1070,8 +1073,8 @@ private:
 
                 eps_list_L.push_back(eps_L);
                 eps_list_R.push_back(eps_R);
-                BT_L.rdmd_list.push_back(rdmd_L);
-                BT_R.rdmd_list.push_back(rdmd_R);
+                BT_L.rdmd_list[Idx_L] = rdmd_L;
+                BT_R.rdmd_list[Idx_R] = rdmd_R;
 
                 /*  Prepare the vectors for getting the eigenvectors */
                 Vec v_L, v_R;
@@ -1309,7 +1312,7 @@ private:
         return(0);
     }
 
-    /** FIlls the rotation matrix assumming that the reduced density matrix has a block diagonal structure */
+    /** Fills the rotation matrix assumming that the reduced density matrix has a block diagonal structure */
     PetscErrorCode FillRotation_BlockDiag(
         const std::vector< Eigen_t >&   eigen_list,     /**< [in] full list of eigenstates */
         const std::vector< EPS >&       eps_list,       /**< [in] ordered list of EPS contexts */
@@ -1362,6 +1365,213 @@ private:
         ierr = PetscFree(idx); CHKERRQ(ierr);
         return(0);
     }
+
+    #define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
+    #define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
+
+    /** Calculates the correlation functions. Must be called only at the end of a sweep since corresponding partitioning of the
+        lattice sites are embedded in the generation of Measurement objects, and reflection symmetry is assumed by taking in only
+        the system block. NOTE: May be generalized if needed. */
+    PetscErrorCode CalculateCorrelations_BlockDiag(
+        KronBlocks_t& KronBlocks, /**< [in] Kronblocks context of the superblock */
+        const Vec& gsv_r,               /**< [in] Real part of the superblock ground state vector */
+        const BasisTransformation& BT,  /**< [in] BasisTransformation context containing reduced density matrix */
+        const PetscBool flg=PETSC_TRUE  /**< [in] Whether to do the measurements */
+        )
+    {
+        if(!flg) return(0);
+        PetscErrorCode ierr;
+
+        PetscBool debug = PETSC_TRUE; /* FIXME: Remove later */
+        if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
+
+        /*  Classify the correlators accordingly */
+        std::vector< Correlator > CorrSys;     /* For operators residing in the system block */
+        std::vector< Correlator > CorrSysEnv;  /* For operators residing in the system and environment blocks */
+        for(const Correlator& m: measurements){
+            if(m.SysOps.size()!=0 && m.EnvOps.size()==0){
+                CorrSys.push_back(m);
+            }
+            else if (m.SysOps.size()==0 && m.EnvOps.size()!=0){
+                SETERRQ(mpi_comm,1,"Reflection symmetry is imposed. Empty SysOps and non-empty EnvOps not permitted.");
+            }
+            else if (m.SysOps.size()!=0 && m.EnvOps.size()!=0){
+                CorrSysEnv.push_back(m);
+            }
+            else {
+                /* TODO: Skip correlators with no operators and simply return the  */
+            }
+        }
+
+        /*---- For correlators in the system block ----*/
+        /*  Send the elements of the reduced density matrix (diagonals) to their corresponding processors
+            Since each processor has a complete copy of KronBlocks, each one is aware of how much data
+            it will receive. */
+        if(CorrSys.size() > 0)
+        {
+            if(debug && !mpi_rank) std::cout << "\nCorrSys" << std::endl;
+            if(debug && !mpi_rank) for(const Correlator& m: CorrSys) m.PrintInfo();
+
+            std::vector< PetscInt > Sizes = KronBlocks.LeftBlockRef().Magnetization.Sizes();
+            std::vector< PetscInt > Offsets = KronBlocks.LeftBlockRef().Magnetization.Offsets();
+            PetscInt NumSectors = KronBlocks.LeftBlockRef().Magnetization.NumSectors();
+            PetscInt NumStates = KronBlocks.LeftBlockRef().Magnetization.NumStates();
+
+            /* Verify the sizes of the reduced density matrix diagonals */
+            if(!mpi_rank){
+                for(PetscInt i=0; i<NumSectors; ++i){
+                    PetscInt M,N;
+                    ierr = MatGetSize(BT.rdmd_list.at(i), &M, &N); CHKERRQ(ierr);
+                    if(M!=N)
+                        SETERRQ2(PETSC_COMM_SELF,1,"Matrix must be square. Got %D x %D instead.",M,N);
+                    if(M!=Sizes.at(i))
+                        SETERRQ2(mpi_comm,1,"Incorrect size. Expected %D. Got %D.", M, Sizes.at(i));
+                }
+            }
+
+            /* TODO: Implement in a subcommunicator */
+            MPI_Comm& loc_comm = mpi_comm;
+            {
+                /* Prepare an MPI dense matrix for the reduced density matrix */
+                Mat rho;
+                ierr = MatCreateDense(loc_comm,PETSC_DECIDE,PETSC_DECIDE,NumStates,NumStates,NULL,&rho); CHKERRQ(ierr);
+                ierr = MatSetOption(rho,MAT_ROW_ORIENTED,PETSC_TRUE); CHKERRQ(ierr);
+                if(!mpi_rank)
+                {
+                    PetscScalar *v;
+                    PetscInt *idx, max_size = 0;
+                    for(const PetscInt& s: Sizes) max_size = (max_size < s) ? s : max_size;
+                    ierr = PetscCalloc1(max_size,&idx); CHKERRQ(ierr);
+                    for(PetscInt iblk=0; iblk<NumSectors; ++iblk)
+                    {
+                        /*  Manually take care of the possiblity that a blk was not included in the sectors used.
+                            Although this is unlikely to happen when imposing symmetry and the target magnetization is zero */
+                        if(BT.rdmd_list.find(iblk) == BT.rdmd_list.end()) continue;
+                        PetscInt size = Sizes[iblk];
+                        PetscInt shift = Offsets[iblk];
+                        for(PetscInt is=0; is<size; ++is)
+                        {
+                            idx[is] = is + shift;
+                        }
+                        ierr = MatDenseGetArray(BT.rdmd_list.at(iblk), &v); CHKERRQ(ierr);
+                        for(PetscInt is=0; is<size; ++is)
+                        {
+                            PetscInt row = is + shift;
+                            ierr = MatSetValues(rho,1,&row,size,idx,v+is*size,INSERT_VALUES); CHKERRQ(ierr);
+                        }
+                        ierr = MatDenseRestoreArray(BT.rdmd_list.at(iblk), &v); CHKERRQ(ierr);
+                    }
+                    ierr = PetscFree(idx); CHKERRQ(ierr);
+                }
+                ierr = MatAssemblyBegin(rho, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+                ierr = MatAssemblyEnd(rho, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+                /* Load only needed operator matrices manually */
+                ierr = KronBlocks.LeftBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+
+                std::map< std::string, Mat > OpMats;
+                std::vector< Mat > AllOpProds; /* Store only the created operator products to avoid duplication */
+                std::vector< Mat > OpProds; /* Points to a matrix in AllOpProds or OpMats */
+
+                ierr = CalculateOperatorProducts(loc_comm,CorrSys,BlockSys,
+                    KronBlocks.LeftBlockRefMod(),OpMats,AllOpProds,OpProds); CHKERRQ(ierr);
+
+                /* TODO: Obtain the trace of the matrix products with the reduced density matrix */
+
+                for(Mat& op_prod: AllOpProds){
+                    ierr = MatDestroy(&op_prod); CHKERRQ(ierr);
+                }
+                for(auto& op_mat: OpMats){
+                    ierr = MatDestroy(&(op_mat.second)); CHKERRQ(ierr);
+                }
+
+                ierr = MatDestroy(&rho); CHKERRQ(ierr);
+            }
+        }
+
+        if(CorrSysEnv.size() > 0)
+        {
+            if(debug && !mpi_rank) std::cout << "\nCorrSysEnv" << std::endl;
+            if(debug && !mpi_rank) for(const Correlator& m: CorrSysEnv) m.PrintInfo();
+        }
+
+        if(debug && !mpi_rank) std::cout << "\n\n" << std::endl;
+        return(0);
+    }
+
+    PetscErrorCode CalculateOperatorProducts(
+        const MPI_Comm& comm_in,
+        const std::vector< Correlator >& Corr,
+        const Block_t& BlockType,
+        Block& BlockRef,
+        std::map< std::string, Mat >& OpMats,
+        std::vector< Mat >& AllOpProds,
+        std::vector< Mat >& OpProds
+        )
+    {
+        PetscErrorCode ierr;
+        MPI_Comm comm = (comm_in==MPI_COMM_NULL) ? mpi_comm : comm_in;
+
+        for(size_t icorr=0; icorr<Corr.size(); ++icorr)
+        {
+            const Correlator& c = Corr.at(icorr);
+            const std::vector< Op >& OpsList = (BlockType == BlockSys)?c.SysOps:c.EnvOps;
+            for(const Op& o : OpsList)
+            {
+                std::string key = OpIdxToStr(o.OpType,o.idx);
+                if(OpMats.find(key)==OpMats.end())
+                {
+                    OpMats[key] = NULL;
+                    // ierr = KronBlocks.LeftBlockRefMod().RetrieveOperator(
+                    ierr = BlockRef.RetrieveOperator(
+                        OpToStr(o.OpType), o.idx, OpMats[key], comm); CHKERRQ(ierr);
+                }
+            }
+        }
+
+        /* Prepare the operator products for each correlator */
+        OpProds.resize(Corr.size());
+        for(size_t icorr=0; icorr<Corr.size(); ++icorr)
+        {
+            const Correlator& c = Corr.at(icorr);
+            const std::vector< Op >& OpsList = (BlockType == BlockSys)?c.SysOps:c.EnvOps;
+            if(OpsList.size()==1)
+            {
+                /* Point to a matrix in OpMats */
+                OpProds.at(icorr) = GetOpMats(OpMats,OpsList,0);
+            }
+            else if(OpsList.size()>1)
+            {
+                /* Generate the operator products */
+                Mat Prod0=NULL, Prod1=NULL;
+                /* Perform the first multiplication */
+                ierr = MatMatMult(GetOpMats(OpMats,OpsList,0),GetOpMats(OpMats,OpsList,1),
+                    MAT_INITIAL_MATRIX,PETSC_DEFAULT,&Prod1); CHKERRQ(ierr);
+
+                /* Iterate over a swap and multiply*/
+                PetscInt nmults = OpsList.size()-1;
+                for(PetscInt imult=1; imult<nmults; ++imult)
+                {
+                    ierr = MatDestroy(&Prod0); CHKERRQ(ierr);
+                    Prod0 = Prod1;
+                    Prod1 = NULL;
+                    ierr = MatMatMult(Prod0,GetOpMats(OpMats,OpsList,imult+1),MAT_INITIAL_MATRIX,PETSC_DEFAULT,&Prod1); CHKERRQ(ierr);
+                }
+                ierr = MatDestroy(&Prod0); CHKERRQ(ierr);
+                AllOpProds.push_back(Prod1);
+                OpProds.at(icorr) = Prod1;
+            }
+            else
+            {
+                SETERRQ(mpi_comm,1,"SysOps should be non-empty.");
+            }
+        }
+
+        return(0);
+    }
+
+    #undef OpIdxToStr
+    #undef GetOpMats
 
     /** Ensure that required blocks are loaded while unrequired blocks are saved */
     PetscErrorCode SysBlocksActive(const std::set< PetscInt >& SysIdx)
