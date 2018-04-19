@@ -110,6 +110,20 @@ PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscIn
 }
 
 
+PETSC_EXTERN PetscErrorCode SplitOwnership(
+    const PetscMPIInt& rank,
+    const PetscMPIInt& nprocs ,
+    const PetscInt N,
+    PetscInt& locrows,
+    PetscInt& Istart)
+{
+    const PetscInt remrows = N % nprocs;
+    locrows = N / nprocs + PetscInt(rank < remrows);
+    Istart =  N / nprocs * rank + (rank < remrows ? rank : remrows);
+    return 0;
+}
+
+
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat)
 {
     PetscErrorCode ierr = 0;
