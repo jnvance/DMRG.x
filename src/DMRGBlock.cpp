@@ -616,6 +616,15 @@ PetscErrorCode Block::SpinOneHalf::RetrieveOperator(
     const MPI_Comm& comm_in)
 {
     PetscErrorCode ierr;
+    /* Separately handle the case of Sm operators since they are never saved */
+    if(OpName=="Sm")
+    {
+        Mat OpSp;
+        ierr = RetrieveOperator("Sp",isite,OpSp,comm_in); CHKERRQ(ierr);
+        ierr = MatHermitianTranspose(OpSp,MAT_INITIAL_MATRIX,&Op); CHKERRQ(ierr);
+        ierr = MatDestroy(&OpSp); CHKERRQ(ierr);
+        return(0);
+    }
     PetscViewer binv;
     MPI_Comm comm = (comm_in==MPI_COMM_NULL) ? mpi_comm : comm_in;
     ierr = PetscViewerBinaryOpen(comm, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_READ, &binv); CHKERRQ(ierr);
