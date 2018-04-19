@@ -49,6 +49,60 @@ int main(int argc, char **argv)
             PetscInt Lx = DMRG.HamiltonianRef().Lx();
             PetscInt Ly = DMRG.HamiltonianRef().Ly();
 
+            /*  The magnetization at the zeroth site */
+            {
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                {
+                    const PetscInt ix  = 0;
+                    const PetscInt jy  = 0;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "Magnetization00", desc); CHKERRQ(ierr);
+            }
+
+            /*  <S^+ S^-> = S^2 - S_z^2 + \hbar Sz */
+            {
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                {
+                    const PetscInt ix  = 0;
+                    const PetscInt jy  = 0;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    {
+                        OpList.push_back({OpSp,idx});
+                        desc += "Sp_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                    }
+                    {
+                        OpList.push_back({OpSm,idx});
+                        desc += "Sm_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                    }
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "SpinXYProjection00", desc); CHKERRQ(ierr);
+            }
+
+            /*  The 1st row from the top <Sz_{0,0} Sz_{1,0} ... Sz_{Lx-1,0}> */
+            {
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                for(PetscInt i = 0; i < Lx; ++i){
+                    const PetscInt ix  = i;
+                    const PetscInt jy  = 1;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "MagnetizationRowX1", desc); CHKERRQ(ierr);
+            }
+
             /*  The second left-most column <Sz_{1,0} Sz_{1,1} ... Sz_{1,Ly-1}>. Equivalent to a Polyakov
                 loop when BCx is periodic */
             {
@@ -64,6 +118,23 @@ int main(int argc, char **argv)
                 }
                 desc += ">";
                 ierr = DMRG.SetUpCorrelation(OpList, "Polyakov", desc); CHKERRQ(ierr);
+            }
+
+            /*  The second to the last left-most column <Sz_{Lx-2,0} Sz_{Lx-2,1} ... Sz_{Lx-2,Ly-1}>. Equivalent to a Polyakov
+                loop when BCx is periodic */
+            {
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                for(PetscInt j = 0; j < Ly; ++j){
+                    const PetscInt ix  = Lx-2;
+                    const PetscInt jy  = j;
+                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
+                    OpList.push_back({OpSz,idx});
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "Polyakov2", desc); CHKERRQ(ierr);
             }
 
             /*  We can also measure a Wilson loop of size (Lx-2)*(Ly-2) on the interior. */
