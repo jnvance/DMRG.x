@@ -47,4 +47,11 @@
 
 PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
 
+PETSC_EXTERN PetscErrorCode SplitOwnership(
+    const PetscMPIInt& rank,
+    const PetscMPIInt& nprocs ,
+    const PetscInt N,
+    PetscInt& locrows,
+    PetscInt& Istart);
+
 #endif // __DMRG_MISCTOOLS_HPP__
