@@ -375,7 +375,7 @@ public:
                 }
                 ierr = SingleDMRGStep(
                     sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], MStates,
-                    sys_blocks[sys_ninit],    sys_blocks[env_numsites]); CHKERRQ(ierr);
+                    sys_blocks[sys_ninit],    sys_blocks[env_numsites], PetscBool(sys_ninit+1==num_sites/2)); CHKERRQ(ierr);
 
                 ++sys_ninit;
 
@@ -1381,6 +1381,7 @@ private:
     {
         if(!flg) return(0);
         PetscErrorCode ierr;
+        std::vector< PetscScalar > CorrValues(measurements.size());
 
         PetscBool debug = PETSC_TRUE; /* FIXME: Remove later */
         if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
@@ -1409,8 +1410,6 @@ private:
             it will receive. */
         if(CorrSys.size() > 0)
         {
-            if(debug && !mpi_rank) std::cout << "\nCorrSys" << std::endl;
-            if(debug && !mpi_rank) for(const Correlator& m: CorrSys) m.PrintInfo();
 
             std::vector< PetscInt > Sizes = KronBlocks.LeftBlockRef().Magnetization.Sizes();
             std::vector< PetscInt > Offsets = KronBlocks.LeftBlockRef().Magnetization.Offsets();
@@ -1430,11 +1429,15 @@ private:
             }
 
             /* TODO: Implement in a subcommunicator */
-            MPI_Comm& loc_comm = mpi_comm;
+            MPI_Comm& sub_comm = mpi_comm;
             {
+                PetscMPIInt sub_rank, sub_size;
+                ierr = MPI_Comm_rank(sub_comm, &sub_rank); CHKERRQ(ierr);
+                ierr = MPI_Comm_size(sub_comm, &sub_size); CHKERRQ(ierr);
+
                 /* Prepare an MPI dense matrix for the reduced density matrix */
                 Mat rho;
-                ierr = MatCreateDense(loc_comm,PETSC_DECIDE,PETSC_DECIDE,NumStates,NumStates,NULL,&rho); CHKERRQ(ierr);
+                ierr = MatCreateDense(sub_comm,PETSC_DECIDE,PETSC_DECIDE,NumStates,NumStates,NULL,&rho); CHKERRQ(ierr);
                 ierr = MatSetOption(rho,MAT_ROW_ORIENTED,PETSC_TRUE); CHKERRQ(ierr);
                 if(!mpi_rank)
                 {
@@ -1473,11 +1476,44 @@ private:
                 std::vector< Mat > AllOpProds; /* Store only the created operator products to avoid duplication */
                 std::vector< Mat > OpProds; /* Points to a matrix in AllOpProds or OpMats */
 
-                ierr = CalculateOperatorProducts(loc_comm,CorrSys,BlockSys,
+                ierr = CalculateOperatorProducts(sub_comm,CorrSys,BlockSys,
                     KronBlocks.LeftBlockRefMod(),OpMats,AllOpProds,OpProds); CHKERRQ(ierr);
 
-                /* TODO: Obtain the trace of the matrix products with the reduced density matrix */
+                /* Allocate space to store the local trace of each correlator */
+                PetscScalar *tr_rho;
+                ierr = PetscCalloc1(CorrSys.size(),&tr_rho); CHKERRQ(ierr);
 
+                /* Obtain the trace of the matrix products with the reduced density matrix */
+                PetscInt ncols_rho, ncols_corr, rstart, rend;
+                const PetscScalar *vals_rho, *vals_corr;
+                const PetscInt *cols_corr;
+                ierr = MatGetOwnershipRange(rho,&rstart,&rend); CHKERRQ(ierr);
+                for(PetscInt irow=rstart; irow<rend; ++irow)
+                {
+                    ierr = MatGetRow(rho,irow,&ncols_rho,NULL,&vals_rho); CHKERRQ(ierr);
+                    for(size_t icorr=0; icorr<CorrSys.size(); ++icorr)
+                    {
+                        ierr = MatGetRow(OpProds.at(icorr),irow,&ncols_corr,&cols_corr,&vals_corr); CHKERRQ(ierr);
+                        PetscScalar y = 0;
+                        for(PetscInt icol=0; icol<ncols_corr; ++icol)
+                        {
+                            y += vals_corr[icol]*vals_rho[cols_corr[icol]];
+                        }
+                        tr_rho[icorr] += y;
+                        ierr = MatRestoreRow(OpProds.at(icorr),irow,&ncols_corr,&cols_corr,&vals_corr); CHKERRQ(ierr);
+                    }
+                    ierr = MatRestoreRow(rho,irow,&ncols_rho,NULL,&vals_rho); CHKERRQ(ierr);
+                }
+
+                /* Do an MPI_Allreduce to sum all values */
+                ierr = MPI_Allreduce(MPI_IN_PLACE, tr_rho, PetscMPIInt(CorrSys.size()), MPIU_SCALAR, MPI_SUM, sub_comm); CHKERRQ(ierr);
+
+                for(size_t icorr=0; icorr<CorrSys.size(); ++icorr)
+                {
+                    CorrValues[CorrSys[icorr].idx] = tr_rho[icorr];
+                }
+
+                ierr = PetscFree(tr_rho); CHKERRQ(ierr);
                 for(Mat& op_prod: AllOpProds){
                     ierr = MatDestroy(&op_prod); CHKERRQ(ierr);
                 }
@@ -1493,6 +1529,14 @@ private:
         {
             if(debug && !mpi_rank) std::cout << "\nCorrSysEnv" << std::endl;
             if(debug && !mpi_rank) for(const Correlator& m: CorrSysEnv) m.PrintInfo();
+        }
+
+        if(debug && !mpi_rank){
+            std::cout << "\nValues" << std::endl;
+            for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                measurements[icorr].PrintInfo();
+                std::cout << "     = " << CorrValues[icorr] << std::endl << std::endl;
+            }
         }
 
         if(debug && !mpi_rank) std::cout << "\n\n" << std::endl;
@@ -1522,7 +1566,6 @@ private:
                 if(OpMats.find(key)==OpMats.end())
                 {
                     OpMats[key] = NULL;
-                    // ierr = KronBlocks.LeftBlockRefMod().RetrieveOperator(
                     ierr = BlockRef.RetrieveOperator(
                         OpToStr(o.OpType), o.idx, OpMats[key], comm); CHKERRQ(ierr);
                 }
