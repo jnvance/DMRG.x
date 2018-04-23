@@ -65,6 +65,22 @@ int main(int argc, char **argv)
                 ierr = DMRG.SetUpCorrelation(OpList, "Magnetization00", desc); CHKERRQ(ierr);
             }
 
+            /*  The magnetization at the last-added site */
+            {
+                std::vector< Op > OpList;
+                std::string desc;
+                desc += "< ";
+                {
+                    const PetscInt idx = Lx*Ly/2-1;
+                    OpList.push_back({OpSz,idx});
+                    PetscInt ix, jy;
+                    ierr = DMRG.HamiltonianRef().To2D(idx,ix,jy); CHKERRQ(ierr);
+                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                }
+                desc += ">";
+                ierr = DMRG.SetUpCorrelation(OpList, "MagnetizationXX", desc); CHKERRQ(ierr);
+            }
+
             /*  <S^+ S^-> = S^2 - S_z^2 + \hbar Sz */
             {
                 std::vector< Op > OpList;
