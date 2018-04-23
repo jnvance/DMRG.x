@@ -1428,6 +1428,9 @@ private:
                 }
             }
 
+            /* Load only needed operator matrices manually */
+            ierr = KronBlocks.LeftBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+
             /* TODO: Implement in a subcommunicator */
             MPI_Comm& sub_comm = mpi_comm;
             {
@@ -1468,9 +1471,6 @@ private:
                 }
                 ierr = MatAssemblyBegin(rho, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
                 ierr = MatAssemblyEnd(rho, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-
-                /* Load only needed operator matrices manually */
-                ierr = KronBlocks.LeftBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
 
                 std::map< std::string, Mat > OpMats;
                 std::vector< Mat > AllOpProds; /* Store only the created operator products to avoid duplication */
