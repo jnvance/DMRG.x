@@ -91,6 +91,11 @@ struct TimingsData
 struct Op{
     Op_t OpType;
     PetscInt idx;
+
+    PetscErrorCode PrintInfo() const {
+        std::cout << "  Op" << OpIdxToStr(OpType, idx) << std::endl;
+        return(0);
+    }
 };
 
 /** Describes an n-point correlator whose expectation value will be measured at the end of each sweep.
@@ -1382,7 +1387,7 @@ private:
         PetscErrorCode ierr;
         std::vector< PetscScalar > CorrValues(measurements.size());
 
-        PetscBool debug = PETSC_TRUE; /* FIXME: Remove later */
+        PetscBool debug = PETSC_FALSE; /* FIXME: Remove later */
         if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
 
         /*  Classify the correlators accordingly */
@@ -1524,13 +1529,58 @@ private:
             }
         }
 
+        /* TODO: Also calculate CorrSys Quantities using the CorrSysEnv routine */
+
+        /*---- For correlators in the system and environment block ----*/
         if(CorrSysEnv.size() > 0)
         {
             if(debug && !mpi_rank) std::cout << "\nCorrSysEnv" << std::endl;
             if(debug && !mpi_rank) for(const Correlator& m: CorrSysEnv) m.PrintInfo();
+
+            /* Prepare products of the system and environment block operators */
+            std::map< std::string, Mat > OpMats;
+            std::vector< Mat > AllOpProds; /* Store only the created operator products to avoid duplication */
+            std::vector< Mat > OpProdsSys, OpProdsEnv; /* Points to a matrix in AllOpProds or OpMats */
+
+            ierr = KronBlocks.LeftBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+            ierr = KronBlocks.RightBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+
+            ierr = CalculateOperatorProducts(MPI_COMM_NULL, CorrSysEnv, BlockSys,
+                KronBlocks.LeftBlockRefMod(), OpMats, AllOpProds, OpProdsSys); CHKERRQ(ierr);
+
+            ierr = CalculateOperatorProducts(MPI_COMM_NULL, CorrSysEnv, BlockEnv,
+                KronBlocks.RightBlockRefMod(), OpMats, AllOpProds, OpProdsEnv); CHKERRQ(ierr);
+
+            for(size_t icorr=0; icorr < CorrSysEnv.size(); ++icorr)
+            {
+                /*  FIXME: Assume Sz-type inputs.
+                    TODO: implement a guesser based on the constituent operator types in the correlator */
+
+                /*  Prepare the kron shell matrix */
+                Mat KronOp = NULL;
+                Vec Op_Vec;
+                PetscScalar Vec_Op_Vec;
+                ierr = KronBlocks.KronConstruct(OpProdsSys.at(icorr), OpSz,
+                                                OpProdsEnv.at(icorr), OpSz, KronOp); CHKERRQ(ierr);
+                ierr = MatCreateVecs(KronOp, NULL, &Op_Vec); CHKERRQ(ierr);
+                ierr = MatMult(KronOp, gsv_r, Op_Vec); CHKERRQ(ierr);
+                ierr = VecDot(Op_Vec, gsv_r, &Vec_Op_Vec); CHKERRQ(ierr);
+                ierr = MatDestroy_KronSumShell(&KronOp); CHKERRQ(ierr);
+                ierr = MatDestroy(&KronOp); CHKERRQ(ierr);
+                ierr = VecDestroy(&Op_Vec); CHKERRQ(ierr);
+
+                CorrValues[CorrSysEnv[icorr].idx] = Vec_Op_Vec;
+            }
+
+            for(Mat& op_prod: AllOpProds){
+                ierr = MatDestroy(&op_prod); CHKERRQ(ierr);
+            }
+            for(auto& op_mat: OpMats){
+                ierr = MatDestroy(&(op_mat.second)); CHKERRQ(ierr);
+            }
         }
 
-        if(debug && !mpi_rank){
+        if(!mpi_rank){
             std::cout << "\nValues" << std::endl;
             for(size_t icorr=0; icorr<measurements.size(); ++icorr){
                 measurements[icorr].PrintInfo();
@@ -1605,7 +1655,7 @@ private:
             }
             else
             {
-                SETERRQ(mpi_comm,1,"SysOps should be non-empty.");
+                SETERRQ1(mpi_comm,1,"%s should be non-empty.",(BlockType == BlockSys)?"SysOps":"EnvOps");
             }
         }
 
