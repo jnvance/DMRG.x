@@ -1,7 +1,7 @@
 #ifndef __DMRG_MISCTOOLS_HPP__
 #define __DMRG_MISCTOOLS_HPP__
 
-#define DMRG_KRON_TIMINGS
+// #define DMRG_KRON_TIMINGS
 
 #if defined(DMRG_KRON_TIMINGS)
     #include <petsctime.h>
