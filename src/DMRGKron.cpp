@@ -632,6 +632,122 @@ PetscErrorCode KronBlocks_t::VerifySzAssumption(
 }
 
 
+PetscErrorCode KronBlocks_t::KronConstruct(
+    const Mat& Mat_L,
+    const Op_t& OpType_L,
+    const Mat& Mat_R,
+    const Op_t& OpType_R,
+    Mat& MatOut
+    )
+{
+    PetscErrorCode ierr;
+    FUNCTION_TIMINGS_BEGIN()
+
+    /* Verify whether the input matrices conform to the given operator type */
+    ierr = LeftBlock.MatCheckOperatorBlocks(OpType_L, Mat_L); CHKERRQ(ierr);
+    ierr = RightBlock.MatCheckOperatorBlocks(OpType_R, Mat_R); CHKERRQ(ierr);
+
+    if(do_shell)
+    {
+        KronSumShellCtx *shellctx;
+        ierr = PetscNew(&shellctx); CHKERRQ(ierr);
+        shellctx->p_ctx = new KronSumCtx();
+        KronSumCtx& ctx = *(shellctx->p_ctx);
+
+        /* Assumes that output matrix is square */
+        ctx.Nrows = ctx.Ncols = num_states;
+        /* Split the ownership of rows using the default way in petsc */
+        ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+        ctx.cstart = ctx.rstart;
+        ctx.lcols = ctx.lrows;
+        ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
+
+
+        ierr = KronGetSubmatrices(Mat_L, OpType_L, Mat_R, OpType_R, ctx); CHKERRQ(ierr);
+        ierr = KronSumSetUpShellTerms(shellctx); CHKERRQ(ierr);
+        /* Create vector scatter object */
+        Vec x_mpi;
+        ierr = VecCreateMPI(mpi_comm, ctx.lrows, ctx.Nrows, &x_mpi); CHKERRQ(ierr);
+        ierr = VecScatterCreateToAll(x_mpi, &shellctx->vsctx, &shellctx->x_seq); CHKERRQ(ierr);
+        ierr = VecDestroy(&x_mpi); CHKERRQ(ierr);
+
+        /* Create the matrix */
+        ierr = MatCreateShell(mpi_comm, ctx.lrows, ctx.lcols, ctx.Nrows, ctx.Ncols, (void*)shellctx, &MatOut); CHKERRQ(ierr);
+        ierr = MatShellSetOperation(MatOut, MATOP_MULT, (void(*)())MatMult_KronSumShell); CHKERRQ(ierr);
+    }
+    else
+    {
+        SETERRQ(mpi_comm,1,"Not implemented for non-shell matrices"); CHKERRQ(ierr);
+    }
+
+    FUNCTION_TIMINGS_END()
+    return(0);
+}
+
+
+PetscErrorCode KronBlocks_t::KronGetSubmatrices(
+    const Mat& Mat_L,
+    const Op_t& OpType_L,
+    const Mat& Mat_R,
+    const Op_t& OpType_R,
+    KronSumCtx& ctx
+    )
+{
+    PetscErrorCode ierr;
+    FUNCTION_TIMINGS_BEGIN()
+
+    /*  Determine the local rows to be collected from each of the left and right block */
+    {
+        KronBlocksIterator KIter(*this, ctx.rstart, ctx.rend);
+        std::set<PetscInt> SetRowsL, SetRowsR;
+        for( ; KIter.Loop(); ++KIter)
+        {
+            SetRowsL.insert(KIter.GlobalIdxLeft());
+            SetRowsR.insert(KIter.GlobalIdxRight());
+        }
+        ctx.NReqRowsL = SetRowsL.size();
+        ctx.NReqRowsR = SetRowsR.size();
+        ctx.ReqRowsL.resize(ctx.NReqRowsL);
+        ctx.ReqRowsR.resize(ctx.NReqRowsR);
+        size_t idx = 0;
+        for(PetscInt row: SetRowsL){
+            ctx.ReqRowsL[idx] = row;
+            ctx.MapRowsL[row] = idx++;
+        }
+        idx = 0;
+        for(PetscInt row: SetRowsR){
+            ctx.ReqRowsR[idx] = row;
+            ctx.MapRowsR[row] = idx++;
+        }
+    }
+    /*  Generate the index sets needed to get the rows and columns */
+    IS isrow_L, isrow_R, iscol_L, iscol_R;
+    /*  Get only some required rows */
+    ierr = ISCreateGeneral(mpi_comm, ctx.NReqRowsL, ctx.ReqRowsL.data(), PETSC_USE_POINTER, &isrow_L); CHKERRQ(ierr);
+    ierr = ISCreateGeneral(mpi_comm, ctx.NReqRowsR, ctx.ReqRowsR.data(), PETSC_USE_POINTER, &isrow_R); CHKERRQ(ierr);
+    /*  Get all columns in each required row */
+    ierr = ISCreateStride(mpi_comm, LeftBlock.NumStates(), 0, 1, &iscol_L); CHKERRQ(ierr);
+    ierr = ISCreateStride(mpi_comm, RightBlock.NumStates(), 0, 1, &iscol_R); CHKERRQ(ierr);
+
+    {
+        Mat *submat_L, *submat_R;
+        ierr = MatCreateSubMatrices(Mat_L, 1, &isrow_L, &iscol_L, MAT_INITIAL_MATRIX, &submat_L); CHKERRQ(ierr);
+        ierr = MatCreateSubMatrices(Mat_R, 1, &isrow_R, &iscol_R, MAT_INITIAL_MATRIX, &submat_R); CHKERRQ(ierr);
+        ctx.Terms.push_back({1.0, OpType_L, submat_L[0], OpType_R, submat_R[0]});
+        ctx.LocalSubMats.push_back(submat_L);
+        ctx.LocalSubMats.push_back(submat_R);
+    }
+
+    ierr = ISDestroy(&isrow_L); CHKERRQ(ierr);
+    ierr = ISDestroy(&isrow_R); CHKERRQ(ierr);
+    ierr = ISDestroy(&iscol_L); CHKERRQ(ierr);
+    ierr = ISDestroy(&iscol_R); CHKERRQ(ierr);
+
+    FUNCTION_TIMINGS_END()
+    return(0);
+}
+
+
 PetscErrorCode KronBlocks_t::KronSumConstruct(
     const std::vector< Hamiltonians::Term >& Terms,
     Mat& MatOut

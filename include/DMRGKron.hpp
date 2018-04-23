@@ -20,6 +20,8 @@
     - 3rd entry:  PetscInt - Number of states in the block */
 typedef std::tuple<PetscReal, PetscInt, PetscInt, PetscInt> KronBlock_t;
 
+PETSC_EXTERN PetscErrorCode MatMult_KronSumShell(Mat A, Vec x, Vec y);
+
 /** A single term of the KronSum.
     If one matrix is set to null, then that matrix is interpreted as an identity */
 struct KronSumTerm {
@@ -299,6 +301,18 @@ public:
         Mat& MatOut                                     /**< [out]  resultant matrix */
         );
 
+    /** Constructs the explicit sum of Kronecker products of two matrices provided that they follow a fixed
+        Kronecker product structure according to the corresponding sub-blocks.
+        Imposing the latter condition is needed since this implementation requires that the given matrices have only
+        one non-zero quantum number block for each row / block row */
+    PetscErrorCode KronConstruct(
+        const Mat& Mat_L,
+        const Op_t& OpType_L,
+        const Mat& Mat_R,
+        const Op_t& OpType_R,
+        Mat& MatOut
+        );
+
     /** Decide whether to create an implicit MATSHELL matrix */
     PetscErrorCode KronSumSetShellMatrix(const PetscBool& do_shell_in)
     {
@@ -393,6 +407,14 @@ private:
     PetscErrorCode VerifySzAssumption(
         const std::vector< Mat >& Matrices,
         const Side_t& SideType
+        );
+
+    PetscErrorCode KronGetSubmatrices(
+        const Mat& Mat_L,
+        const Op_t& OpType_L,
+        const Mat& Mat_R,
+        const Op_t& OpType_R,
+        KronSumCtx& ctx
         );
 
     PetscErrorCode KronSumConstructExplicit(
