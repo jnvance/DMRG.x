@@ -24,6 +24,8 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 #define PrintLines() printf("-----------------------------------------\n")
 #define PRINTLINES() printf("=========================================\n")
 #define PrintBlocks(LEFT,RIGHT) printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT))
+#define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
+#define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
 
 /** Provides an alias of Side_t to follow the Sys-Env convention */
 typedef enum
@@ -1366,9 +1368,6 @@ private:
         return(0);
     }
 
-    #define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
-    #define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
-
     /** Calculates the correlation functions. Must be called only at the end of a sweep since corresponding partitioning of the
         lattice sites are embedded in the generation of Measurement objects, and reflection symmetry is assumed by taking in only
         the system block. NOTE: May be generalized if needed. */
@@ -1613,9 +1612,6 @@ private:
         return(0);
     }
 
-    #undef OpIdxToStr
-    #undef GetOpMats
-
     /** Ensure that required blocks are loaded while unrequired blocks are saved */
     PetscErrorCode SysBlocksActive(const std::set< PetscInt >& SysIdx)
     {
@@ -1848,6 +1844,9 @@ private:
 
 
 };
+
+#undef OpIdxToStr
+#undef GetOpMats
 
 /**
     @}
