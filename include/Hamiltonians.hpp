@@ -117,6 +117,12 @@ namespace Hamiltonians
             const PetscInt jy
             ) const;
 
+        PetscErrorCode To2D(
+            const PetscInt idx,
+            PetscInt& ix,
+            PetscInt& jy
+            ) const;
+
     private:
 
         /** Set from options */

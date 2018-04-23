@@ -11,6 +11,15 @@ PetscInt Hamiltonians::J1J2XYModel_SquareLattice::To1D(
     return SSNAKE_2D_1D(ix,jy,_Lx,_Ly);
 }
 
+PetscErrorCode Hamiltonians::J1J2XYModel_SquareLattice::To2D(
+    const PetscInt idx,
+    PetscInt& ix,
+    PetscInt& jy
+    ) const
+{
+    SETERRQ1(PETSC_COMM_SELF,1,"Function %s() not implemented.", __PRETTY_FUNCTION__);
+    return(0);
+}
 
 std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNearestNeighbors(
     const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
