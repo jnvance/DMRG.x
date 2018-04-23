@@ -17,7 +17,9 @@ PetscErrorCode Hamiltonians::J1J2XYModel_SquareLattice::To2D(
     PetscInt& jy
     ) const
 {
-    SETERRQ1(PETSC_COMM_SELF,1,"Function %s() not implemented.", __PRETTY_FUNCTION__);
+    ix = idx / _Ly;
+    const PetscInt t1 = ix % 2;
+    jy = (idx % _Ly) * (1 - 2*t1) + (_Ly - 1)*t1;
     return(0);
 }
 
