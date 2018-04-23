@@ -21,6 +21,9 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 #define CheckInit(func) if (PetscUnlikely(!init))\
     SETERRQ1(mpi_comm, PETSC_ERR_ARG_CORRUPT, "%s was called but block was not yet initialized.",func);
 
+#define CheckInitOnce(func) if (PetscUnlikely(!init_once))\
+    SETERRQ1(mpi_comm, PETSC_ERR_ARG_CORRUPT, "%s was called but Initialize was never called before.",func);
+
 /** Internal macro for checking that a column index belongs in the magnetization block boundaries */
 #define CheckIndex(row, col, cstart, cend) if((col) < (cstart) || (col) >= (cend))\
     SETERRQ4(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "On row %d, index %d out of bounds [%d,%d) ",\
@@ -72,6 +75,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
 
     /*  Initialize switch  */
     init = PETSC_TRUE;
+    init_once = PETSC_TRUE;
 
     /** When creating a block for one site, the single-site operators are initialized using the default
         values and matrix operators for spin-1/2 defined in Block::SpinOneHalf::loc_dim, Block::SpinOneHalf::loc_qn_list and Block::SpinOneHalf::loc_qn_size */
@@ -217,7 +221,7 @@ PetscErrorCode Block::SpinOneHalf::CheckOperators() const
 PetscErrorCode Block::SpinOneHalf::CheckSectors() const
 {
     PetscErrorCode ierr = 0;
-    CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
+    CheckInitOnce(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
 
     /*  Check whether the Magnetization object has been initialized correctly */
     ierr = Magnetization.CheckInitialized(); CHKERRQ(ierr);

@@ -81,6 +81,9 @@ namespace Block {
         /** Tells whether the block was initialized */
         PetscBool init = PETSC_FALSE;
 
+        /** Tells whether the block was initialized at least once before */
+        PetscBool init_once = PETSC_FALSE;
+
         /** Tells whether the block's MPI attributes were initialized */
         PetscBool mpi_init = PETSC_FALSE;
 
