@@ -202,6 +202,8 @@ public:
             fprintf(fp_data,",\n");
         }
 
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Correlations.json")).c_str(), "w", &fp_corr); assert(!ierr);
+
         /* do_save_prealloc: default value is FALSE */
         ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); assert(!ierr);
         if(do_save_prealloc){
@@ -277,7 +279,7 @@ public:
         m.desc3 += "< ( ";
         for(const Op& op: m.SysOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
         if(m.SysOps.size()==0) m.desc3 += "1 ";
-        m.desc3 += ") \\otimes ( ";
+        m.desc3 += ") ⊗ ( ";
         for(const Op& op: m.EnvOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
         if(m.EnvOps.size()==0) m.desc3 += "1 ";
         m.desc3 += ") >";
@@ -495,6 +497,9 @@ public:
         if(!mpi_rank) fprintf(fp_data,"\n}\n");
         ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
 
+        if(!mpi_rank) fprintf(fp_corr,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_corr); assert(!ierr);
+
         if(do_save_prealloc){
             if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
             ierr = PetscFClose(mpi_comm, fp_prealloc); assert(!ierr);
@@ -624,6 +629,9 @@ private:
     /** File to store preallocation data of the superblock Hamiltonian */
     FILE *fp_prealloc = NULL;
 
+    /** File to store timings data for each section of a single iteration */
+    FILE *fp_corr = NULL;
+
     /** Global index key which must be unique for each record */
     PetscInt GlobIdx = 0;
 
@@ -638,6 +646,9 @@ private:
 
     /** Stores the measurements to be performed at the end of each sweep */
     std::vector< Correlator > measurements;
+
+    /** Tells whether the headers for the correlators have been printed */
+    PetscBool corr_headers_printed = PETSC_FALSE;
 
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
@@ -1592,6 +1603,47 @@ private:
                 measurements[icorr].PrintInfo();
                 std::cout << "     = " << CorrValues[icorr] << std::endl << std::endl;
             }
+        }
+
+        /* Print results to file */
+        if(!mpi_rank)
+        {
+            if(!corr_headers_printed)
+            {
+                fprintf(fp_corr, "{\n");
+                fprintf(fp_corr, "  \"info\" :\n");
+                fprintf(fp_corr, "  [\n");
+
+                for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                    if(icorr) fprintf(fp_corr, ",\n");
+                    Correlator& c = measurements[icorr];
+                    fprintf(fp_corr, "    {\n");
+                    fprintf(fp_corr, "      \"corrIdx\" : %lld,\n", c.idx);
+                    fprintf(fp_corr, "      \"name\"    : \"%s\",\n",  c.name.c_str());
+                    fprintf(fp_corr, "      \"desc1\"   : \"%s\",\n", c.desc1.c_str());
+                    fprintf(fp_corr, "      \"desc2\"   : \"%s\",\n", c.desc2.c_str());
+                    fprintf(fp_corr, "      \"desc3\"   : \"%s\"\n",  c.desc3.c_str());
+                    fprintf(fp_corr, "    }");
+                }
+
+                fprintf(fp_corr, "\n");
+                fprintf(fp_corr, "  ],\n");
+                fprintf(fp_corr, "  \"values\" :\n");
+                fprintf(fp_corr, "  [\n");
+
+                corr_headers_printed = PETSC_TRUE;
+            }
+            else
+            {
+                fprintf(fp_corr, ",\n");
+            }
+            fprintf(fp_corr, "    [");
+            for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                if(icorr) fprintf(fp_corr, ",");
+                fprintf(fp_corr, " %g", CorrValues[icorr]);
+            }
+            fprintf(fp_corr, " ]");
+            fflush(fp_corr);
         }
 
         if(debug && !mpi_rank) std::cout << "\n\n" << std::endl;

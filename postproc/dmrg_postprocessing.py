@@ -63,6 +63,7 @@ class Data:
         self._timings = None
         self._hamPrealloc = None
         self._entSpectra = None
+        self._corr = None
 
     #
     #   Run data
@@ -215,6 +216,17 @@ class Data:
         a = self.EntanglementSpectra()
         l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
         return [-np.sum( [np.log(lii)*lii  for lii in li if lii > 0] ) for li in l]
+
+    #
+    #   Correlations
+    #
+    def _LoadCorrelations(self):
+        if self._corr is None:
+            self._corr = LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
+
+    def Correlations(self):
+        self._LoadCorrelations()
+        return self._corr
 
 class DataSeries:
     """
