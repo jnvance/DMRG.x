@@ -48,37 +48,44 @@ int main(int argc, char **argv)
             /*  Explicitly give a list of operators. */
             PetscInt Lx = DMRG.HamiltonianRef().Lx();
             PetscInt Ly = DMRG.HamiltonianRef().Ly();
+            PetscInt NumSitesSys = Lx*Ly/2;
 
-            /*  The magnetization at the zeroth site */
+            /*  The magnetization at each site */
+            for(PetscInt idx=0; idx < NumSitesSys; ++idx)
             {
                 std::vector< Op > OpList;
+                OpList.push_back({OpSz,idx});
+
+                PetscInt ix, jy;
                 std::string desc;
+                ierr = DMRG.HamiltonianRef().To2D(idx,ix,jy); CHKERRQ(ierr);
                 desc += "< ";
-                {
-                    const PetscInt ix  = 0;
-                    const PetscInt jy  = 0;
-                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
-                    OpList.push_back({OpSz,idx});
-                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
-                }
+                desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
                 desc += ">";
-                ierr = DMRG.SetUpCorrelation(OpList, "Magnetization00", desc); CHKERRQ(ierr);
+                std::string name = "Magnetization(" + std::to_string(idx) + ")";
+                ierr = DMRG.SetUpCorrelation(OpList, name, desc); CHKERRQ(ierr);
             }
 
-            /*  The magnetization at the last-added site */
+            /*  The pair-wise correlation of nearest neighbors */
             {
-                std::vector< Op > OpList;
-                std::string desc;
-                desc += "< ";
+                const std::vector< std::vector < PetscInt > > nnp = DMRG.HamiltonianRef().NeighborPairs();
+                for(const std::vector< PetscInt > pair : nnp)
                 {
-                    const PetscInt idx = Lx*Ly/2-1;
-                    OpList.push_back({OpSz,idx});
-                    PetscInt ix, jy;
-                    ierr = DMRG.HamiltonianRef().To2D(idx,ix,jy); CHKERRQ(ierr);
-                    desc += "Sz_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                    std::vector< Op > OpList;
+                    std::string desc = "< ";
+                    std::string name = "NearestNeighborSpinSpin( ";
+                    for(const PetscInt idx : pair)
+                    {
+                        OpList.push_back({OpSz,idx});
+                        PetscInt ix, jy;
+                        ierr = DMRG.HamiltonianRef().To2D(idx,ix,jy); CHKERRQ(ierr);
+                        desc += "Sz_{" + std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                        name += std::to_string(idx) + " ";
+                    }
+                    desc += ">";
+                    name += ")";
+                    ierr = DMRG.SetUpCorrelation(OpList, name, desc); CHKERRQ(ierr);
                 }
-                desc += ">";
-                ierr = DMRG.SetUpCorrelation(OpList, "MagnetizationXX", desc); CHKERRQ(ierr);
             }
 
             /*  <S^+ S^-> = S^2 - S_z^2 + \hbar Sz */
