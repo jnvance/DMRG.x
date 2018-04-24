@@ -109,7 +109,7 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
                 /* Append the terms into the Hamiltonian */
                 if(_J2 != 0.0) Terms.push_back({ _J2, OpSp, il, OpSm, ir }); /* J2 S^+_ia S^-_ib */
                 if(_J2 != 0.0) Terms.push_back({ _J2, OpSm, il, OpSp, ir }); /* J2 S^-_ia S^+_ib */
-                if(_Jz2 != 0.0) Terms.push_back({ _Jz2, OpSz, il, OpSz, ir }); /* J2 S^+_ia S^-_ib */
+                if(_Jz2 != 0.0) Terms.push_back({ _Jz2, OpSz, il, OpSz, ir }); /* Jz2 S^z_ia S^z_ib */
             }
         }
     }
@@ -119,4 +119,29 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
         return H_full;
     }
     return Terms;
+}
+
+std::vector< std::vector< PetscInt > > Hamiltonians::J1J2XYModel_SquareLattice::NeighborPairs(
+    const PetscInt d
+    ) const
+{
+    if(d!=1) CPP_CHKERRQ_MSG(1, "Only d=1 supported.");
+    std::vector< std::vector< PetscInt > > nnp;
+    PetscInt ns = _Lx*_Ly;
+    for (PetscInt is = 0; is < ns; ++is)
+    {
+        const PetscInt ix = is / _Ly;
+        const PetscInt jy = (is % _Ly)*(1 - 2 * (ix % 2)) + (_Ly - 1)*(ix % 2);
+        /* Get nearest neighbors */
+        const std::vector<PetscInt> nn = GetNearestNeighbors(ix,jy,ns);
+        for(const PetscInt& in: nn)
+        {
+            /* Ensure that 1d block indices are ordered */
+            PetscInt ia = (in < is) ? in : is;
+            PetscInt ib = (in > is) ? in : is;
+            /* Append the pair */
+            nnp.push_back({ia,ib});
+        }
+    }
+    return nnp;
 }

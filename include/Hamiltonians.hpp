@@ -123,6 +123,9 @@ namespace Hamiltonians
             PetscInt& jy
             ) const;
 
+        /** Returns all pairs of nearest-neighbors in the full square lattice */
+        std::vector< std::vector< PetscInt > > NeighborPairs(const PetscInt d=1) const;
+
     private:
 
         /** Set from options */
