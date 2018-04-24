@@ -1618,7 +1618,7 @@ private:
                     if(icorr) fprintf(fp_corr, ",\n");
                     Correlator& c = measurements[icorr];
                     fprintf(fp_corr, "    {\n");
-                    fprintf(fp_corr, "      \"corrIdx\" : %lld,\n", c.idx);
+                    fprintf(fp_corr, "      \"corrIdx\" : %lld,\n", LLD(c.idx));
                     fprintf(fp_corr, "      \"name\"    : \"%s\",\n",  c.name.c_str());
                     fprintf(fp_corr, "      \"desc1\"   : \"%s\",\n", c.desc1.c_str());
                     fprintf(fp_corr, "      \"desc2\"   : \"%s\",\n", c.desc2.c_str());
