@@ -285,7 +285,7 @@ public:
         m.desc3 += ") >";
 
         /* Printout some information */
-        if(!mpi_rank) m.PrintInfo();
+        // if(!mpi_rank) m.PrintInfo();
 
         measurements.push_back(m);
         return(0);
@@ -1597,7 +1597,7 @@ private:
             }
         }
 
-        if(!mpi_rank){
+        if(debug && !mpi_rank){
             std::cout << "\nValues" << std::endl;
             for(size_t icorr=0; icorr<measurements.size(); ++icorr){
                 measurements[icorr].PrintInfo();
