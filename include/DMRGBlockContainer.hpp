@@ -1390,9 +1390,15 @@ private:
         PetscBool debug = PETSC_FALSE; /* FIXME: Remove later */
         if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
 
+#if 1
+        /* Explicitly build the operators in the Kronecker product space */
+        std::vector< Correlator > CorrSysEnv = measurements;
+#else
+        /* Separately handle the case of a correlator of operators living only on the system block */
         /*  Classify the correlators accordingly */
         std::vector< Correlator > CorrSys;     /* For operators residing in the system block */
         std::vector< Correlator > CorrSysEnv;  /* For operators residing in the system and environment blocks */
+
         for(const Correlator& m: measurements){
             if(m.SysOps.size()!=0 && m.EnvOps.size()==0){
                 CorrSys.push_back(m);
@@ -1528,7 +1534,7 @@ private:
                 ierr = MatDestroy(&rho); CHKERRQ(ierr);
             }
         }
-
+#endif
         /* TODO: Also calculate CorrSys Quantities using the CorrSysEnv routine */
 
         /*---- For correlators in the system and environment block ----*/
@@ -1619,6 +1625,17 @@ private:
                         OpToStr(o.OpType), o.idx, OpMats[key], comm); CHKERRQ(ierr);
                 }
             }
+            if(OpsList.empty())
+            {
+                std::string key = "eye";
+                if(OpMats.find(key)==OpMats.end())
+                {
+                    Mat eye = NULL;
+                    PetscInt nstates = BlockRef.NumStates();
+                    ierr = MatEyeCreate(comm, eye, nstates); CHKERRQ(ierr);
+                    OpMats[key] = eye;
+                }
+            }
         }
 
         /* Prepare the operator products for each correlator */
@@ -1652,6 +1669,11 @@ private:
                 ierr = MatDestroy(&Prod0); CHKERRQ(ierr);
                 AllOpProds.push_back(Prod1);
                 OpProds.at(icorr) = Prod1;
+            }
+            else if(OpsList.empty())
+            {
+                /* Populate with an identity instead of throwing an error */
+                OpProds.at(icorr) = OpMats["eye"];
             }
             else
             {
