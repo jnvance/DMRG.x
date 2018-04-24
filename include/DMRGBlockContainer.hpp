@@ -1441,6 +1441,7 @@ private:
             if(!mpi_rank){
                 for(PetscInt i=0; i<NumSectors; ++i){
                     PetscInt M,N;
+                    if(BT.rdmd_list.find(i)==BT.rdmd_list.end()) continue;
                     ierr = MatGetSize(BT.rdmd_list.at(i), &M, &N); CHKERRQ(ierr);
                     if(M!=N)
                         SETERRQ2(PETSC_COMM_SELF,1,"Matrix must be square. Got %D x %D instead.",M,N);
