@@ -81,8 +81,7 @@ struct KronSumCtx {
 
 
 struct KronSumTermRow {
-    PetscBool   skip;
-    PetscInt    nz_L, nz_R, bks_L, bks_R, col_NStatesR, fws_O;
+    PetscInt    nz_L, nz_R, bks_L, col_NStatesR, fws_O;
     PetscInt    *idx_L, *idx_R;
     PetscScalar *v_L, *v_R;
 };

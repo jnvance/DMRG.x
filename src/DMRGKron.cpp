@@ -1576,6 +1576,7 @@ PetscErrorCode KronBlocks_t::KronSumSetUpShellTerms(KronSumShellCtx *shellctx)
             for(const KronSumTerm& term: ctx.Terms)
             {
                 KronSumTermRow& kstr = shellctx->kstr[irt];
+                PetscInt bks_R = 0;
 
                 if(term.OpTypeA != OpEye){
                     ierr = (*term.A->ops->getrow)(term.A, LocRow_L,
@@ -1591,21 +1592,21 @@ PetscErrorCode KronBlocks_t::KronSumSetUpShellTerms(KronSumShellCtx *shellctx)
                 if(term.OpTypeB != OpEye){
                     ierr = (*term.B->ops->getrow)(term.B, LocRow_R,
                         &(kstr.nz_R), (PetscInt**)&(kstr.idx_R), (PetscScalar**)&(kstr.v_R)); CHKERRQ(ierr);
-                    kstr.bks_R = RightBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_R, term.OpTypeB, flg[SideRight]);
+                    bks_R = RightBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_R, term.OpTypeB, flg[SideRight]);
                 } else {
                     kstr.nz_R = 1;
                     kstr.idx_R = &(shellctx->Rows_R[lrow]);
                     kstr.v_R = &(shellctx->one);
-                    kstr.bks_R = RightBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_R, OpSz, flg[SideRight]);
+                    bks_R = RightBlock.Magnetization.OpBlockToGlobalRangeStart(Row_BlockIdx_R, OpSz, flg[SideRight]);
                 }
 
                 if( (!flg[SideLeft]) || (!flg[SideRight]) || (kstr.nz_L*kstr.nz_R == 0)){
-                    kstr.skip = PETSC_TRUE;
+                    kstr.nz_L = 0;
+                    kstr.nz_R = 0;
                 } else {
-                    kstr.fws_O = fws_LOP.at(term.OpTypeA);
+                    kstr.fws_O = fws_LOP.at(term.OpTypeA) - bks_R;
                     kstr.col_NStatesR = Row_NumStates_ROP.at(term.OpTypeB);
                     if(kstr.col_NStatesR==-1) SETERRQ(PETSC_COMM_SELF,1,"Accessed incorrect value.");
-                    kstr.skip = PETSC_FALSE;
                 }
 
                 ++irt;
@@ -1651,12 +1652,11 @@ PETSC_EXTERN PetscErrorCode MatMult_KronSumShell(Mat A, Vec x, Vec y)
         {
             ++irt;
             const KronSumTermRow& kstr = shellctx->kstr[irt];
-            if(kstr.skip) continue;
 
             for(PetscInt l=0; l<kstr.nz_L; ++l)
             {
                 /* TODO: fuse fws_O-bks_R */
-                idx = (kstr.idx_L[l] - kstr.bks_L) * kstr.col_NStatesR + kstr.fws_O - kstr.bks_R;
+                idx = (kstr.idx_L[l] - kstr.bks_L) * kstr.col_NStatesR + kstr.fws_O;
                 temp = shellctx->term_a[it] * kstr.v_L[l];
                 for(PetscInt r=0; r<kstr.nz_R; ++r)
                 {
