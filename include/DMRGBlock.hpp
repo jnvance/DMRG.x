@@ -125,7 +125,7 @@ namespace Block {
             const std::string& OpName,
             const size_t& isite,
             Mat& Op,
-            const MPI_Comm& comm_in=MPI_COMM_NULL
+            const MPI_Comm& comm_in
             );
 
         /* Number of subcommunicators to be used when performing the rotation. */

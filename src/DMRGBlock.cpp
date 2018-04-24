@@ -602,9 +602,8 @@ PetscErrorCode Block::SpinOneHalf::SaveOperator(
 {
     PetscErrorCode ierr;
     PetscViewer binv;
-    MPI_Comm comm = (comm_in==MPI_COMM_NULL) ? mpi_comm : comm_in;
     if(!Op) SETERRQ(PETSC_COMM_SELF,1,"Input matrix is null.");
-    ierr = PetscViewerBinaryOpen(comm, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
+    ierr = PetscViewerBinaryOpen(comm_in, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
     ierr = MatView(Op, binv); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
     ierr = MatDestroy(&Op); CHKERRQ(ierr);
@@ -649,13 +648,13 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
     PetscErrorCode ierr;
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = SaveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
+        ierr = SaveOperator("Sz",isite,SzData[isite],mpi_comm); CHKERRQ(ierr);
     }
     for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = SaveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
+        ierr = SaveOperator("Sp",isite,SpData[isite],mpi_comm); CHKERRQ(ierr);
     }
     if(H){
-        ierr = SaveOperator("H",0,H); CHKERRQ(ierr);
+        ierr = SaveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
     }
     ierr = Destroy(); CHKERRQ(ierr);
     init = PETSC_FALSE;
