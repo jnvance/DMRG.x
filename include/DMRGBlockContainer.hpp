@@ -1401,10 +1401,10 @@ private:
         PetscBool debug = PETSC_FALSE; /* FIXME: Remove later */
         if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
 
-#if 1
+        #if 0
         /* Explicitly build the operators in the Kronecker product space */
         std::vector< Correlator > CorrSysEnv = measurements;
-#else
+        #else
         /* Separately handle the case of a correlator of operators living only on the system block */
         /*  Classify the correlators accordingly */
         std::vector< Correlator > CorrSys;     /* For operators residing in the system block */
@@ -1545,7 +1545,7 @@ private:
                 ierr = MatDestroy(&rho); CHKERRQ(ierr);
             }
         }
-#endif
+        #endif
         /* TODO: Also calculate CorrSys Quantities using the CorrSysEnv routine */
 
         /*---- For correlators in the system and environment block ----*/
