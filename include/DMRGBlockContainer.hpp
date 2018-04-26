@@ -650,6 +650,9 @@ private:
     /** Tells whether the headers for the correlators have been printed */
     PetscBool corr_headers_printed = PETSC_FALSE;
 
+    /** Tells whether a single entry for the correlators have been printed */
+    PetscBool corr_printed_first = PETSC_FALSE;
+
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
     PetscErrorCode SingleDMRGStep(
@@ -1394,6 +1397,36 @@ private:
         const PetscBool flg=PETSC_TRUE  /**< [in] Whether to do the measurements */
         )
     {
+        if(!mpi_rank)
+        {
+            if(!corr_headers_printed)
+            {
+                fprintf(fp_corr, "{\n");
+                fprintf(fp_corr, "  \"info\" :\n");
+                fprintf(fp_corr, "  [\n");
+
+                for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                    if(icorr) fprintf(fp_corr, ",\n");
+                    Correlator& c = measurements[icorr];
+                    fprintf(fp_corr, "    {\n");
+                    fprintf(fp_corr, "      \"corrIdx\" : %lld,\n", LLD(c.idx));
+                    fprintf(fp_corr, "      \"name\"    : \"%s\",\n",  c.name.c_str());
+                    fprintf(fp_corr, "      \"desc1\"   : \"%s\",\n", c.desc1.c_str());
+                    fprintf(fp_corr, "      \"desc2\"   : \"%s\",\n", c.desc2.c_str());
+                    fprintf(fp_corr, "      \"desc3\"   : \"%s\"\n",  c.desc3.c_str());
+                    fprintf(fp_corr, "    }");
+                }
+
+                fprintf(fp_corr, "\n");
+                fprintf(fp_corr, "  ],\n");
+                fprintf(fp_corr, "  \"values\" :\n");
+                fprintf(fp_corr, "  [\n");
+                fflush(fp_corr);
+
+                corr_headers_printed = PETSC_TRUE;
+            }
+        }
+
         if(!flg) return(0);
         PetscErrorCode ierr;
         std::vector< PetscScalar > CorrValues(measurements.size());
@@ -1609,30 +1642,9 @@ private:
         /* Print results to file */
         if(!mpi_rank)
         {
-            if(!corr_headers_printed)
+            if(!corr_printed_first)
             {
-                fprintf(fp_corr, "{\n");
-                fprintf(fp_corr, "  \"info\" :\n");
-                fprintf(fp_corr, "  [\n");
-
-                for(size_t icorr=0; icorr<measurements.size(); ++icorr){
-                    if(icorr) fprintf(fp_corr, ",\n");
-                    Correlator& c = measurements[icorr];
-                    fprintf(fp_corr, "    {\n");
-                    fprintf(fp_corr, "      \"corrIdx\" : %lld,\n", LLD(c.idx));
-                    fprintf(fp_corr, "      \"name\"    : \"%s\",\n",  c.name.c_str());
-                    fprintf(fp_corr, "      \"desc1\"   : \"%s\",\n", c.desc1.c_str());
-                    fprintf(fp_corr, "      \"desc2\"   : \"%s\",\n", c.desc2.c_str());
-                    fprintf(fp_corr, "      \"desc3\"   : \"%s\"\n",  c.desc3.c_str());
-                    fprintf(fp_corr, "    }");
-                }
-
-                fprintf(fp_corr, "\n");
-                fprintf(fp_corr, "  ],\n");
-                fprintf(fp_corr, "  \"values\" :\n");
-                fprintf(fp_corr, "  [\n");
-
-                corr_headers_printed = PETSC_TRUE;
+                corr_printed_first = PETSC_TRUE;
             }
             else
             {
