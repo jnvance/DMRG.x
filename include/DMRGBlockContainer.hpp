@@ -1611,8 +1611,12 @@ private:
                 Mat KronOp = NULL;
                 Vec Op_Vec;
                 PetscScalar Vec_Op_Vec;
-                ierr = KronBlocks.KronConstruct(OpProdsSys.at(icorr), OpSz,
-                                                OpProdsEnv.at(icorr), OpSz, KronOp); CHKERRQ(ierr);
+                int OpTypeSys = OpSz;
+                int OpTypeEnv = OpSz;
+                for(const Op& op : CorrSysEnv[icorr].SysOps) OpTypeSys += int(op.OpType);
+                for(const Op& op : CorrSysEnv[icorr].EnvOps) OpTypeEnv += int(op.OpType);
+                ierr = KronBlocks.KronConstruct(OpProdsSys.at(icorr), Op_t(OpTypeSys),
+                                                OpProdsEnv.at(icorr), Op_t(OpTypeEnv), KronOp); CHKERRQ(ierr);
                 ierr = MatCreateVecs(KronOp, NULL, &Op_Vec); CHKERRQ(ierr);
                 ierr = MatMult(KronOp, gsv_r, Op_Vec); CHKERRQ(ierr);
                 ierr = VecDot(Op_Vec, gsv_r, &Vec_Op_Vec); CHKERRQ(ierr);
