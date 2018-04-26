@@ -128,12 +128,26 @@ class Data:
         self._LoadSteps()
         energy_iter = np.array(self.EnergyPerSite())
         self._p = plt.plot(energy_iter,label=self._label,**kwargs)
-        # color = self._p[-1].get_color()
-        # for d in dm:
-        #     plt.axvline(x=d,color=color,linewidth=1)
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
         plt.ylabel(r'$E_0/N$')
+
+    def PlotErrorEnergyPerSite(self,which='abs',**kwargs):
+        self._LoadSteps()
+        if which=='abs':
+            energy_iter = np.array(self.EnergyPerSite())
+            energy_iter = np.abs((energy_iter - np.min(energy_iter)))
+            plt.ylabel(r'$E_0/N - \mathrm{min}(E_0/N)$')
+        elif which=='rel':
+            energy_iter = np.array(self.EnergyPerSite())
+            energy_iter = np.abs((energy_iter - np.min(energy_iter))/np.min(energy_iter))
+            plt.ylabel(r'$[E_0/N - \mathrm{min}(E_0/N)] / \mathrm{min}(E_0/N)$')
+        else:
+            raise ValueError("The value of which can only be 'abs' or 'rel'. Got {}".format(which))
+
+        self._p = plt.semilogy(energy_iter,label=self._label,**kwargs)
+        self._color = self._p[-1].get_color()
+        plt.xlabel('DMRG Steps')
 
     def PlotLoopBars(self,**kwargs):
         self._LoadSteps()
