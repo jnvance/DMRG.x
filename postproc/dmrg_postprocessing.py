@@ -64,6 +64,7 @@ class Data:
         self._hamPrealloc = None
         self._entSpectra = None
         self._corr = None
+        self._color = None
 
     #
     #   Run data
@@ -139,7 +140,10 @@ class Data:
         LoopIdx = [row[self._idxLoopidx] for row in self._steps]
         dm = np.where([LoopIdx[i] - LoopIdx[i-1] for i in range(1,len(LoopIdx))])[0]
         for d in dm:
-            plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
+            if self._color is None:
+                plt.axvline(x=d,linewidth=1,**kwargs)
+            else:
+                plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
 
     #
     #   Timings data
