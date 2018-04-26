@@ -66,48 +66,34 @@ int main(int argc, char **argv)
                 ierr = DMRG.SetUpCorrelation(OpList, name, desc); CHKERRQ(ierr);
             }
 
-            /*  The pair-wise correlation of nearest neighbors */
+            /*  The pair-wise correlation of nearest neighbors (Sz-Sz, Sp-Sm, Sm-Sp) for calculating bond energies
+                for the corresponding Heisenberg model */
             {
                 const std::vector< std::vector < PetscInt > > nnp = DMRG.HamiltonianRef().NeighborPairs();
                 for(const std::vector< PetscInt > pair : nnp)
                 {
-                    std::vector< Op > OpList;
-                    std::string desc = "< ";
-                    std::string name = "NearestNeighborSpinSpin( ";
-                    for(const PetscInt idx : pair)
+                    if(pair.size()!=2) SETERRQ1(PETSC_COMM_WORLD,1,"Invalid 2-point correlator. Got %lu operators instead.", pair.size());
+                    std::vector< std::vector< Op_t > > OpTypesList = { {OpSz, OpSz}, {OpSp, OpSm}, {OpSm, OpSp} };
+                    for (const std::vector< Op_t >& OpTypes : OpTypesList)
                     {
-                        OpList.push_back({OpSz,idx});
-                        PetscInt ix, jy;
-                        ierr = DMRG.HamiltonianRef().To2D(idx,ix,jy); CHKERRQ(ierr);
-                        desc += "Sz_{" + std::to_string(ix) + "," + std::to_string(jy) + "} ";
-                        name += std::to_string(idx) + " ";
-                    }
-                    desc += ">";
-                    name += ")";
-                    ierr = DMRG.SetUpCorrelation(OpList, name, desc); CHKERRQ(ierr);
-                }
-            }
-
-            /*  <S^+ S^-> = S^2 - S_z^2 + \hbar Sz */
-            {
-                std::vector< Op > OpList;
-                std::string desc;
-                desc += "< ";
-                {
-                    const PetscInt ix  = 0;
-                    const PetscInt jy  = 0;
-                    const PetscInt idx = DMRG.HamiltonianRef().To1D(ix,jy);
-                    {
-                        OpList.push_back({OpSp,idx});
-                        desc += "Sp_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
-                    }
-                    {
-                        OpList.push_back({OpSm,idx});
-                        desc += "Sm_{"+ std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                        std::vector< Op > OpList;
+                        std::string desc = "< ";
+                        std::string name = std::string("NearestNeighbor") + OpToStr(OpTypes[0]) + OpToStr(OpTypes[1]) + "( ";
+                        for(PetscInt i=0; i < 2; ++i)
+                        {
+                            const PetscInt idx = pair.at(i);
+                            const Op_t OpType = OpTypes.at(i);
+                            OpList.push_back({OpType,idx});
+                            PetscInt ix, jy;
+                            ierr = DMRG.HamiltonianRef().To2D(idx,ix,jy); CHKERRQ(ierr);
+                            desc += OpToStr(OpType) + "_{" + std::to_string(ix) + "," + std::to_string(jy) + "} ";
+                            name += std::to_string(idx) + " ";
+                        }
+                        desc += ">";
+                        name += ")";
+                        ierr = DMRG.SetUpCorrelation(OpList, name, desc); CHKERRQ(ierr);
                     }
                 }
-                desc += ">";
-                ierr = DMRG.SetUpCorrelation(OpList, "SpinXYProjection00", desc); CHKERRQ(ierr);
             }
 
             /*  The 1st row from the top <Sz_{0,0} Sz_{1,0} ... Sz_{Lx-1,0}> */
