@@ -64,6 +64,7 @@ class Data:
         self._hamPrealloc = None
         self._entSpectra = None
         self._corr = None
+        self._corrLookup = None
         self._color = None
 
     #
@@ -242,9 +243,51 @@ class Data:
         if self._corr is None:
             self._corr = LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
 
+    def _LoadCorrelationsLookup(self):
+        self._LoadCorrelations()
+        if self._corrLookup is None:
+            self._corrLookup = {}
+            for key in self._corr['info'][0].keys(): self._corrLookup[key] = []
+            for corr in self._corr['info']:
+                for key in corr:
+                    self._corrLookup[key].append(corr[key])
+
     def Correlations(self):
         self._LoadCorrelations()
         return self._corr
+
+    def CorrelationsInfo(self):
+        return self.Correlations()['info']
+
+    def CorrelationsValues(self, key=None, labels=None):
+        if labels is None:
+            return np.array(self.Correlations()['values'])
+        elif labels is not None and key is None:
+            raise ValueError('key must be given when labels is not None')
+        else:
+            idx = self.CorrelationsInfoGetIndex(key, labels)
+            return np.array(self.Correlations()['values'])[:,idx]
+
+    def CorrelationsInfoGetIndex(self, key=None, value=None):
+        self._LoadCorrelationsLookup()
+
+        if key is None and value is None:
+            return self._corrLookup
+
+        elif key is not None and value is None:
+            try:
+                return self._corrLookup[key]
+            except KeyError:
+                raise ValueError("Incorrect key='{}'. Choose among {}".format(key, self._corrLookup.keys()))
+
+        elif key is None and value is not None:
+            raise ValueError('key must be given when value is not None')
+
+        else: # both key and value are not none
+            if isinstance(value,(list,tuple,np.ndarray)):
+                return [self._corrLookup[key].index(v) for v in value]
+            else:
+                return self._corrLookup[key].index(value)
 
 class DataSeries:
     """
