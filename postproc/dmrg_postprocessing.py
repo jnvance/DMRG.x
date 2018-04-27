@@ -110,7 +110,12 @@ class Data:
         if self._sweepIdx is None:
             StepIdx = self.Steps("StepIdx")
             LoopIdx = self.Steps("LoopIdx")
-            self._sweepIdx = np.where(StepIdx==max(StepIdx[np.where(LoopIdx>0)]))[0]
+            NSites_Sys = self.Steps("NSites_Sys")
+            NSites_Env = self.Steps("NSites_Env")
+            # Look for the maximum position for each loop index
+            self._sweepIdx = [max(np.where(LoopIdx==i)[0]) for i in list(set(LoopIdx))]
+            # Include only the positions where the number of sites in the system == environment
+            self._sweepIdx = [ j for j in self._sweepIdx if NSites_Sys[j]==NSites_Env[j]]
         return self._sweepIdx
 
     def EnergyPerSite(self):
