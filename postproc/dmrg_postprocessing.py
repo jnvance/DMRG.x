@@ -106,7 +106,7 @@ class Data:
         self._LoadSteps()
         return self._stepsHeaders
 
-    def SweepIdx(self):
+    def SweepIdx(self,show_all=False):
         if self._sweepIdx is None:
             StepIdx = self.Steps("StepIdx")
             LoopIdx = self.Steps("LoopIdx")
@@ -114,9 +114,12 @@ class Data:
             NSites_Env = self.Steps("NSites_Env")
             # Look for the maximum position for each loop index
             self._sweepIdx = [max(np.where(LoopIdx==i)[0]) for i in list(set(LoopIdx))]
+
+        if show_all:
+            return self._sweepIdx
+        else:
             # Include only the positions where the number of sites in the system == environment
-            self._sweepIdx = [ j for j in self._sweepIdx if NSites_Sys[j]==NSites_Env[j]]
-        return self._sweepIdx
+            return [ j for j in self._sweepIdx if NSites_Sys[j]==NSites_Env[j]]
 
     def EnergyPerSite(self):
         self._LoadSteps()
