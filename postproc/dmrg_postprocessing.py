@@ -182,9 +182,14 @@ class Data:
         self._LoadTimings()
         return np.array([row[self._idxTimeTot] for row in self._timings])
 
-    def PlotTotalTime(self,**kwargs):
+    def PlotTotalTime(self,which='plot',**kwargs):
         totTime = self.TotalTime()
-        self._p = plt.plot(totTime,label=self._label,**kwargs)
+        if which=='plot':
+            self._p = plt.plot(totTime,label=self._label,**kwargs)
+        elif which=='semilogy':
+            self._p = plt.semilogy(totTime,label=self._label,**kwargs)
+        else:
+            raise ValueError("which='{}' unsupported. Choose among ['plot','semilogy']".format(which))
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
         plt.ylabel('Time Elapsed per Step (s)')
