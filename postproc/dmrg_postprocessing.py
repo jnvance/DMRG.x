@@ -107,11 +107,12 @@ class Data:
         return self._stepsHeaders
 
     def SweepIdx(self,show_all=False):
+        NSites_Sys = self.Steps("NSites_Sys")
+        NSites_Env = self.Steps("NSites_Env")
+
         if self._sweepIdx is None:
             StepIdx = self.Steps("StepIdx")
             LoopIdx = self.Steps("LoopIdx")
-            NSites_Sys = self.Steps("NSites_Sys")
-            NSites_Env = self.Steps("NSites_Env")
             # Look for the maximum position for each loop index
             self._sweepIdx = [max(np.where(LoopIdx==i)[0]) for i in list(set(LoopIdx))]
 
