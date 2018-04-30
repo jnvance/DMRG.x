@@ -1434,7 +1434,7 @@ private:
         PetscBool debug = PETSC_FALSE; /* FIXME: Remove later */
         if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
 
-        #if 0
+        #if 1
         /* Explicitly build the operators in the Kronecker product space */
         std::vector< Correlator > CorrSysEnv = measurements;
         #else
