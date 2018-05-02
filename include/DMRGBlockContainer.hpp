@@ -21,6 +21,7 @@
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
+#define CheckInitialization(init,mpi_comm) if(!init) SETERRQ(mpi_comm,1,"DMRGBlockContainer object not initialized. Call Initialize() first.");
 #define PrintLines() printf("-----------------------------------------\n")
 #define PRINTLINES() printf("=========================================\n")
 #define PrintBlocks(LEFT,RIGHT) printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT))
@@ -38,7 +39,8 @@ Block_t;
 typedef enum
 {
     WarmupStep,
-    SweepStep
+    SweepStep,
+    NullStep=-1
 }
 Step_t;
 
@@ -141,19 +143,21 @@ template<class Block, class Hamiltonian> class DMRGBlockContainer
 public:
 
     /** Initializes the container object with blocks of one site on each of the system and environment */
-    explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
+    explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm){}
+
+    PetscErrorCode Initialize()
     {
-        PetscInt ierr = 0;
+        PetscErrorCode ierr = 0;
 
         /*  Get MPI attributes */
-        ierr = MPI_Comm_size(mpi_comm, &mpi_size); assert(!ierr);
-        ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); assert(!ierr);
+        ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
+        ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
 
         /*  Initialize Hamiltonian object */
-        ierr = Ham.SetFromOptions(); assert(!ierr);
+        ierr = Ham.SetFromOptions(); CHKERRQ(ierr);
 
         /*  Initialize SingleSite which is used as added site */
-        ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+        ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
         num_sites = Ham.NumSites();
 
@@ -161,15 +165,15 @@ public:
         if((num_sites) % 2) throw std::runtime_error("Total number of sites must be even.");
 
         /*  Get some info from command line */
-        ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
-        ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); assert(!ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); CHKERRQ(ierr);
         /*  The scratch space to save temporary data*/
         char path[512];
         PetscBool opt_do_scratch_dir;
-        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); assert(!ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); CHKERRQ(ierr);
         do_scratch_dir = opt_do_scratch_dir;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); assert(!ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); CHKERRQ(ierr);
         if(do_scratch_dir){
             scratch_dir = std::string(path);
             if(scratch_dir.back()!='/') scratch_dir += '/';
@@ -179,35 +183,35 @@ public:
         memset(path,0,sizeof(path));
         std::string data_dir;
         PetscBool opt_data_dir;
-        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); assert(!ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); CHKERRQ(ierr);
         if(opt_data_dir){
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
         }
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); assert(!ierr);
-        ierr = SaveStepHeaders(); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); CHKERRQ(ierr);
+        ierr = SaveStepHeaders(); CHKERRQ(ierr);
         if(!mpi_rank) fprintf(fp_step,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Timings.json")).c_str(), "w", &fp_timings); assert(!ierr);
-        ierr = SaveTimingsHeaders(); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Timings.json")).c_str(), "w", &fp_timings); CHKERRQ(ierr);
+        ierr = SaveTimingsHeaders(); CHKERRQ(ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("EntanglementSpectra.json")).c_str(), "w", &fp_entanglement); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("EntanglementSpectra.json")).c_str(), "w", &fp_entanglement); CHKERRQ(ierr);
         if(!mpi_rank) fprintf(fp_entanglement,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGRun.json")).c_str(), "w", &fp_data); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGRun.json")).c_str(), "w", &fp_data); CHKERRQ(ierr);
         if(!mpi_rank){
             fprintf(fp_data,"{\n");
             Ham.SaveOut(fp_data);
             fprintf(fp_data,",\n");
         }
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Correlations.json")).c_str(), "w", &fp_corr); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Correlations.json")).c_str(), "w", &fp_corr); CHKERRQ(ierr);
 
         /* do_save_prealloc: default value is FALSE */
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); assert(!ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); CHKERRQ(ierr);
         if(do_save_prealloc){
-            ierr = PetscFOpen(mpi_comm, (data_dir+std::string("HamiltonianPrealloc.json")).c_str(), "w", &fp_prealloc); assert(!ierr);
+            ierr = PetscFOpen(mpi_comm, (data_dir+std::string("HamiltonianPrealloc.json")).c_str(), "w", &fp_prealloc); CHKERRQ(ierr);
             if(!mpi_rank) fprintf(fp_prealloc,"[\n");
         }
 
@@ -226,6 +230,7 @@ public:
         }
         LoopType = WarmupStep;
         init = PETSC_TRUE;
+        return(0);
     }
 
     /** Calls the Destroy() method and deallocates container object */
@@ -278,6 +283,8 @@ public:
         const std::string& desc
         )
     {
+        CheckInitialization(init,mpi_comm);
+
         /* Verify that the function is called before warm up and after initialization */
         if(LoopType==SweepStep)
             SETERRQ(mpi_comm,1,"Setup correlation functions should be called before starting the sweeps.");
@@ -334,6 +341,8 @@ public:
         const PetscInt& MStates /**< [in] the maximum number of states to keep after each truncation */
         )
     {
+        CheckInitialization(init,mpi_comm);
+
         PetscErrorCode ierr = 0;
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
         if(!mpi_rank) printf("WARMUP\n");
@@ -456,6 +465,8 @@ public:
         const PetscInt& MinBlock = PETSC_DEFAULT /**< [in] the minimum block length when performing sweeps. Defaults to 1 */
         )
     {
+        CheckInitialization(init,mpi_comm);
+
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
         if(!mpi_rank) printf("SWEEP MStates=%lld\n", LLD(MStates));
@@ -616,16 +627,16 @@ private:
     PetscBool do_shell = PETSC_TRUE;
 
     /** File to store basic data (energy, number of sites, etc) */
-    FILE *fp_step;
+    FILE *fp_step = NULL;
 
     /** File to store timings data for each section of a single iteration */
-    FILE *fp_timings;
+    FILE *fp_timings = NULL;
 
     /** File to store the entanglement spectrum of the reduced density matrices for a single iteration */
-    FILE *fp_entanglement;
+    FILE *fp_entanglement = NULL;
 
     /** File to store timings data for each section of a single iteration */
-    FILE *fp_data;
+    FILE *fp_data = NULL;
 
     /** File to store preallocation data of the superblock Hamiltonian */
     FILE *fp_prealloc = NULL;
@@ -637,7 +648,7 @@ private:
     PetscInt GlobIdx = 0;
 
     /** The type of step performed, whether as part of warmup or sweep */
-    Step_t   LoopType;
+    Step_t   LoopType = NullStep;
 
     /** Counter for this loop (the same counter for warmup and sweeps) */
     PetscInt LoopIdx = 0;

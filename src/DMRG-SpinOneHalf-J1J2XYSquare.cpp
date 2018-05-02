@@ -16,6 +16,7 @@ int main(int argc, char **argv)
     ierr = MPI_Comm_rank(PETSC_COMM_WORLD, &rank); CHKERRQ(ierr);
     {
         DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
+        ierr = DMRG.Initialize(); CHKERRQ(ierr);
 
         /* Default behavior: Use the same number of states for warmup and sweeps */
         PetscInt nsweeps = 1, mstates = 8;
