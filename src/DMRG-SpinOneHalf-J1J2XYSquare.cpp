@@ -199,6 +199,8 @@ int main(int argc, char **argv)
                 ierr = DMRG.Sweep(mstates); CHKERRQ(ierr);
             }
         }
+
+        ierr = DMRG.Destroy(); CHKERRQ(ierr);
     }
     ierr = SlepcFinalize(); CHKERRQ(ierr);
     return(0);

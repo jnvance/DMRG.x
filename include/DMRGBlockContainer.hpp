@@ -228,10 +228,46 @@ public:
         init = PETSC_TRUE;
     }
 
-    /** Destroys all created blocks */
+    /** Calls the Destroy() method and deallocates container object */
     ~DMRGBlockContainer()
     {
-        PetscErrorCode ierr = Destroy(); assert(!ierr);
+        PetscErrorCode ierr = Destroy(); CPP_CHKERR(ierr);
+    }
+
+    /** Destroys the container object */
+    PetscErrorCode Destroy()
+    {
+        if(!init) return(0);
+        PetscInt ierr = 0;
+        ierr = SingleSite.Destroy(); CHKERRQ(ierr);
+        for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+        for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_step,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_step,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_timings,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
+
+        if(!mpi_rank) fprintf(fp_entanglement,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_entanglement); CHKERRQ(ierr);
+
+        ierr = SaveLoopsData();
+        if(!mpi_rank) fprintf(fp_data,"\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_data); CHKERRQ(ierr);
+
+        if(!mpi_rank) fprintf(fp_corr,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_corr); CHKERRQ(ierr);
+
+        if(do_save_prealloc){
+            if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
+            ierr = PetscFClose(mpi_comm, fp_prealloc); CHKERRQ(ierr);
+        }
+
+        init = PETSC_FALSE;
+        return(0);
     }
 
     /** Sets up measurement of correlation functions at the end of each sweep. Sites are numbered according
@@ -473,41 +509,6 @@ public:
 
         return(0);
     };
-
-    /** Destroys the container object */
-    PetscErrorCode Destroy(){
-        if(!init) return(0);
-        PetscInt ierr = 0;
-        ierr = SingleSite.Destroy(); CHKERRQ(ierr);
-        for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
-        for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
-
-        if(!mpi_rank && !data_tabular) fprintf(fp_step,"\n]\n");
-        if(!mpi_rank && data_tabular) fprintf(fp_step,"\n  ]\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
-
-        if(!mpi_rank && !data_tabular) fprintf(fp_timings,"\n]\n");
-        if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
-
-        if(!mpi_rank) fprintf(fp_entanglement,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_entanglement); CHKERRQ(ierr);
-
-        ierr = SaveLoopsData();
-        if(!mpi_rank) fprintf(fp_data,"\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
-
-        if(!mpi_rank) fprintf(fp_corr,"\n  ]\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_corr); assert(!ierr);
-
-        if(do_save_prealloc){
-            if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
-            ierr = PetscFClose(mpi_comm, fp_prealloc); assert(!ierr);
-        }
-
-        init = PETSC_FALSE;
-        return(0);
-    }
 
     /** Accesses the specified system block */
     const Block& SysBlock(const PetscInt& BlockIdx) const {
