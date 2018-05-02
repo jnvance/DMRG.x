@@ -12,11 +12,13 @@ ${TARGET}: ${TARGET_OBJ} ${TARGET_DEPS} chkopts
 	-${CLINKER} -o ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS} ${SLEPC_EPS_LIB}
 	${RM} ${TARGET_OBJ}
 
-docs:
+docs: FORCE
 	doxygen Doxyfile
 
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
 	${RM} src/*.optrpt
+
+FORCE:
 
 include ${SLEPC_DIR}/lib/slepc/conf/slepc_common
