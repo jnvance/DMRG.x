@@ -142,11 +142,29 @@ template<class Block, class Hamiltonian> class DMRGBlockContainer
 
 public:
 
-    /** Initializes the container object with blocks of one site on each of the system and environment */
+    /** The constructor only takes in the MPI communicator; Initialize() has to be called next. */
     explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm){}
 
+    /** Initializes the container object with blocks of one site on each of the system and environment.
+
+        @par Options Database
+        Command-line arguments:
+         - `-verbose <bool>`
+         - `-no_symm <bool>`
+         - `-do_shell <bool>`
+         - `-scratch_dir <string>`
+         - `-do_scratch_dir <bool>`
+         - `-data_dir <string>`
+         - `-do_save_prealloc <bool>`
+         - `-mstates <int>`
+         - `-mwarmup <int>`
+         - `-nsweeps <int>`
+         - `-msweeps <int>`
+
+     */
     PetscErrorCode Initialize()
     {
+        if(init) SETERRQ(mpi_comm,1,"DMRG object has already been initialized.");
         PetscErrorCode ierr = 0;
 
         /*  Get MPI attributes */
@@ -161,8 +179,8 @@ public:
 
         num_sites = Ham.NumSites();
 
-        if((num_sites) < 2) throw std::runtime_error("There must be at least two total sites.");
-        if((num_sites) % 2) throw std::runtime_error("Total number of sites must be even.");
+        if((num_sites) < 2) SETERRQ1(mpi_comm,1,"There must be at least two total sites. Got %lld.", LLD(num_sites));
+        if((num_sites) % 2) SETERRQ1(mpi_comm,1,"Total number of sites must be even. Got %lld.", LLD(num_sites));
 
         /*  Get some info from command line */
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
