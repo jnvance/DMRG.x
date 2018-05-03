@@ -1078,17 +1078,29 @@ private:
             const PetscReal pRdms = 100*(timings_data.tRdms)/timings_data.Total;
             const PetscReal pRotb = 100*(timings_data.tRotb)/timings_data.Total;
             printf("\n");
+            printf("  Sys Block In:\n");
+            printf("    NumStates:      %lld\n", LLD(SysBlock.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(SysBlock.NumSites()));
+            printf("  Env Block In:\n");
+            printf("    NumStates:      %lld\n", LLD(EnvBlock.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(EnvBlock.NumSites()));
+            printf("  Sys Block Enl:\n");
+            printf("    NumStates:      %lld\n", LLD(SysBlockEnl.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(SysBlockEnl.NumSites()));
+            printf("  Env Block Enl:\n");
+            printf("    NumStates:      %lld\n", LLD(EnvBlockEnl.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(EnvBlockEnl.NumSites()));
             printf("  Superblock:\n");
-            printf("    NumStates:   %lld\n", LLD(KronBlocks.NumStates()));
-            printf("    NumSites:    %lld\n", LLD(NumSitesTotal));
-            printf("    Energy:      %-10.10g\n", gse_r);
-            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
+            printf("    NumStates:      %lld\n", LLD(KronBlocks.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(NumSitesTotal));
+            printf("    Energy:         %-10.10g\n", gse_r);
+            printf("    Energy/site:    %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
             printf("  Sys Block Out\n"
-                   "    NumStates: %lld\n"
-                   "    TrunError: %g\n", LLD(BT_L->QN.NumStates()), BT_L->TruncErr);
+                   "    NumStates:      %lld\n"
+                   "    TrunError:      %g\n", LLD(BT_L->QN.NumStates()), BT_L->TruncErr);
             printf("  Env Block Out\n"
-                   "    NumStates: %lld\n"
-                   "    TrunError: %g\n", LLD(BT_R->QN.NumStates()), BT_R->TruncErr);
+                   "    NumStates:      %lld\n"
+                   "    TrunError:      %g\n", LLD(BT_R->QN.NumStates()), BT_R->TruncErr);
             printf("\n");
             printf("  Total Time:              %12.6f s\n", timings_data.Total);
             printf("    Add One Site:          %12.6f s \t%6.2f %%\n", timings_data.tEnlr, pEnlr);
