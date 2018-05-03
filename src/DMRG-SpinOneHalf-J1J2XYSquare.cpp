@@ -33,8 +33,6 @@ int main(int argc, char **argv)
         /* Print some info */
         if(!rank){
             std::cout
-                << "WARMUP\n"
-                << "  NumStates to keep:       " << mstates << "\n"
                 << "SWEEPS\n"
                 << "  Use msweeps array:       " << (use_msweeps?"yes":"no") << "\n"
                 << "  Number of sweeps:        " << (use_msweeps?num_msweeps:nsweeps) << "\n"
@@ -190,7 +188,7 @@ int main(int argc, char **argv)
         }
 
         /* Perform DMRG steps */
-        ierr = DMRG.Warmup(mstates); CHKERRQ(ierr);
+        ierr = DMRG.Warmup(); CHKERRQ(ierr);
         if(use_msweeps){
             for(const PetscInt& mstates: msweeps){
                 ierr = DMRG.Sweep(mstates); CHKERRQ(ierr);

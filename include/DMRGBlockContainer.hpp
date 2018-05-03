@@ -246,7 +246,88 @@ public:
             printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
             printf( "=========================================\n");
         }
-        LoopType = WarmupStep;
+
+        /*  Setup the modes for performing the warmup and sweeps */
+        {
+            PetscBool   opt_mstates = PETSC_FALSE,
+                        opt_mwarmup = PETSC_FALSE,
+                        opt_nsweeps = PETSC_FALSE,
+                        opt_msweeps = PETSC_FALSE,
+                        opt_maxnsweeps = PETSC_FALSE;
+            PetscInt mstates, num_msweeps=1000; // nsweeps
+            // std::vector< PetscInt > msweeps(num_msweeps);
+            msweeps.resize(num_msweeps);
+
+            ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,&opt_mstates); CHKERRQ(ierr);
+            ierr = PetscOptionsGetInt(NULL,NULL,"-mwarmup",&mwarmup,&opt_mwarmup); CHKERRQ(ierr);
+            ierr = PetscOptionsGetInt(NULL,NULL,"-nsweeps",&nsweeps,&opt_nsweeps); CHKERRQ(ierr);
+            ierr = PetscOptionsGetIntArray(NULL,NULL,"-msweeps",&msweeps.at(0),&num_msweeps,&opt_msweeps); CHKERRQ(ierr);
+            msweeps.resize(num_msweeps);
+
+            PetscInt num_maxnsweeps = num_msweeps;
+            // std::vector< PetscInt > maxnsweeps(num_msweeps);
+            maxnsweeps.resize(num_msweeps);
+            ierr = PetscOptionsGetIntArray(NULL,NULL,"-maxnsweeps",&maxnsweeps.at(0),&num_maxnsweeps,&opt_maxnsweeps); CHKERRQ(ierr);
+
+            /** @note
+                @parblock
+                This function also enforces some restrictions on command line inputs:
+                - either `-mstates` or `-mwarmup` has to be specified */
+            if(!opt_mstates && !opt_mwarmup)
+                SETERRQ(mpi_comm,1,"Either -mstates or -mwarmup has to be specified.");
+
+            /** - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other */
+            if(opt_mstates && !opt_mwarmup)
+                mwarmup = mstates;
+
+            /** - `-nsweeps` and `-msweeps` are incompatible and only one of them can be specified at a time */
+            if(opt_nsweeps && opt_msweeps)
+                SETERRQ(mpi_comm,1,"-msweeps and -nsweeps cannot both be specified at the same time.");
+
+            /** - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time */
+            if(opt_nsweeps && opt_msweeps)
+                SETERRQ(mpi_comm,1,"-nsweeps and -maxnsweeps cannot both be specified at the same time.");
+
+            if(opt_maxnsweeps && (num_maxnsweeps != num_msweeps))
+                SETERRQ2(mpi_comm,1,"-msweeps and -maxnsweeps must have the same number of items. "
+                    "Got %lld and %lld, respectively.", num_msweeps, num_maxnsweeps);
+
+            /** @endparblock */
+
+            /** @note
+                @parblock
+                The following criteria is used to decide the kind of sweeps to be performed: */
+            if(opt_nsweeps && !opt_msweeps)
+            {
+                sweep_mode = SWEEP_MODE_NSWEEPS;
+            }
+            else if(opt_msweeps && !opt_nsweeps)
+            {
+                if(opt_maxnsweeps)
+                {
+                    sweep_mode = SWEEP_MODE_TOLERANCE_TEST;
+                }
+                else
+                {
+                    sweep_mode = SWEEP_MODE_MSWEEPS;
+                }
+            }
+            else
+            {
+                SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
+            }
+
+            /** @endparblock */
+
+            /* printout some info */
+            if(!mpi_rank){
+                std::cout
+                    << "WARMUP\n"
+                    << "  NumStates to keep:       " << mwarmup << "\n";
+            }
+        }
+
+        LoopType = WarmupStep; /*??????*/
         init = PETSC_TRUE;
         return(0);
     }
@@ -355,9 +436,7 @@ public:
     /** Performs the warmup stage of DMRG.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
         of sites. All created system blocks are stored and will be represented by at most `MStates` number of basis states */
-    PetscErrorCode Warmup(
-        const PetscInt& MStates /**< [in] the maximum number of states to keep after each truncation */
-        )
+    PetscErrorCode Warmup()
     {
         CheckInitialization(init,mpi_comm);
 
@@ -446,7 +525,7 @@ public:
                     ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
                 }
                 ierr = SingleDMRGStep(
-                    sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], MStates,
+                    sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], mwarmup,
                     sys_blocks[sys_ninit],    sys_blocks[env_numsites], PetscBool(sys_ninit+1==num_sites/2)); CHKERRQ(ierr);
 
                 ++sys_ninit;
@@ -465,7 +544,6 @@ public:
         }
         env_ninit = 0;
         warmed_up = PETSC_TRUE;
-        warmup_mstates = MStates;
 
         if(verbose){
             PetscPrintf(mpi_comm,
@@ -564,6 +642,16 @@ public:
 
 private:
 
+    /** Determines the type of sweep to be performed */
+    typedef enum
+    {
+        SWEEP_MODE_NULL,            /**< Do not perform any sweep */
+        SWEEP_MODE_NSWEEPS,         /**< Perform N sweeps with a fixed number of kept states */
+        SWEEP_MODE_MSWEEPS,         /**< Perform sweeps with a varying number of kept states */
+        SWEEP_MODE_TOLERANCE_TEST   /**< Perform sweeps with a certain number of kept states until the
+                                         a tolerance is reached, then change the number of kept states */
+    } SweepMode_t;
+
     /** MPI Communicator */
     MPI_Comm    mpi_comm = PETSC_COMM_SELF;
 
@@ -585,8 +673,20 @@ private:
     /** Tells whether no quantum number symmetries will be implemented */
     PetscBool   no_symm = PETSC_FALSE;
 
+    /** Stores the mode of sweeps to be performed */
+    SweepMode_t sweep_mode = SWEEP_MODE_NULL;
+
     /** Number of states requested for warmup */
-    PetscInt    warmup_mstates = 0;
+    PetscInt    mwarmup = 0;
+
+    /** Number of sweeps to be performed with the number of states specified by mwarmup (for SWEEP_MODE_NSWEEPS only) */
+    PetscInt    nsweeps = 0;
+
+    /** Number of states for each sweep (for SWEEP_MODE_MSWEEPS and SWEEP_MODE_TOLERANCE_TEST only) */
+    std::vector< PetscInt > msweeps;
+
+    /** Maximum number of sweeps for each state in msweeps (for SWEEP_MODE_TOLERANCE_TEST only) */
+    std::vector< PetscInt > maxnsweeps;
 
     /** Records the number of states requested for each sweep, where each entry is a single
         call to Sweep() */
@@ -1998,7 +2098,7 @@ private:
         if(mpi_rank) return(0);
 
         fprintf(fp_data,"  \"Warmup\": {\n");
-        fprintf(fp_data,"    \"MStates\": %lld\n", LLD(warmup_mstates));
+        fprintf(fp_data,"    \"MStates\": %lld\n", LLD(mwarmup));
         fprintf(fp_data,"  },\n");
         fprintf(fp_data,"  \"Sweeps\": {\n");
         fprintf(fp_data,"    \"MStates\": [");
@@ -2012,7 +2112,6 @@ private:
         fflush(fp_data);
         return(0);
     }
-
 
 };
 
