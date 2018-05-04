@@ -314,6 +314,10 @@ public:
                     sweep_mode = SWEEP_MODE_MSWEEPS;
                 }
             }
+            else if(!opt_msweeps && !opt_nsweeps)
+            {
+                sweep_mode = SWEEP_MODE_NULL;
+            }
             else
             {
                 SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
@@ -644,11 +648,11 @@ public:
         }
         else if(sweep_mode==SWEEP_MODE_NULL)
         {
-            SETERRQ1(mpi_comm,1,"Sweep mode %s not implemented.","SWEEP_MODE_NULL");
+
         }
         else
         {
-            SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
+            SETERRQ(mpi_comm,1,"Invalid sweep mode.");
         }
 
         return(0);
