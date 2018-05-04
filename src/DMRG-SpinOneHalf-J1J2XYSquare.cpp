@@ -18,32 +18,7 @@ int main(int argc, char **argv)
         DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
         ierr = DMRG.Initialize(); CHKERRQ(ierr);
 
-        /* Default behavior: Use the same number of states for warmup and sweeps */
-        PetscInt nsweeps = 1, mstates = 8;
-        ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
-        ierr = PetscOptionsGetInt(NULL,NULL,"-nsweeps",&nsweeps,NULL); CHKERRQ(ierr);
-
-        /* Optional behavior: Specify the number of states for warmup, and the number of states for successive sweeps */
-        PetscBool use_msweeps = PETSC_FALSE;
-        PetscInt num_msweeps = MAX_SWEEPS;
-        std::vector<PetscInt> msweeps(MAX_SWEEPS);
-        ierr = PetscOptionsGetIntArray(NULL,NULL,"-msweeps",&msweeps[0],&num_msweeps,&use_msweeps); CHKERRQ(ierr);
-        msweeps.resize(num_msweeps);
-
-        /* Print some info */
-        if(!rank){
-            std::cout
-                << "SWEEPS\n"
-                << "  Use msweeps array:       " << (use_msweeps?"yes":"no") << "\n"
-                << "  Number of sweeps:        " << (use_msweeps?num_msweeps:nsweeps) << "\n"
-                << "  NumStates to keep:      ";
-            if(use_msweeps) for(const PetscInt& m: msweeps) std::cout << " " << m;
-            else std::cout << " " << mstates;
-            std::cout << std::endl;
-        }
-
         {
-            if(!rank) std::cout << "MEASUREMENTS" << std::endl;
             /*  Explicitly give a list of operators. */
             PetscInt Lx = DMRG.HamiltonianRef().Lx();
             PetscInt Ly = DMRG.HamiltonianRef().Ly();
@@ -183,21 +158,9 @@ int main(int argc, char **argv)
             }
         }
 
-        if(!rank){
-            std::cout << "=========================================" << std::endl;
-        }
-
         /* Perform DMRG steps */
         ierr = DMRG.Warmup(); CHKERRQ(ierr);
-        if(use_msweeps){
-            for(const PetscInt& mstates: msweeps){
-                ierr = DMRG.Sweep(mstates); CHKERRQ(ierr);
-            }
-        } else {
-            for(PetscInt isweep = 0; isweep < nsweeps; ++isweep){
-                ierr = DMRG.Sweep(mstates); CHKERRQ(ierr);
-            }
-        }
+        ierr = DMRG.Sweeps(); CHKERRQ(ierr);
 
         ierr = DMRG.Destroy(); CHKERRQ(ierr);
     }

@@ -561,7 +561,39 @@ public:
     }
 
     /** Performs the sweep stage of DMRG. */
-    PetscErrorCode Sweep(
+    PetscErrorCode Sweeps()
+    {
+        PetscErrorCode ierr;
+
+        if(sweep_mode==SWEEP_MODE_NSWEEPS)
+        {
+            for(PetscInt isweep = 0; isweep < nsweeps; ++isweep)
+            {
+                ierr = SingleSweep(mwarmup); CHKERRQ(ierr);
+            }
+        }
+        else if(sweep_mode==SWEEP_MODE_MSWEEPS)
+        {
+            SETERRQ1(mpi_comm,1,"Sweep mode %s not implemented.","SWEEP_MODE_MSWEEPS");
+        }
+        else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
+        {
+            SETERRQ1(mpi_comm,1,"Sweep mode %s not implemented.","SWEEP_MODE_TOLERANCE_TEST");
+        }
+        else if(sweep_mode==SWEEP_MODE_NULL)
+        {
+            SETERRQ1(mpi_comm,1,"Sweep mode %s not implemented.","SWEEP_MODE_NULL");
+        }
+        else
+        {
+            SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
+        }
+
+        return(0);
+    }
+
+    /** Performs a single sweep from center to right, and back to center */
+    PetscErrorCode SingleSweep(
         const PetscInt& MStates, /**< [in] the maximum number of states to keep after each truncation */
         const PetscInt& MinBlock = PETSC_DEFAULT /**< [in] the minimum block length when performing sweeps. Defaults to 1 */
         )
