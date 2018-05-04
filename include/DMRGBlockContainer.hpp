@@ -325,24 +325,27 @@ public:
             if(!mpi_rank){
                 std::cout
                     << "WARMUP\n"
-                    << "  NumStates to keep:       " << mwarmup << "\n"
+                    << "  NumStates to keep:           " << mwarmup << "\n"
                     << "SWEEP\n"
-                    << "  Sweep mode:              " << SweepModeToString.at(sweep_mode)
+                    << "  Sweep mode:                  " << SweepModeToString.at(sweep_mode)
                     << std::endl;
 
                 if(sweep_mode==SWEEP_MODE_NSWEEPS)
                 {
-                    std::cout << "  Number of sweeps:        " << nsweeps << std::endl;
+                    std::cout << "  Number of sweeps:            " << nsweeps << std::endl;
                 }
                 else if(sweep_mode==SWEEP_MODE_MSWEEPS)
                 {
-                    std::cout << "  NumStates to keep:      ";
+                    std::cout << "  NumStates to keep:          ";
                     for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
                     std::cout << std::endl;
                 }
                 else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
                 {
-
+                    std::cout << "  NumStates to keep, maxiter: ";
+                    for(size_t i = 0; i < msweeps.size(); ++i)
+                        std::cout << " (" << msweeps.at(i) << "," << maxnsweeps.at(i) << ")";
+                    std::cout << std::endl;
                 }
                 else if(sweep_mode==SWEEP_MODE_NULL)
                 {
@@ -602,7 +605,42 @@ public:
         }
         else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
         {
-            SETERRQ1(mpi_comm,1,"Sweep mode %s not implemented.","SWEEP_MODE_TOLERANCE_TEST");
+            for(size_t imstates = 0; imstates < msweeps.size(); ++imstates)
+            {
+                PetscInt mstates  = msweeps.at(imstates);
+                PetscInt max_iter = maxnsweeps.at(imstates);
+                PetscInt iter = 0;
+                if(max_iter==0) continue;
+
+                PetscScalar prev_gse;
+                PetscReal   max_trn;
+                PetscReal   diff_gse;
+                bool        cont;
+
+                do
+                {
+                    prev_gse = gse;
+                    ierr = SingleSweep(mstates); CHKERRQ(ierr);
+                    diff_gse = PetscAbsScalar(gse-prev_gse);
+                    max_trn = *std::max_element(trunc_err.begin(), trunc_err.end());
+                    max_trn = std::max(max_trn,0.0);
+                    iter++;
+                    cont = (iter<max_iter) && (diff_gse > max_trn);
+
+                    if(!mpi_rank)
+                    {
+                        std::cout
+                            << "SWEEP_MODE_TOLERANCE_TEST\n"
+                            << "  Iterations / Max Iterations:       " << iter << "/" << max_iter << "\n"
+                            << "  Difference in ground state energy: " << diff_gse << "\n"
+                            << "  Largest truncation error:          " << max_trn << "\n"
+                            << "  " << (cont?"CONTINUE":"BREAK")
+                            << std::endl;
+                        PRINTLINES();
+                    }
+                }
+                while(cont);
+            }
         }
         else if(sweep_mode==SWEEP_MODE_NULL)
         {
@@ -627,6 +665,9 @@ public:
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
         if(!mpi_rank) printf("SWEEP MStates=%lld\n", LLD(MStates));
+
+        /*  Setup the attributes that will contain some information about this sweep */
+        trunc_err.clear();
 
         /*  Set a minimum number of blocks (min_block). Decide whether to set it statically or let
             the number correspond to the least number of sites needed to exactly build MStates. */
@@ -856,7 +897,7 @@ private:
     PetscScalar gse = 0.0;
 
     /** Stores the truncation error at the end of a single dmrg step */
-    PetscReal   trunc_err = 0.0;
+    std::vector<PetscReal>  trunc_err;
 
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
@@ -1188,7 +1229,7 @@ private:
 
         /* Store some results to class attributes */
         gse = gse_r;
-        trunc_err = BT_L->TruncErr;
+        trunc_err.push_back(BT_L->TruncErr);
 
         /* Save data */
         ierr = SaveStepData(step_data); CHKERRQ(ierr);
