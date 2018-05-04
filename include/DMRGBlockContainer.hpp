@@ -329,6 +329,27 @@ public:
                     << "SWEEP\n"
                     << "  Sweep mode:              " << SweepModeToString.at(sweep_mode)
                     << std::endl;
+
+                if(sweep_mode==SWEEP_MODE_NSWEEPS)
+                {
+                    std::cout << "  Number of sweeps:        " << nsweeps << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_MSWEEPS)
+                {
+                    std::cout << "  NumStates to keep:      ";
+                    for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
+                    std::cout << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
+                {
+
+                }
+                else if(sweep_mode==SWEEP_MODE_NULL)
+                {
+
+                }
+
+                PRINTLINES();
             }
         }
 
@@ -574,7 +595,10 @@ public:
         }
         else if(sweep_mode==SWEEP_MODE_MSWEEPS)
         {
-            SETERRQ1(mpi_comm,1,"Sweep mode %s not implemented.","SWEEP_MODE_MSWEEPS");
+            for(const PetscInt& mstates: msweeps)
+            {
+                ierr = SingleSweep(mstates); CHKERRQ(ierr);
+            }
         }
         else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
         {
