@@ -1507,6 +1507,17 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 
 /*--- Definitions for shell matrices ---*/
 
+PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
+    const std::vector< Hamiltonians::Term >& TermsLR,
+    const PetscInt Nrows,
+    PetscInt& lrows,
+    PetscInt& rstart
+    )
+{
+    SETERRQ(mpi_comm,1,"KronSumShellSplitOwnership not implemented.");
+    return (0);
+}
+
 PetscErrorCode KronBlocks_t::KronSumSetUpShellTerms(KronSumShellCtx *shellctx)
 {
     PetscErrorCode ierr;
@@ -1687,8 +1698,16 @@ PetscErrorCode KronBlocks_t::KronSumConstructShell(
 
     /* Assumes that output matrix is square */
     ctx.Nrows = ctx.Ncols = num_states;
-    /* Split the ownership of rows using the default way in petsc */
-    ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+
+    if(do_redistribute)
+    {
+        ierr = KronSumShellSplitOwnership(TermsLR, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+    }
+    else
+    {
+        /* Split the ownership of rows using the default way in petsc */
+        ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+    }
     ctx.cstart = ctx.rstart;
     ctx.lcols = ctx.lrows;
     ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;

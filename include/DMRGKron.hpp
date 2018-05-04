@@ -441,6 +441,13 @@ private:
         KronSumCtx& ctx
         );
 
+    PetscErrorCode KronSumShellSplitOwnership(
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        const PetscInt Nrows,
+        PetscInt& lrows,
+        PetscInt& rstart
+        );
+
     PetscErrorCode KronSumRedistribute(
         KronSumCtx& ctx,
         PetscBool& flg
