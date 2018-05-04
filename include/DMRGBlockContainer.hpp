@@ -254,8 +254,7 @@ public:
                         opt_nsweeps = PETSC_FALSE,
                         opt_msweeps = PETSC_FALSE,
                         opt_maxnsweeps = PETSC_FALSE;
-            PetscInt mstates, num_msweeps=1000; // nsweeps
-            // std::vector< PetscInt > msweeps(num_msweeps);
+            PetscInt mstates, num_msweeps=1000;
             msweeps.resize(num_msweeps);
 
             ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,&opt_mstates); CHKERRQ(ierr);
@@ -264,10 +263,10 @@ public:
             ierr = PetscOptionsGetIntArray(NULL,NULL,"-msweeps",&msweeps.at(0),&num_msweeps,&opt_msweeps); CHKERRQ(ierr);
             msweeps.resize(num_msweeps);
 
-            PetscInt num_maxnsweeps = num_msweeps;
-            // std::vector< PetscInt > maxnsweeps(num_msweeps);
-            maxnsweeps.resize(num_msweeps);
+            PetscInt num_maxnsweeps = 1000;
+            maxnsweeps.resize(num_maxnsweeps);
             ierr = PetscOptionsGetIntArray(NULL,NULL,"-maxnsweeps",&maxnsweeps.at(0),&num_maxnsweeps,&opt_maxnsweeps); CHKERRQ(ierr);
+            maxnsweeps.resize(num_maxnsweeps);
 
             /** @note
                 @parblock
@@ -296,7 +295,8 @@ public:
 
             /** @note
                 @parblock
-                The following criteria is used to decide the kind of sweeps to be performed: */
+                The following criteria is used to decide the kind of sweeps to be performed:
+                - if `-nsweeps` is specified use SWEEP_MODE_NSWEEPS */
             if(opt_nsweeps && !opt_msweeps)
             {
                 sweep_mode = SWEEP_MODE_NSWEEPS;
@@ -305,10 +305,12 @@ public:
             {
                 if(opt_maxnsweeps)
                 {
+                    /** - if `-msweeps` and `-maxnsweeps` is specified use SWEEP_MODE_TOLERANCE_TEST */
                     sweep_mode = SWEEP_MODE_TOLERANCE_TEST;
                 }
                 else
                 {
+                    /** - if `-msweeps` is specified, and not `-maxnsweeps`, use SWEEP_MODE_MSWEEPS */
                     sweep_mode = SWEEP_MODE_MSWEEPS;
                 }
             }
@@ -323,7 +325,10 @@ public:
             if(!mpi_rank){
                 std::cout
                     << "WARMUP\n"
-                    << "  NumStates to keep:       " << mwarmup << "\n";
+                    << "  NumStates to keep:       " << mwarmup << "\n"
+                    << "SWEEP\n"
+                    << "  Sweep mode:              " << SweepModeToString.at(sweep_mode)
+                    << std::endl;
             }
         }
 
