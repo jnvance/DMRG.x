@@ -783,6 +783,12 @@ private:
     /** Tells whether a single entry for the correlators have been printed */
     PetscBool corr_printed_first = PETSC_FALSE;
 
+    /** Stores the ground state energy at the end of a single dmrg step */
+    PetscScalar gse = 0.0;
+
+    /** Stores the truncation error at the end of a single dmrg step */
+    PetscReal   trunc_err = 0.0;
+
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
     PetscErrorCode SingleDMRGStep(
@@ -1110,6 +1116,10 @@ private:
             printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n", timings_data.tRotb, pRotb);
             printf("\n");
         }
+
+        /* Store some results to class attributes */
+        gse = gse_r;
+        trunc_err = BT_L->TruncErr;
 
         /* Save data */
         ierr = SaveStepData(step_data); CHKERRQ(ierr);
