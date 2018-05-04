@@ -657,6 +657,14 @@ private:
                                          a tolerance is reached, then change the number of kept states */
     } SweepMode_t;
 
+    /** Gives the equivalent string for the sweep mode */
+    const std::map< SweepMode_t, std::string > SweepModeToString = {
+        {SWEEP_MODE_NULL, "SWEEP_MODE_NULL"},
+        {SWEEP_MODE_NSWEEPS, "SWEEP_MODE_NSWEEPS"},
+        {SWEEP_MODE_MSWEEPS, "SWEEP_MODE_MSWEEPS"},
+        {SWEEP_MODE_TOLERANCE_TEST, "SWEEP_MODE_TOLERANCE_TEST"}
+    };
+
     /** MPI Communicator */
     MPI_Comm    mpi_comm = PETSC_COMM_SELF;
 
