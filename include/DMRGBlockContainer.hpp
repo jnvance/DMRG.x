@@ -150,6 +150,7 @@ public:
         @par Options Database
         Command-line arguments:
          - `-verbose <bool>`
+         - `-dry_run <bool>`
          - `-no_symm <bool>`
          - `-do_shell <bool>`
          - `-scratch_dir <string>`
@@ -186,6 +187,7 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); CHKERRQ(ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-dry_run",&dry_run,NULL); CHKERRQ(ierr);
         /*  The scratch space to save temporary data*/
         char path[512];
         PetscBool opt_do_scratch_dir;
@@ -472,6 +474,7 @@ public:
     PetscErrorCode Warmup()
     {
         CheckInitialization(init,mpi_comm);
+        if(dry_run) return(0);
 
         PetscErrorCode ierr = 0;
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
@@ -591,8 +594,8 @@ public:
     /** Performs the sweep stage of DMRG. */
     PetscErrorCode Sweeps()
     {
+        if(dry_run) return(0);
         PetscErrorCode ierr;
-
         if(sweep_mode==SWEEP_MODE_NSWEEPS)
         {
             for(PetscInt isweep = 0; isweep < nsweeps; ++isweep)
@@ -780,6 +783,9 @@ private:
 
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
+
+    /** Tells whether to skip the warmup and sweep stages even when called */
+    PetscBool dry_run = PETSC_FALSE;
 
     /** Tells whether the object was initialized using Initialize() */
     PetscBool   warmed_up = PETSC_FALSE;
