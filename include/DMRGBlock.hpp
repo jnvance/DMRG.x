@@ -262,6 +262,19 @@ namespace Block {
         /** Checks whether sector indexing was done properly */
         PetscErrorCode CheckSectors() const;
 
+        /** Returns the number of non-zeros in each row for an operator acting on a given site */
+        PetscErrorCode MatOpGetNNZs(
+            const Op_t& OpType,
+            const PetscInt& isite,
+            std::vector<PetscInt>& nnzs
+            ) const;
+
+        /** Returns the number of non-zeros in each row for a given matrix */
+        PetscErrorCode MatGetNNZs(
+            const Mat& matin,
+            std::vector<PetscInt>& nnzs
+            ) const;
+
         /** Checks the block indexing in the matrix operator op_t on site isite.
             @pre Implemented only for MPIAIJ matrices */
         PetscErrorCode MatOpCheckOperatorBlocks(

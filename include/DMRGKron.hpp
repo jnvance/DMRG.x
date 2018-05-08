@@ -380,6 +380,15 @@ private:
     /** Whether to create an implicit MATSHELL matrix */
     PetscBool do_shell = PETSC_FALSE;
 
+    /** Whether KronSumShellSplitOwnership has been called before */
+    PetscBool called_KronSumShellSplitOwnership = PETSC_FALSE;
+
+    /** Stores the resulting lrows of a previous call to KronSumShellSplitOwnership */
+    PetscInt  prev_lrows = 0;
+
+    /** Stores the resulting rstart of a previous call to KronSumShellSplitOwnership */
+    PetscInt  prev_rstart = 0;
+
     /** Tolerance */
     #if defined(PETSC_USE_REAL_DOUBLE)
     PetscReal ks_tol = 1.0e-16;
@@ -442,6 +451,8 @@ private:
         );
 
     PetscErrorCode KronSumShellSplitOwnership(
+        const Mat& OpProdSumLL,
+        const Mat& OpProdSumRR,
         const std::vector< Hamiltonians::Term >& TermsLR,
         const PetscInt Nrows,
         PetscInt& lrows,

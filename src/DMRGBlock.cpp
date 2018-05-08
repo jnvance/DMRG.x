@@ -239,6 +239,54 @@ PetscErrorCode Block::SpinOneHalf::CheckSectors() const
 }
 
 
+PetscErrorCode Block::SpinOneHalf::MatOpGetNNZs(
+    const Op_t& OpType,
+    const PetscInt& isite,
+    std::vector<PetscInt>& nnzs
+    ) const
+{
+    PetscErrorCode ierr = 0;
+
+    /* TODO: Generalize this piece of redundant code */
+
+    /* Decipher inputs */
+    Mat matin;
+    if(isite >= num_sites) /** @throw PETSC_ERR_ARG_WRONG The input isite is out of bounds */
+        SETERRQ2(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE, "Input isite (%d) out of bounds [0,%d).", isite, num_sites);
+    switch(OpType) {
+        case OpSm: matin = SmData[isite]; break;
+        case OpSz: matin = SzData[isite]; break;
+        case OpSp: matin = SpData[isite]; break;
+        default: SETERRQ(mpi_comm, PETSC_ERR_ARG_WRONG, "Incorrect operator type.");
+        /** @throw PETSC_ERR_ARG_WRONG The operator type is incorrect */
+    }
+
+    ierr = MatGetNNZs(matin, nnzs); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::MatGetNNZs(
+    const Mat& matin,
+    std::vector<PetscInt>& nnzs
+    ) const
+{
+    nnzs.clear();
+    PetscInt rstart, rend;
+    PetscErrorCode ierr = MatGetOwnershipRange(matin, &rstart, &rend); CHKERRQ(ierr);
+    PetscInt lrows = rend - rstart;
+    nnzs.resize(lrows);
+    PetscInt ncols;
+    for(PetscInt irow=rstart; irow<rend; ++irow)
+    {
+        ierr = MatGetRow(matin, irow, &ncols, NULL, NULL); CHKERRQ(ierr);
+        nnzs[irow-rstart] = ncols;
+        ierr = MatRestoreRow(matin, irow, &ncols, NULL, NULL); CHKERRQ(ierr);
+    }
+    return(0);
+}
+
+
 PetscErrorCode Block::SpinOneHalf::MatOpCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
 {
     PetscErrorCode ierr = 0;

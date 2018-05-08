@@ -656,18 +656,26 @@ PetscErrorCode KronBlocks_t::KronConstruct(
 
         /* Assumes that output matrix is square */
         ctx.Nrows = ctx.Ncols = num_states;
-        /* Split the ownership of rows using the default way in petsc */
-        ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+        /* Split the ownership of rows depending on a previous call to KronSumShellSplitOwnership */
+        if(do_redistribute && called_KronSumShellSplitOwnership)
+        {
+            ctx.lrows = prev_lrows;
+            ctx.rstart = prev_rstart;
+        }
+        else
+        {
+            /* Split the ownership of rows using the default way in petsc */
+            ierr = PreSplitOwnership(mpi_comm, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+        }
         ctx.cstart = ctx.rstart;
         ctx.lcols = ctx.lrows;
         ctx.rend = ctx.cend = ctx.rstart + ctx.lrows;
-
 
         ierr = KronGetSubmatrices(Mat_L, OpType_L, Mat_R, OpType_R, ctx); CHKERRQ(ierr);
         ierr = KronSumSetUpShellTerms(shellctx); CHKERRQ(ierr);
         /* Create vector scatter object */
         Vec x_mpi;
-        ierr = VecCreateMPI(mpi_comm, ctx.lrows, ctx.Nrows, &x_mpi); CHKERRQ(ierr);
+        ierr = VecCreateMPI(mpi_comm, ctx.lrows, PETSC_DETERMINE, &x_mpi); CHKERRQ(ierr);
         ierr = VecScatterCreateToAll(x_mpi, &shellctx->vsctx, &shellctx->x_seq); CHKERRQ(ierr);
         ierr = VecDestroy(&x_mpi); CHKERRQ(ierr);
 
@@ -1508,6 +1516,8 @@ PetscErrorCode KronBlocks_t::SavePreallocData(const KronSumCtx& ctx)
 /*--- Definitions for shell matrices ---*/
 
 PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
+    const Mat& OpProdSumLL,
+    const Mat& OpProdSumRR,
     const std::vector< Hamiltonians::Term >& TermsLR,
     const PetscInt Nrows,
     PetscInt& lrows,
@@ -1515,7 +1525,176 @@ PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
     )
 {
     PetscErrorCode ierr;
-    ierr = PreSplitOwnership(mpi_comm, Nrows, lrows, rstart); CHKERRQ(ierr);
+    if(Nrows!=num_states) SETERRQ2(mpi_comm,1,"Invalid input Nrows. Expected %lld. Got %lld.", LLD(num_states), LLD(Nrows));
+
+    /*  Map unique operators to their respective positions
+        key tuple: Side_t, Op_t, SiteIdx */
+    std::map< std::tuple< Side_t, Op_t, PetscInt >, std::vector<PetscInt> > nnzs_loc, nnzs;
+    std::tuple< Side_t, Op_t, PetscInt > key;
+    PetscMPIInt lrows_L, lrows_R;
+
+    /*  LR terms */
+    for(const Hamiltonians::Term& term: TermsLR)
+    {
+        /*  L-block */
+        key = std::make_tuple(SideLeft,  term.Iop, term.Isite);
+        if(nnzs_loc.find(key)==nnzs_loc.end())
+        {
+            ierr = LeftBlock.MatOpGetNNZs(term.Iop, term.Isite, nnzs_loc[key]); CHKERRQ(ierr);
+        }
+
+        /*  R-block */
+        key = std::make_tuple(SideRight, term.Jop, term.Jsite);
+        if(nnzs_loc.find(key)==nnzs_loc.end())
+        {
+            ierr = RightBlock.MatOpGetNNZs(term.Jop, term.Jsite, nnzs_loc[key]); CHKERRQ(ierr);
+        }
+    }
+
+    /*  LL term */
+    key = std::make_tuple(SideLeft, OpSz, -1);
+    if(nnzs_loc.find(key)==nnzs_loc.end())
+    {
+        ierr = LeftBlock.MatGetNNZs(OpProdSumLL, nnzs_loc[key]); CHKERRQ(ierr);
+        ierr = PetscMPIIntCast(PetscInt(nnzs_loc[key].size()), &lrows_L);
+    }
+    else SETERRQ(mpi_comm,1,"Key error: (SideLeft, OpSz, -1).");
+
+    /*  RR term */
+    key = std::make_tuple(SideRight, OpSz, -1);
+    if(nnzs_loc.find(key)==nnzs_loc.end())
+    {
+        ierr = LeftBlock.MatGetNNZs(OpProdSumRR, nnzs_loc[key]); CHKERRQ(ierr);
+        ierr = PetscMPIIntCast(PetscInt(nnzs_loc[key].size()), &lrows_R);
+    }
+    else SETERRQ(mpi_comm,1,"Key error: (SideRight, OpSz, -1).");
+
+    /*  Gather the number of local rows in each process to root */
+    std::vector< std::vector< PetscMPIInt > > side_lrows(2);
+    side_lrows[SideLeft ].resize(mpi_rank ? 1 : mpi_size);
+    side_lrows[SideRight].resize(mpi_rank ? 1 : mpi_size);
+
+    ierr = MPI_Gather(&lrows_L, 1, MPI_INT, &side_lrows[SideLeft ].at(0), 1, MPI_INT, 0, mpi_comm); CHKERRQ(ierr);
+    ierr = MPI_Gather(&lrows_R, 1, MPI_INT, &side_lrows[SideRight].at(0), 1, MPI_INT, 0, mpi_comm); CHKERRQ(ierr);
+
+    /*  Calculate the offsets on root */
+    std::vector< std::vector< PetscMPIInt > > side_offset(2);
+    std::vector< PetscMPIInt > side_nrows(2);
+    side_offset[SideLeft ].resize(mpi_rank ? 1 : mpi_size);
+    side_offset[SideRight].resize(mpi_rank ? 1 : mpi_size);
+
+    for(const auto& side_key: SideTypes)
+    {
+        {
+            const std::vector< PetscMPIInt >& lrows = side_lrows.at(side_key);
+            std::vector< PetscMPIInt >& offset = side_offset.at(side_key);
+            PetscInt sum_lrows = 0;
+            for(size_t i=0; i<lrows.size(); ++i)
+            {
+                offset[i] = sum_lrows;
+                sum_lrows += lrows.at(i);
+            }
+            ierr = PetscMPIIntCast(PetscInt(mpi_rank ? 1 : sum_lrows), &side_nrows.at(side_key)); CHKERRQ(ierr);
+        }
+    }
+
+    /*  Gather the arrays containing nnzs for each operator */
+    for(const auto& pair_loc: nnzs_loc)
+    {
+        const std::tuple< Side_t, Op_t, PetscInt >& key = pair_loc.first;
+        const std::vector< PetscInt >& nnz_loc = pair_loc.second;
+        const Side_t side = std::get<0>(key);
+        PetscMPIInt nnz_loc_size;
+        ierr = PetscMPIIntCast(PetscInt(nnz_loc.size()),&nnz_loc_size); CHKERRQ(ierr);
+        nnzs[key].resize(side_nrows.at(side));
+        ierr = MPI_Gatherv(&nnz_loc.at(0), nnz_loc_size, MPIU_INT,
+            &nnzs.at(key).at(0), &side_lrows.at(side).at(0), &side_offset.at(side).at(0),
+            MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    }
+
+    PetscBool flg = PETSC_TRUE;
+    std::vector< PetscInt > lrows_arr(mpi_rank ? 1: mpi_size), rstart_arr(mpi_rank ? 1: mpi_size);
+    if(!mpi_rank)
+    {
+        /* Determine the number of non-zeros in each row of the resulting final matrix */
+        std::vector< PetscInt > ks_nnz(num_states);
+        std::tuple< Side_t, Op_t, PetscInt > key_L, key_R;
+        KronBlocksIterator KIter(*this, 0, num_states);
+        for( ; KIter.Loop(); ++KIter)
+        {
+            const PetscInt lrow = KIter.Steps();
+            const PetscInt Row_L = KIter.GlobalIdxLeft();
+            const PetscInt Row_R = KIter.GlobalIdxRight();
+
+            for(const Hamiltonians::Term& term: TermsLR)
+            {
+                key_L = std::make_tuple(SideLeft,  term.Iop, term.Isite);
+                key_R = std::make_tuple(SideRight, term.Jop, term.Jsite);
+                ks_nnz.at(lrow) += nnzs.at(key_L).at(Row_L) * nnzs.at(key_R).at(Row_R);
+            }
+            key_L = std::make_tuple(SideLeft, OpSz, -1);
+            ks_nnz.at(lrow) += nnzs.at(key_L).at(Row_L);
+            key_R = std::make_tuple(SideRight, OpSz, -1);
+            ks_nnz.at(lrow) += nnzs.at(key_R).at(Row_R);
+        }
+
+        PetscInt tot_nnz=0;
+        for(const PetscInt& nnz: ks_nnz) tot_nnz+=nnz;
+
+        /* Impose an average number of non-zeros that should go into a row */
+        PetscInt avg_nnz_proc = tot_nnz / mpi_size;
+        std::vector< PetscInt > nnz_proc(mpi_size);
+        for(PetscInt irow=0, iproc=0; irow<Nrows; ++irow)
+        {
+            if(iproc>=mpi_size) break;
+            nnz_proc.at(iproc) += ks_nnz.at(irow);
+            ++lrows_arr.at(iproc);
+            if( nnz_proc.at(iproc) >= avg_nnz_proc ) ++iproc;
+        }
+
+        PetscInt tot_lrows = 0;
+        for(PetscInt p=0; p<mpi_size; ++p)
+        {
+            rstart_arr[p] = tot_lrows;
+            tot_lrows += lrows_arr[p];
+        }
+        if(Nrows!=tot_lrows)
+        {
+            printf("--------------------------------------------------\n");
+            printf("[0] Redistribution failed at GlobIdx: %lld\n", LLD(GlobIdx));
+            printf("[0] >>> tot_lrows:    %lld\n", LLD(tot_lrows));
+            printf("[0] >>> ctx.Nrows:    %lld\n", LLD(Nrows));
+            printf("[0] >>> tot_nnz:      %lld\n", LLD(tot_nnz));
+            printf("[0] >>> avg_nnz_proc: %lld\n", LLD(avg_nnz_proc));
+            printf("[0] >>> nnz_proc: [ %lld", LLD(nnz_proc[0]));
+                for(PetscInt p=1; p<mpi_size; ++p) printf(", %lld", LLD(nnz_proc[p]));
+                printf(" ]\n");
+
+            #if 0
+            SETERRQ2(PETSC_COMM_SELF,1,"Incorrect total number of rows. "
+            "Expected %d. Got %d.", Nrows, tot_lrows);
+            #else
+            flg = PETSC_FALSE;
+            #endif
+        }
+    }
+
+    ierr = MPI_Bcast(&flg, 1, MPI_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    if(flg)
+    {
+        /* Scatter data on lrows and rstart */
+        ierr = MPI_Scatter(&lrows_arr.at(0), 1, MPIU_INT, &lrows, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+        ierr = MPI_Scatter(&rstart_arr.at(0), 1, MPIU_INT, &rstart, 1, MPIU_INT, 0, PETSC_COMM_WORLD); CHKERRQ(ierr);
+    }
+    else
+    {
+        ierr = PreSplitOwnership(mpi_comm, Nrows, lrows, rstart); CHKERRQ(ierr);
+    }
+
+    prev_lrows = lrows;
+    prev_rstart = rstart;
+    called_KronSumShellSplitOwnership = PETSC_TRUE;
+
     return (0);
 }
 
@@ -1702,7 +1881,7 @@ PetscErrorCode KronBlocks_t::KronSumConstructShell(
 
     if(do_redistribute)
     {
-        ierr = KronSumShellSplitOwnership(TermsLR, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
+        ierr = KronSumShellSplitOwnership(LeftBlock.H, RightBlock.H, TermsLR, ctx.Nrows, ctx.lrows, ctx.rstart); CHKERRQ(ierr);
     }
     else
     {
@@ -1720,7 +1899,7 @@ PetscErrorCode KronBlocks_t::KronSumConstructShell(
     ierr = KronSumSetUpShellTerms(shellctx); CHKERRQ(ierr);
     /* Create vector scatter object */
     Vec x_mpi;
-    ierr = VecCreateMPI(mpi_comm, ctx.lrows, ctx.Nrows, &x_mpi); CHKERRQ(ierr);
+    ierr = VecCreateMPI(mpi_comm, ctx.lrows, PETSC_DETERMINE, &x_mpi); CHKERRQ(ierr);
     ierr = VecScatterCreateToAll(x_mpi, &shellctx->vsctx, &shellctx->x_seq); CHKERRQ(ierr);
     ierr = VecDestroy(&x_mpi); CHKERRQ(ierr);
 
