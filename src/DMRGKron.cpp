@@ -1514,7 +1514,7 @@ PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
     PetscInt& rstart
     )
 {
-    SETERRQ(mpi_comm,1,"KronSumShellSplitOwnership not implemented.");
+    ierr = PreSplitOwnership(mpi_comm, Nrows, lrows, rstart); CHKERRQ(ierr);
     return (0);
 }
 
