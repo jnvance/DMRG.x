@@ -1514,6 +1514,7 @@ PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
     PetscInt& rstart
     )
 {
+    PetscErrorCode ierr;
     ierr = PreSplitOwnership(mpi_comm, Nrows, lrows, rstart); CHKERRQ(ierr);
     return (0);
 }
