@@ -2,14 +2,15 @@ DMRG.x
 ======
 
 A distributed-memory implementation of the DMRG algorithm based on the [PETSc](https://www.mcs.anl.gov/petsc/) and
-[SLEPc](http://slepc.upv.es/).
+[SLEPc](http://slepc.upv.es/) libraries.
 
 The Density Matrix Renormalization Group (DMRG) algorithm is a numerical technique used in the study of low-dimensional
 strongly correlated quantum systems. With this implementation, one can study two-dimensional spin systems using a one-dimensional
 traversal of the lattice.
 
-In particular, the current version deals with a **square-type lattice** with longitudinal dimension `Lx` and transverse dimension `Ly`
-shown in the following figure. The spin sites can interact with their nearest neighbor (NN) and next-nearest neighbors (NNN), and different boundary conditions may be implemented on the two directions (such as the cylindrical boundary conditions illustrated below).
+In particular, the current version deals with a **square-type lattice** with longitudinal dimension *Lx* and transverse
+dimension *Ly* shown in the following figure.
+The spin sites can interact with their nearest neighbor (NN) and next-nearest neighbors (NNN), and different boundary conditions may be implemented on the two directions (such as the cylindrical boundary conditions illustrated below).
 
 ![](./assets/img/lattice-j1-j2-square.png)
 
