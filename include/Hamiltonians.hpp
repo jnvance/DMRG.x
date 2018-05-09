@@ -147,7 +147,7 @@ namespace Hamiltonians
         PetscInt _Lx = 4;
 
         /** Length along (fixed) transverse direction */
-        PetscInt _Ly = 3;
+        PetscInt _Ly = 4;
 
         /** Flag that tells whether to print some information */
         PetscBool verbose = PETSC_FALSE;
