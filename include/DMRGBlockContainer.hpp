@@ -497,7 +497,7 @@ public:
         if(do_scratch_dir){
             PetscBool flg;
             ierr = PetscTestDirectory(scratch_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
-            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",scratch_dir.c_str());
+            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist. Please verify that -scratch_dir is specified correctly.",scratch_dir.c_str());
             if(!mpi_rank){
                 for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                     std::string path = BlockDir("Sys",iblock);
@@ -541,6 +541,12 @@ public:
                 for(PetscInt isys = 0; isys < sys_ninit; ++isys){
                     if(!mpi_rank && verbose) printf("   block %lld, num_sites %lld\n", LLD(isys), LLD(sys_blocks[isys].NumSites()));
                 }
+            }
+
+            if(sys_ninit >= num_sites/2)
+            {
+                SETERRQ(mpi_comm,1,"No DMRG Steps were performed since all site operators were created exactly. "
+                    " Please change the system dimensions.");
             }
 
             /*  Continuously enlarge the system block until it reaches half the total system size and use the largest

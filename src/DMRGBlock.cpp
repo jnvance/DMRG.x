@@ -626,7 +626,7 @@ PetscErrorCode Block::SpinOneHalf::InitializeSave(
         ierr = PetscTestDirectory(save_dir_in.c_str(), 'r', &flg); CHKERRQ(ierr);
     }
     ierr = MPI_Bcast(&flg, 1, MPI_INT, 0, mpi_comm); CHKERRQ(ierr);
-    if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",save_dir_in.c_str());
+    if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist. Please verify that -scratch_dir is specified correctly.",save_dir_in.c_str());
     save_dir = save_dir_in;
     /* If the last character is not a slash then add one */
     if(save_dir.back()!='/') save_dir += '/';
