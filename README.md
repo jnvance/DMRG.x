@@ -20,6 +20,23 @@ The Hamiltonian for this implementation takes the form:
 
 which maps to a Heisenberg model when J₁ = 1/2 and J₂ = Δ₂ = 0, and to the J1-J2 XY model when Δ₁ = Δ₂ = 0.
 
+Documentation
+-------------
+
+Additional documentation may be found in the following pages under the docs folder:
+
+ - [Usage](docs/usage.md)
+
+To generate the corresponding Doxygen documentation, go to the root directory and execute
+
+    make docs
+
+This will place the documentation in docs/latex and docs/html.
+
+**NOTE:**
+Since the same markdown files were used in generating documentation with doxygen, some links may be available only for the
+markdown/github version and others may work only for the doxygen version.
+
 References
 ----------
 

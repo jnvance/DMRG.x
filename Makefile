@@ -18,6 +18,7 @@ docs: FORCE
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
 	${RM} src/*.optrpt
+	${RM} -rf docs/html docs/latex
 
 FORCE:
 
