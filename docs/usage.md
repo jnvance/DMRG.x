@@ -5,7 +5,9 @@
 A sample source code for a stand-alone executable can be found in src/DMRG-SpinOneHalf-J1J2XYSquare.cpp
 [[md](../src/DMRG-SpinOneHalf-J1J2XYSquare.cpp)].
 
-To generate the program, go to the root directory and execute:
+### Compilation
+
+To compile the executable, go to the root directory and execute the command:
 
     make all
 
