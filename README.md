@@ -23,10 +23,10 @@ which maps to a Heisenberg model when J₁ = 1/2 and J₂ = Δ₂ = 0, and to th
 References
 ----------
 
-For more information on the DMRG algorithm, we recommend the following review articles:
+For more information on the DMRG algorithm, we recommend the following reading materials:
  - U. Schollwöck. "The density-matrix renormalization group." Rev. Mod. Phys. 77, 259 – Published 26 April 2005
-    [doi](https://doi.org/10.1103/RevModPhys.77.259)
-
+    [[doi](https://doi.org/10.1103/RevModPhys.77.259)]
+ - A E Feiguin. "The Density Matrix Renormalization Group". In: Strongly Correlated Systems. Berlin, Heidelberg: Springer Berlin Heidelberg, Apr. 2013, pp. 31–65. [[link](https://www.springer.com/cda/content/document/cda_downloaddocument/9783642351051-c2.pdf?SGWID=0-0-45-1391718-p174727662)]
 
 <!--
 Table of Contents
@@ -53,7 +53,7 @@ Contributing
 
 Credits
 -------
-This application was developed as part of a thesis for the [Master in High Performance Computing](http://www.mhpc.it)
+This application was developed as part of a [thesis](http://hdl.handle.net/20.500.11767/68070) for the [Master in High Performance Computing](http://www.mhpc.it)
 in collaboration with the [Condensed Matter and Statistical Physics Section](https://www.ictp.it/research/cmsp.aspx) of the
 [The Abdus Salam International Centre for Theoretical Physics](http://www.ictp.it).
 
