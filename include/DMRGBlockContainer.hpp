@@ -28,22 +28,6 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 #define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
 #define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
 
-/** Provides an alias of Side_t to follow the Sys-Env convention */
-typedef enum
-{
-    BlockSys = 0,
-    BlockEnv = 1
-}
-Block_t;
-
-typedef enum
-{
-    WarmupStep,
-    SweepStep,
-    NullStep=-1
-}
-Step_t;
-
 /** Storage for information on resulting eigenpairs of the reduced density matrices */
 struct Eigen_t
 {
@@ -59,86 +43,111 @@ bool greater_eigval(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e
 /** Comparison operator for sorting Eigen_t objects by increasing blkIdx (decreasing qn's) */
 bool less_blkIdx(const Eigen_t &e1, const Eigen_t &e2) { return e1.blkIdx < e2.blkIdx; }
 
-/** Storage for basic data to be saved corresponding to a call of SingleDMRGStep() */
-struct StepData
-{
-    PetscInt    NumSites_Sys;       /**< Number of sites in the input sys block */
-    PetscInt    NumSites_Env;       /**< Number of sites in the input env block */
-    PetscInt    NumSites_SysEnl;    /**< Number of sites in the enlarged sys block */
-    PetscInt    NumSites_EnvEnl;    /**< Number of sites in the enlarged env block */
-    PetscInt    NumStates_Sys;      /**< Number of states in the input sys block */
-    PetscInt    NumStates_Env;      /**< Number of states in the input env block */
-    PetscInt    NumStates_SysEnl;   /**< Number of states in the enlarged sys block */
-    PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
-    PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
-    PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
-    PetscInt    NumStates_H;        /**< Number of states used in constructing the superblock Hamiltonian */
-    PetscScalar GSEnergy;
-    PetscReal   TruncErr_Sys;
-    PetscReal   TruncErr_Env;
-};
-
-/** Storage for timings to be saved corresponding to a call of SingleDMRGStep() */
-struct TimingsData
-{
-    PetscLogDouble  tEnlr;
-    PetscLogDouble  tKron;
-    PetscLogDouble  tDiag;
-    PetscLogDouble  tRdms;
-    PetscLogDouble  tRotb;
-    PetscLogDouble  Total;
-};
-
 /** Defines a single operator to be used for performing measurements */
-struct Op{
-    Op_t OpType;
-    PetscInt idx;
+struct Op {
+    Op_t        OpType;     /**< Operator type */
+    PetscInt    idx;        /**< Site index */
 
+    /** Print out information regarding this operator */
     PetscErrorCode PrintInfo() const {
         std::cout << "  Op" << OpIdxToStr(OpType, idx) << std::endl;
         return(0);
     }
 };
 
-/** Describes an n-point correlator whose expectation value will be measured at the end of each sweep.
-    Thus, Sys and Env here have reflection symmetry. */
-struct Correlator {
-    PetscInt            idx;
-    std::vector< Op >   SysOps;
-    std::vector< Op >   EnvOps;
-    std::string         name;
-    std::string         desc1;
-    std::string         desc2;
-    std::string         desc3;
-
-    PetscErrorCode PrintInfo() const {
-        std::cout << "  Correlator " << idx << ": " << name << std::endl;
-        std::cout << "    " << desc1 << std::endl;
-        std::cout << "    " << desc2 << std::endl;
-        std::cout << "    " << desc3 << std::endl;
-        return(0);
-    }
-};
-
-struct BasisTransformation {
-    std::map< PetscInt, Mat >   rdmd_list;      /**< diagonal blocks of the reduced density matrix */
-    Mat                         RotMatT;        /**< rotation matrix for the block */
-    QuantumNumbers              QN;             /**< quantum numbers context for the block */
-    PetscReal                   TruncErr;       /**< total weights of discarded states for the block */
-
-    ~BasisTransformation()
-    {
-        PetscErrorCode ierr = 0;
-        for(auto& rdmd: rdmd_list){
-            ierr = MatDestroy(&(rdmd.second)); CPP_CHKERR(ierr);
-        }
-        ierr = MatDestroy(&RotMatT); CPP_CHKERR(ierr);
-    }
-};
-
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {
+
+private:
+
+    /** Provides an alias of Side_t to follow the Sys-Env convention */
+    typedef enum
+    {
+        BlockSys = 0,
+        BlockEnv = 1
+    }
+    Block_t;
+
+    /** Lists the types of steps that can be performed */
+    typedef enum
+    {
+        WarmupStep,
+        SweepStep,
+        NullStep=-1
+    }
+    Step_t;
+
+    /** Storage for basic data to be saved corresponding to a call of SingleDMRGStep() */
+    struct StepData
+    {
+        PetscInt    NumSites_Sys;       /**< Number of sites in the input sys block */
+        PetscInt    NumSites_Env;       /**< Number of sites in the input env block */
+        PetscInt    NumSites_SysEnl;    /**< Number of sites in the enlarged sys block */
+        PetscInt    NumSites_EnvEnl;    /**< Number of sites in the enlarged env block */
+        PetscInt    NumStates_Sys;      /**< Number of states in the input sys block */
+        PetscInt    NumStates_Env;      /**< Number of states in the input env block */
+        PetscInt    NumStates_SysEnl;   /**< Number of states in the enlarged sys block */
+        PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
+        PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
+        PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
+        PetscInt    NumStates_H;        /**< Number of states used in constructing the superblock Hamiltonian */
+        PetscScalar GSEnergy;           /**< Ground state energy */
+        PetscReal   TruncErr_Sys;       /**< Truncation error for the system block */
+        PetscReal   TruncErr_Env;       /**< Truncation error for the environment block */
+    };
+
+    /** Storage for timings to be saved corresponding to a call of SingleDMRGStep() */
+    struct TimingsData
+    {
+        PetscLogDouble  tEnlr;          /**< Enlargement of each block */
+        PetscLogDouble  tKron;          /**< Construction of the Hamiltonian using Kronecker product routines */
+        PetscLogDouble  tDiag;          /**< Diagonalization of the Hamiltonian using EPS routines */
+        PetscLogDouble  tRdms;          /**< Construction of the reduced density matrices from the ground state vector */
+        PetscLogDouble  tRotb;          /**< Rotation of the block operators */
+        PetscLogDouble  Total;          /**< Total time */
+    };
+
+    /** Describes an n-point correlator whose expectation value will be measured at the end of each sweep.
+        Thus, Sys and Env here have reflection symmetry. */
+    struct Correlator
+    {
+        PetscInt            idx;        /**< Index of the correlator in the sequence */
+        std::vector< Op >   SysOps;     /**< List of operators residing on the system block */
+        std::vector< Op >   EnvOps;     /**< List of operators residing on the environment block */
+        std::string         name;       /**< Short name of the correlator */
+        std::string         desc1;      /**< Descriptor 1: Using 2d indices */
+        std::string         desc2;      /**< Descriptor 2: Using 1d indices */
+        std::string         desc3;      /**< Descriptor 3: Using 1d indices separated into sys and env blocks */
+
+        /** Prints some information regarding the correlator */
+        PetscErrorCode PrintInfo() const {
+            std::cout << "  Correlator " << idx << ": " << name << std::endl;
+            std::cout << "    " << desc1 << std::endl;
+            std::cout << "    " << desc2 << std::endl;
+            std::cout << "    " << desc3 << std::endl;
+            return(0);
+        }
+    };
+
+    /** Context struct for results of the basis transformation that may be useful in solving the correlators */
+    struct BasisTransformation
+    {
+        std::map< PetscInt, Mat >   rdmd_list;      /**< diagonal blocks of the reduced density matrix */
+        Mat                         RotMatT;        /**< rotation matrix for the block */
+        QuantumNumbers              QN;             /**< quantum numbers context for the block */
+        PetscReal                   TruncErr;       /**< total weights of discarded states for the block */
+
+        /** Destructor that safely deallocates the PETSc matrix objects */
+        ~BasisTransformation()
+        {
+            PetscErrorCode ierr = 0;
+            for(auto& rdmd: rdmd_list){
+                ierr = MatDestroy(&(rdmd.second)); CPP_CHKERR(ierr);
+            }
+            ierr = MatDestroy(&RotMatT); CPP_CHKERR(ierr);
+        }
+    };
 
 public:
 
@@ -747,6 +756,7 @@ public:
     /** Returns whether verbose printing is active */
     PetscBool Verbose() const { return verbose; }
 
+    /** Const reference to the Hamiltonian object for extracting its parameters */
     const Hamiltonian& HamiltonianRef() const { return Ham; }
 
 private:
@@ -1939,14 +1949,16 @@ private:
         return(0);
     }
 
+    /** Calculates the products of operators that belong to a single block represented by the same basis. */
     PetscErrorCode CalculateOperatorProducts(
-        const MPI_Comm& comm_in,
-        const std::vector< Correlator >& Corr,
-        const Block_t& BlockType,
-        Block& BlockRef,
-        std::map< std::string, Mat >& OpMats,
-        std::vector< Mat >& AllOpProds,
-        std::vector< Mat >& OpProds
+        const MPI_Comm& comm_in,                    /**< [in] communicator */
+        const std::vector< Correlator >& Corr,      /**< [in] list of correlators */
+        const Block_t& BlockType,                   /**< [in] block type (whether BlockSys or BlockEnv) */
+        Block& BlockRef,                            /**< [in] reference to the block (non-const since RetrieveOperator
+                                                              requires modification of the block object) */
+        std::map< std::string, Mat >& OpMats,       /**< [out] maps operator key strings to corresponding matrices */
+        std::vector< Mat >& AllOpProds,             /**< [out] list of all operator products generated and to be destroyed */
+        std::vector< Mat >& OpProds                 /**< [out] list of operator products requested in Corr */
         )
     {
         PetscErrorCode ierr;
@@ -2045,7 +2057,8 @@ private:
     }
 
     /** Returns the path to the directory for the storage of a specific system block */
-    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
+    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock)
+    {
         std::ostringstream oss;
         oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
         return oss.str();
