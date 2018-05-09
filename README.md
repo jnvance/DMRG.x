@@ -34,6 +34,10 @@ To properly use the Makefiles for generating executables, the following environm
  - `PETSC_ARCH`
  - `SLEPC_DIR`
 
+For information on configuring and installing the required libraries, see:
+ - [https://www.mcs.anl.gov/petsc/documentation/installation.html](https://www.mcs.anl.gov/petsc/documentation/installation.html)
+ - [http://slepc.upv.es/documentation/](http://slepc.upv.es/documentation/)
+
 Documentation
 -------------
 **Additional documentation** may be found in their respective pages inside the `docs` directory:
@@ -57,10 +61,6 @@ For more information on the DMRG algorithm, we recommend the following reading m
  - U. Schollwöck. "The density-matrix renormalization group." Rev. Mod. Phys. 77, 259 – Published 26 April 2005
     [[doi](https://doi.org/10.1103/RevModPhys.77.259)]
  - A E Feiguin. "The Density Matrix Renormalization Group". In: Strongly Correlated Systems. Berlin, Heidelberg: Springer Berlin Heidelberg, Apr. 2013, pp. 31–65. [[link](https://www.springer.com/cda/content/document/cda_downloaddocument/9783642351051-c2.pdf?SGWID=0-0-45-1391718-p174727662)]
-
-For information on configuring and installing the required libraries, see:
- - [https://www.mcs.anl.gov/petsc/documentation/installation.html](https://www.mcs.anl.gov/petsc/documentation/installation.html)
- - [http://slepc.upv.es/documentation/](http://slepc.upv.es/documentation/)
 
 <!--
 Table of Contents
