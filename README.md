@@ -35,7 +35,7 @@ This will place the documentation in docs/latex and docs/html.
 
 **NOTE:**
 Since the same markdown files were used in generating documentation with doxygen, some links may be available only for the
-markdown/github version and others may work only for the doxygen version.
+markdown/github version (links marked as **[md]**) and others may work only for the doxygen version (marked as **[dox]**).
 
 References
 ----------
