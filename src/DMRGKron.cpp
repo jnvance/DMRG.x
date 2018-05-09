@@ -1299,6 +1299,7 @@ PetscErrorCode KronBlocks_t::KronSumPreallocate(
 
     ierr = MatCreate(mpi_comm, &MatOut); CHKERRQ(ierr);
     ierr = MatSetSizes(MatOut, ctx.lrows, ctx.lcols, ctx.Nrows, ctx.Ncols); CHKERRQ(ierr);
+    ierr = MatSetType(MatOut,MATMPIAIJ); CHKERRQ(ierr);
     ierr = MatSetOptionsPrefix(MatOut, "H_"); CHKERRQ(ierr);
     ierr = MatSetFromOptions(MatOut); CHKERRQ(ierr);
     ierr = MatMPIAIJSetPreallocation(MatOut, 0, ctx.Dnnz, 0, ctx.Onnz); CHKERRQ(ierr);

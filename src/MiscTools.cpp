@@ -132,6 +132,7 @@ PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const P
 
     ierr = MatCreate(comm, mat); CHKERRQ(ierr);
     ierr = MatSetSizes(*mat, PETSC_DECIDE, PETSC_DECIDE, dim, dim); CHKERRQ(ierr);
+    ierr = MatSetType(*mat, MATMPIAIJ); CHKERRQ(ierr);
     ierr = MatSetFromOptions(*mat); CHKERRQ(ierr);
     ierr = MatSetUp(*mat); CHKERRQ(ierr);
 
