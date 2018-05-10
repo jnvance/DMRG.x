@@ -1,3 +1,5 @@
+/** @file DMRG-SpinOneHalf-J1J2XXZSquare.cpp */
+
 static char help[] =
     "DMRG executable for the Spin-1/2 J1-J2 XY Model on a two-dimensional square lattice.\n";
 
@@ -10,6 +12,7 @@ static char help[] =
 typedef DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG_t;
 PetscErrorCode Correlators(DMRG_t& DMRG);
 
+/** Executes the full DMRG Calculation */
 int main(int argc, char **argv)
 {
     PetscErrorCode  ierr;
@@ -34,7 +37,7 @@ int main(int argc, char **argv)
     return(0);
 }
 
-
+/** Sets up the measurement of correlators */
 PetscErrorCode Correlators(DMRG_t& DMRG)
 {
     PetscErrorCode ierr;

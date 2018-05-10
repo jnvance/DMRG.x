@@ -1,3 +1,7 @@
+"""
+Python module for post-processing data files produced by a DMRG.x application.
+"""
+
 import os
 import numpy as np
 import json
