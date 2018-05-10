@@ -15,7 +15,7 @@ int main(int argc, char **argv)
     ierr = MPI_Comm_size(PETSC_COMM_WORLD, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(PETSC_COMM_WORLD, &rank); CHKERRQ(ierr);
     {
-        DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
+        DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
         ierr = DMRG.Initialize(); CHKERRQ(ierr);
 
         {

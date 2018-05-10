@@ -3,7 +3,7 @@
 /** Encodes the 2d coordinate on the square lattice to the 1d coordinate on the s-shaped snake */
 #define SSNAKE_2D_1D(ix,jy,_Lx,_Ly) (((ix)*(_Ly)+jy)*(1-((ix)%2)) + ((ix+1)*(_Ly) - (jy+1))*((ix)%2))
 
-PetscInt Hamiltonians::J1J2XYModel_SquareLattice::To1D(
+PetscInt Hamiltonians::J1J2XXZModel_SquareLattice::To1D(
     const PetscInt ix,
     const PetscInt jy
     ) const
@@ -11,7 +11,7 @@ PetscInt Hamiltonians::J1J2XYModel_SquareLattice::To1D(
     return SSNAKE_2D_1D(ix,jy,_Lx,_Ly);
 }
 
-PetscErrorCode Hamiltonians::J1J2XYModel_SquareLattice::To2D(
+PetscErrorCode Hamiltonians::J1J2XXZModel_SquareLattice::To2D(
     const PetscInt idx,
     PetscInt& ix,
     PetscInt& jy
@@ -23,7 +23,7 @@ PetscErrorCode Hamiltonians::J1J2XYModel_SquareLattice::To2D(
     return(0);
 }
 
-std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNearestNeighbors(
+std::vector<PetscInt> Hamiltonians::J1J2XXZModel_SquareLattice::GetNearestNeighbors(
     const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
     ) const
 {
@@ -45,7 +45,7 @@ std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNearestNeighbo
     return nn;
 }
 
-std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNextNearestNeighbors(
+std::vector<PetscInt> Hamiltonians::J1J2XXZModel_SquareLattice::GetNextNearestNeighbors(
     const PetscInt& ix, const PetscInt& jy, const PetscInt& nsites_in
     ) const
 {
@@ -67,7 +67,7 @@ std::vector<PetscInt> Hamiltonians::J1J2XYModel_SquareLattice::GetNextNearestNei
     return nnn;
 }
 
-std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(const PetscInt& nsites_in)
+std::vector< Hamiltonians::Term > Hamiltonians::J1J2XXZModel_SquareLattice::H(const PetscInt& nsites_in)
 {
     PetscInt ns = (nsites_in == PETSC_DEFAULT) ? _Lx*_Ly : nsites_in;
     PetscBool full_lattice = PetscBool(nsites_in == _Lx*_Ly);
@@ -121,7 +121,7 @@ std::vector< Hamiltonians::Term > Hamiltonians::J1J2XYModel_SquareLattice::H(con
     return Terms;
 }
 
-std::vector< std::vector< PetscInt > > Hamiltonians::J1J2XYModel_SquareLattice::NeighborPairs(
+std::vector< std::vector< PetscInt > > Hamiltonians::J1J2XXZModel_SquareLattice::NeighborPairs(
     const PetscInt d
     ) const
 {

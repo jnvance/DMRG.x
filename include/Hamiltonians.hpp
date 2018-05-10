@@ -32,13 +32,13 @@ namespace Hamiltonians
     } BC_t;
 
     /** Implements the Hamiltonian for the J1-J2 XY model on the square lattice */
-    class J1J2XYModel_SquareLattice
+    class J1J2XXZModel_SquareLattice
     {
 
     public:
 
         /** Constructor */
-        J1J2XYModel_SquareLattice()
+        J1J2XXZModel_SquareLattice()
         {
 
         }
@@ -54,7 +54,16 @@ namespace Hamiltonians
             ierr = PetscOptionsGetInt(NULL,NULL,"-Lx",&_Lx,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetInt(NULL,NULL,"-Ly",&_Ly,NULL); CHKERRQ(ierr);
             ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
-            /* TODO: Also get boundary conditions from command line */
+
+            /* One may also specify whether to do the NN Heisenberg model and specify only the anisotropy */
+            ierr = PetscOptionsGetReal(NULL,NULL,"-heisenberg",&_Jz1,&heisenberg); CHKERRQ(ierr);
+            if(heisenberg)
+            {
+                _J1 = 0.50;
+                _J2 = 0.0;
+                _Jz2= 0.0;
+            }
+
             PetscBool BCopen = PETSC_FALSE;
             ierr = PetscOptionsGetBool(NULL,NULL,"-BCopen",&BCopen,NULL); CHKERRQ(ierr);
             if(BCopen) { _BCx=OpenBC; _BCy=OpenBC; }
@@ -79,7 +88,14 @@ namespace Hamiltonians
 
         /** Prints out some information to stdout */
         void PrintOut() const {
-            printf( "HAMILTONIAN: J1J2XYModel_SquareLattice\n");
+            if(heisenberg)
+            {
+                printf( "HAMILTONIAN: HeisenbergModel_SquareLattice\n");
+            }
+            else
+            {
+                printf( "HAMILTONIAN: J1J2XXZModel_SquareLattice\n");
+            }
             printf( "  Lx  : %lld\n", LLD(_Lx));
             printf( "  Ly  : %lld\n", LLD(_Ly));
             printf( "  J1  : %g\n", _J1);
@@ -93,7 +109,7 @@ namespace Hamiltonians
         /** Writes out some JSON information to stdout */
         void SaveOut(FILE *fp) const {
             fprintf(fp, "  \"Hamiltonian\": {\n");
-            fprintf(fp, "    \"label\":\"J1J2XYModel_SquareLattice\",\n");
+            fprintf(fp, "    \"label\":\"J1J2XXZModel_SquareLattice\",\n");
             fprintf(fp, "    \"parameters\": {\n");
             fprintf(fp, "      \"Lx\"  : %lld,\n", LLD(_Lx));
             fprintf(fp, "      \"Ly\"  : %lld,\n", LLD(_Ly));
@@ -127,6 +143,9 @@ namespace Hamiltonians
         std::vector< std::vector< PetscInt > > NeighborPairs(const PetscInt d=1) const;
 
     private:
+
+        /** Whether to use the Heisenberg model */
+        PetscBool heisenberg = PETSC_FALSE;
 
         /** Set from options */
         PetscBool set_from_options = PETSC_FALSE;
