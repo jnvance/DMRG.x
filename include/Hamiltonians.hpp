@@ -110,7 +110,14 @@ namespace Hamiltonians
         /** Writes out some JSON information to stdout */
         void SaveOut(FILE *fp) const {
             fprintf(fp, "  \"Hamiltonian\": {\n");
-            fprintf(fp, "    \"label\":\"J1J2XXZModel_SquareLattice\",\n");
+            if(heisenberg)
+            {
+                fprintf(fp, "    \"label\":\"HeisenbergModel_SquareLattice\",\n");
+            }
+            else
+            {
+                fprintf(fp, "    \"label\":\"J1J2XXZModel_SquareLattice\",\n");
+            }
             fprintf(fp, "    \"parameters\": {\n");
             fprintf(fp, "      \"Lx\"  : %lld,\n", LLD(_Lx));
             fprintf(fp, "      \"Ly\"  : %lld,\n", LLD(_Ly));
