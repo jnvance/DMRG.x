@@ -1,15 +1,121 @@
 # Usage
 
-## Example 1: Calculating correlators for a square lattice
+## Calculating correlators for a square lattice
 
-A sample source code for a stand-alone executable can be found in src/DMRG-SpinOneHalf-J1J2XYSquare.cpp
-[[md](../src/DMRG-SpinOneHalf-J1J2XYSquare.cpp)].
+A sample source code for a stand-alone executable can be found in src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp
+[[md](../src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp)].
 
-### Compilation
+### Compiling the executable
 
 To compile the executable, go to the root directory and execute the command:
 
     make all
 
-The resulting program is generated in `bin/DMRG-SpinOneHalf-J1J2XYSquare.x`.
+The resulting program is generated in `bin/DMRG-SpinOneHalf-J1J2XXZSquare.x`.
 For more details see Makefile [[md](../Makefile)]  [[dox](../../Makefile)].
+
+### Preparing the directories
+
+The application requires two directories to be specified at run-time:
+  - `DATA_DIR` for storing the calculated values
+  - `SCRATCH_DIR` for temporarily storing the matrix operators to reduce RAM usage.
+
+Typically, `DATA_DIR` should be a directory outside of the repository and should be unique for every run.
+For example, `$HOME/dmrg_data/01`.
+
+Meanwhile, when working on a cluster `SCRATCH_DIR` should be a
+directory in the high-bandwidth scratch disk, while on a local machine, it could be a subdirectory of `/tmp`.
+
+It is thus a good idea to place these values in environment variables. For example, on your local machine:
+
+    export DATA_DIR=$HOME/dmrg_data/01
+    export SCRATCH_DIR=/tmp/dmrg_scratch
+
+or on the Marconi cluster:
+
+    export DATA_DIR=$HOME/dmrg_data/01
+    export SCRATCH_DIR=$CINECA_SCRATCH/dmrg_scratch
+
+Then, we can create these directories using:
+
+    mkdir -p $DATA_DIR
+    mkdir -p $SCRATCH_DIR
+
+### Executing the program
+
+#### Basics
+
+The program may be executed on a single processor using
+
+    bin/DMRG-SpinOneHalf-J1J2XXZSquare.x <OPTIONS>
+
+or in parallel with `<N>` number of processors
+
+    mpirun -np <N> bin/DMRG-SpinOneHalf-J1J2XXZSquare.x <OPTIONS>
+
+The different parameters of the simulation may be specified using `OPTIONS`.
+The minimum required `OPTIONS` to be specified are the following:
+
+    -scratch_dir $SCRATCH_DIR -data_dir $DATA_DIR -mwarmup <MWARMUP> -msweeps <M1>,<M2>,...
+
+where `<MWARMUP>` is the number of states kept during the warmup stage and `<MX>` is the number of
+states kept during the `X`th loop of the sweep stage.
+
+The following additional general options may also be specified:
+ - `-verbose <bool>` - printout more detailed information of each DMRG step
+ - `-dry_run <bool>` - test initial inputs and do not perform warmup and sweeps
+
+#### Setting the sweep stage
+
+The sweep stage of DMRG may be performed using three possible modes. See: DMRGBlockContainer< Block, Hamiltonian >::SweepMode_t
+
+ - **SWEEP_MODE_NSWEEPS**
+    - `-nsweeps <int>`
+    - Specify the number of sweeps to be performed using the same number of states in warmup
+ - **SWEEP_MODE_MSWEEPS**
+    - `-msweeps <int>,<int>,...`
+    - Specify the number of kept states *m* for each sweep
+ - **SWEEP_MODE_TOLERANCE_TEST**
+    - `-msweeps <int>,... -maxnsweeps <int>,...`
+    - Specify the number of kept states *m* for each sweep and the maximum number of sweeps for each *m*.
+    - Sweeps with the same *m* are performed until the drop in energy is less than the truncation error or the maximum number of sweeps is reached.
+
+For a full list of these command line arguments, see the documentation for
+DMRGBlockContainer< Block, Hamiltonian >::Initialize() in DMRGBlockContainer.hpp [[md]](../include/DMRGBlockContainer.hpp)
+
+#### Setting the lattice dimensions, coupling constants and boundary conditions
+
+The system size and the interactions are set to default values but may be modified by setting the
+following options:
+ - `-Lx <int>` - lattice dimension in the longitudinal direction (growing) [def: 4]
+ - `-Ly <int>` - lattice dimension in the transverse direction [def: 4]
+ - `-J1 <float>` - coupling constant for the nearest neighbor interaction
+ - `-Jz1 <float>` - anisotropy in the z-direction for the nearest neighbor interaction
+ - `-J2 <float>` - coupling constant for the next-nearest neighbor interaction
+ - `-Jz2 <float>` - anisotropy in the z-direction for the next-nearest neighbor interaction
+
+The default coupling constants are J1 = J2 = 1.0 and Jz1 = Jz2 = 0.0 representing the J1-J2 XY Model.
+
+One can also specify a Heisenberg model using:
+ - `-heisenberg <float Jz1>`
+
+specifying the anisotropy. This makes J1 = 0.5 and J2 = Jz2 = 0.0.
+
+The default boundary condition is cylindrical (open along Lx and periodic along Ly) but one may also specify:
+ - `-BCopen` for open boundary conditions
+ - `-BCperiodic` for periodic (toroidal) boundary conditions
+
+For a full list of these command line arguments, see the documentation for
+Hamiltonians::J1J2XXZModel_SquareLattice::SetFromOptions() in Hamiltonians.hpp [[md]](../include/Hamiltonians.hpp)
+
+#### Example
+
+In this example, we want to run a simulation on our local machine with 2 processors.
+We choose the Heisenberg model with open boundary conditions on a 12x6 lattice with anisotropy Jz1 = 0.4.
+We also want to use 20 states for warmup and use SWEEP_MODE_TOLERANCE_TEST with 40, 80 and 160 states with a maximum of
+4, 2 and 2 iterations each. The corresponding command would be
+
+    mpirun -np 2 bin/DMRG-SpinOneHalf-J1J2XXZSquare.x \
+        -scratch_dir $SCRATCH_DIR -data_dir $DATA_DIR \
+        -Lx 12 -Ly 6 -heisenberg 0.4 -BCOpen \
+        -mwarmup 20 -msweeps 40,80,160 -maxnsweeps 4,2,2

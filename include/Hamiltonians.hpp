@@ -43,6 +43,7 @@ namespace Hamiltonians
 
         }
 
+        /** Set attributes from command line arguments */
         PetscErrorCode SetFromOptions()
         {
             PetscErrorCode ierr;

@@ -20,6 +20,9 @@ The Hamiltonian for this implementation takes the form:
 
 which maps to a Heisenberg model when J₁ = 1/2 and J₂ = Δ₂ = 0, and to the J1-J2 XY model when Δ₁ = Δ₂ = 0.
 
+To reduce the computational cost, we exploit *U*(1) symmetry through conservation of the total magnetization (Sz).
+We also implement a matrix-free approach in the diagonalization of the superblock Hamiltonian.
+
 Prerequisites
 -------------
 The current version requires the following libraries to be installed
@@ -48,7 +51,7 @@ To generate the corresponding **Doxygen documentation**, go to the root director
 
     doxygen
 
-This will place the documentation in docs/html.
+This will place the documentation in `docs/html/index.html` [[md]](docs/html/index.html)  [[dox]](./index.html).
 
 **NOTE:**
 Since the same markdown files were used in generating the Doxygen documentation, some links may be available only for the
