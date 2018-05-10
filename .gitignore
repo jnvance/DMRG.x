@@ -31,8 +31,5 @@
 *.out
 *.app
 
-# Documentation
-docs
-
 # Timings folder
 timings

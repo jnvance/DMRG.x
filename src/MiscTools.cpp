@@ -110,6 +110,20 @@ PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscIn
 }
 
 
+PETSC_EXTERN PetscErrorCode SplitOwnership(
+    const PetscMPIInt& rank,
+    const PetscMPIInt& nprocs ,
+    const PetscInt N,
+    PetscInt& locrows,
+    PetscInt& Istart)
+{
+    const PetscInt remrows = N % nprocs;
+    locrows = N / nprocs + PetscInt(rank < remrows);
+    Istart =  N / nprocs * rank + (rank < remrows ? rank : remrows);
+    return 0;
+}
+
+
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat)
 {
     PetscErrorCode ierr = 0;
@@ -118,6 +132,7 @@ PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const P
 
     ierr = MatCreate(comm, mat); CHKERRQ(ierr);
     ierr = MatSetSizes(*mat, PETSC_DECIDE, PETSC_DECIDE, dim, dim); CHKERRQ(ierr);
+    ierr = MatSetType(*mat, MATMPIAIJ); CHKERRQ(ierr);
     ierr = MatSetFromOptions(*mat); CHKERRQ(ierr);
     ierr = MatSetUp(*mat); CHKERRQ(ierr);
 

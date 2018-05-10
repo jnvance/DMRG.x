@@ -16,28 +16,17 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <string>
 #include "DMRGKron.hpp"
 
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
+#define CheckInitialization(init,mpi_comm) if(!init) SETERRQ(mpi_comm,1,"DMRGBlockContainer object not initialized. Call Initialize() first.");
 #define PrintLines() printf("-----------------------------------------\n")
 #define PRINTLINES() printf("=========================================\n")
 #define PrintBlocks(LEFT,RIGHT) printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT))
-
-/** Provides an alias of Side_t to follow the Sys-Env convention */
-typedef enum
-{
-    BlockSys = 0,
-    BlockEnv = 1
-}
-Block_t;
-
-typedef enum
-{
-    WarmupStep,
-    SweepStep
-}
-Step_t;
+#define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
+#define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
 
 /** Storage for information on resulting eigenpairs of the reduced density matrices */
 struct Eigen_t
@@ -54,78 +43,166 @@ bool greater_eigval(const Eigen_t &e1, const Eigen_t &e2) { return e1.eigval > e
 /** Comparison operator for sorting Eigen_t objects by increasing blkIdx (decreasing qn's) */
 bool less_blkIdx(const Eigen_t &e1, const Eigen_t &e2) { return e1.blkIdx < e2.blkIdx; }
 
-/** Storage for basic data to be saved corresponding to a call of SingleDMRGStep() */
-struct StepData
-{
-    PetscInt    NumSites_Sys;       /**< Number of sites in the input sys block */
-    PetscInt    NumSites_Env;       /**< Number of sites in the input env block */
-    PetscInt    NumSites_SysEnl;    /**< Number of sites in the enlarged sys block */
-    PetscInt    NumSites_EnvEnl;    /**< Number of sites in the enlarged env block */
-    PetscInt    NumStates_Sys;      /**< Number of states in the input sys block */
-    PetscInt    NumStates_Env;      /**< Number of states in the input env block */
-    PetscInt    NumStates_SysEnl;   /**< Number of states in the enlarged sys block */
-    PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
-    PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
-    PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
-    PetscInt    NumStates_H;        /**< Number of states used in constructing the superblock Hamiltonian */
-    PetscScalar GSEnergy;
-    PetscReal   TruncErr_Sys;
-    PetscReal   TruncErr_Env;
-};
-
-/** Storage for timings to be saved corresponding to a call of SingleDMRGStep() */
-struct TimingsData
-{
-    PetscLogDouble  tEnlr;
-    PetscLogDouble  tKron;
-    PetscLogDouble  tDiag;
-    PetscLogDouble  tRdms;
-    PetscLogDouble  tRotb;
-    PetscLogDouble  Total;
-};
-
 /** Defines a single operator to be used for performing measurements */
-struct Op{
-    Op_t OpType;
-    PetscInt idx;
+struct Op {
+    Op_t        OpType;     /**< Operator type */
+    PetscInt    idx;        /**< Site index */
+
+    /** Print out information regarding this operator */
+    PetscErrorCode PrintInfo() const {
+        std::cout << "  Op" << OpIdxToStr(OpType, idx) << std::endl;
+        return(0);
+    }
 };
 
 /** Contains and manipulates the system and environment blocks used in a single DMRG run */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {
 
+private:
+
+    /** Provides an alias of Side_t to follow the Sys-Env convention */
+    typedef enum
+    {
+        BlockSys = 0,
+        BlockEnv = 1
+    }
+    Block_t;
+
+    /** Lists the types of steps that can be performed */
+    typedef enum
+    {
+        WarmupStep,
+        SweepStep,
+        NullStep=-1
+    }
+    Step_t;
+
+    /** Storage for basic data to be saved corresponding to a call of SingleDMRGStep() */
+    struct StepData
+    {
+        PetscInt    NumSites_Sys;       /**< Number of sites in the input sys block */
+        PetscInt    NumSites_Env;       /**< Number of sites in the input env block */
+        PetscInt    NumSites_SysEnl;    /**< Number of sites in the enlarged sys block */
+        PetscInt    NumSites_EnvEnl;    /**< Number of sites in the enlarged env block */
+        PetscInt    NumStates_Sys;      /**< Number of states in the input sys block */
+        PetscInt    NumStates_Env;      /**< Number of states in the input env block */
+        PetscInt    NumStates_SysEnl;   /**< Number of states in the enlarged sys block */
+        PetscInt    NumStates_EnvEnl;   /**< Number of states in the enlarged env block */
+        PetscInt    NumStates_SysRot;   /**< Number of states in the rotated sys block */
+        PetscInt    NumStates_EnvRot;   /**< Number of states in the rotated env block */
+        PetscInt    NumStates_H;        /**< Number of states used in constructing the superblock Hamiltonian */
+        PetscScalar GSEnergy;           /**< Ground state energy */
+        PetscReal   TruncErr_Sys;       /**< Truncation error for the system block */
+        PetscReal   TruncErr_Env;       /**< Truncation error for the environment block */
+    };
+
+    /** Storage for timings to be saved corresponding to a call of SingleDMRGStep() */
+    struct TimingsData
+    {
+        PetscLogDouble  tEnlr;          /**< Enlargement of each block */
+        PetscLogDouble  tKron;          /**< Construction of the Hamiltonian using Kronecker product routines */
+        PetscLogDouble  tDiag;          /**< Diagonalization of the Hamiltonian using EPS routines */
+        PetscLogDouble  tRdms;          /**< Construction of the reduced density matrices from the ground state vector */
+        PetscLogDouble  tRotb;          /**< Rotation of the block operators */
+        PetscLogDouble  Total;          /**< Total time */
+    };
+
+    /** Describes an n-point correlator whose expectation value will be measured at the end of each sweep.
+        Thus, Sys and Env here have reflection symmetry. */
+    struct Correlator
+    {
+        PetscInt            idx;        /**< Index of the correlator in the sequence */
+        std::vector< Op >   SysOps;     /**< List of operators residing on the system block */
+        std::vector< Op >   EnvOps;     /**< List of operators residing on the environment block */
+        std::string         name;       /**< Short name of the correlator */
+        std::string         desc1;      /**< Descriptor 1: Using 2d indices */
+        std::string         desc2;      /**< Descriptor 2: Using 1d indices */
+        std::string         desc3;      /**< Descriptor 3: Using 1d indices separated into sys and env blocks */
+
+        /** Prints some information regarding the correlator */
+        PetscErrorCode PrintInfo() const {
+            std::cout << "  Correlator " << idx << ": " << name << std::endl;
+            std::cout << "    " << desc1 << std::endl;
+            std::cout << "    " << desc2 << std::endl;
+            std::cout << "    " << desc3 << std::endl;
+            return(0);
+        }
+    };
+
+    /** Context struct for results of the basis transformation that may be useful in solving the correlators */
+    struct BasisTransformation
+    {
+        std::map< PetscInt, Mat >   rdmd_list;      /**< diagonal blocks of the reduced density matrix */
+        Mat                         RotMatT;        /**< rotation matrix for the block */
+        QuantumNumbers              QN;             /**< quantum numbers context for the block */
+        PetscReal                   TruncErr;       /**< total weights of discarded states for the block */
+
+        /** Destructor that safely deallocates the PETSc matrix objects */
+        ~BasisTransformation()
+        {
+            PetscErrorCode ierr = 0;
+            for(auto& rdmd: rdmd_list){
+                ierr = MatDestroy(&(rdmd.second)); CPP_CHKERR(ierr);
+            }
+            ierr = MatDestroy(&RotMatT); CPP_CHKERR(ierr);
+        }
+    };
+
 public:
 
-    /** Initializes the container object with blocks of one site on each of the system and environment */
-    explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm)
+    /** The constructor only takes in the MPI communicator; Initialize() has to be called next. */
+    explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm){}
+
+    /** Initializes the container object with blocks of one site on each of the system and environment.
+
+        @par Options Database
+        Command-line arguments:
+         - `-verbose <bool>`
+         - `-dry_run <bool>`
+         - `-no_symm <bool>`
+         - `-do_shell <bool>`
+         - `-scratch_dir <string>`
+         - `-do_scratch_dir <bool>`
+         - `-data_dir <string>`
+         - `-do_save_prealloc <bool>`
+         - `-mstates <int>`
+         - `-mwarmup <int>`
+         - `-nsweeps <int>`
+         - `-msweeps <int>`
+
+     */
+    PetscErrorCode Initialize()
     {
-        PetscInt ierr = 0;
+        if(init) SETERRQ(mpi_comm,1,"DMRG object has already been initialized.");
+        PetscErrorCode ierr = 0;
 
         /*  Get MPI attributes */
-        ierr = MPI_Comm_size(mpi_comm, &mpi_size); assert(!ierr);
-        ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); assert(!ierr);
+        ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
+        ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
 
         /*  Initialize Hamiltonian object */
-        ierr = Ham.SetFromOptions(); assert(!ierr);
+        ierr = Ham.SetFromOptions(); CHKERRQ(ierr);
 
         /*  Initialize SingleSite which is used as added site */
-        ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); assert(!ierr);
+        ierr = SingleSite.Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
         num_sites = Ham.NumSites();
 
-        if((num_sites) < 2) throw std::runtime_error("There must be at least two total sites.");
-        if((num_sites) % 2) throw std::runtime_error("Total number of sites must be even.");
+        if((num_sites) < 2) SETERRQ1(mpi_comm,1,"There must be at least two total sites. Got %lld.", LLD(num_sites));
+        if((num_sites) % 2) SETERRQ1(mpi_comm,1,"Total number of sites must be even. Got %lld.", LLD(num_sites));
 
         /*  Get some info from command line */
-        ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); assert(!ierr);
-        ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); assert(!ierr);
-
+        ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-dry_run",&dry_run,NULL); CHKERRQ(ierr);
         /*  The scratch space to save temporary data*/
         char path[512];
         PetscBool opt_do_scratch_dir;
-        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); assert(!ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); CHKERRQ(ierr);
         do_scratch_dir = opt_do_scratch_dir;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); assert(!ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); CHKERRQ(ierr);
         if(do_scratch_dir){
             scratch_dir = std::string(path);
             if(scratch_dir.back()!='/') scratch_dir += '/';
@@ -135,33 +212,35 @@ public:
         memset(path,0,sizeof(path));
         std::string data_dir;
         PetscBool opt_data_dir;
-        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); assert(!ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); CHKERRQ(ierr);
         if(opt_data_dir){
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
         }
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); assert(!ierr);
-        ierr = SaveStepHeaders(); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); CHKERRQ(ierr);
+        ierr = SaveStepHeaders(); CHKERRQ(ierr);
         if(!mpi_rank) fprintf(fp_step,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Timings.json")).c_str(), "w", &fp_timings); assert(!ierr);
-        ierr = SaveTimingsHeaders(); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Timings.json")).c_str(), "w", &fp_timings); CHKERRQ(ierr);
+        ierr = SaveTimingsHeaders(); CHKERRQ(ierr);
         if(!mpi_rank) fprintf(fp_timings,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("EntanglementSpectra.json")).c_str(), "w", &fp_entanglement); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("EntanglementSpectra.json")).c_str(), "w", &fp_entanglement); CHKERRQ(ierr);
         if(!mpi_rank) fprintf(fp_entanglement,"[\n");
 
-        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGRun.json")).c_str(), "w", &fp_data); assert(!ierr);
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGRun.json")).c_str(), "w", &fp_data); CHKERRQ(ierr);
         if(!mpi_rank){
             fprintf(fp_data,"{\n");
             Ham.SaveOut(fp_data);
             fprintf(fp_data,",\n");
         }
 
+        ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Correlations.json")).c_str(), "w", &fp_corr); CHKERRQ(ierr);
+
         /* do_save_prealloc: default value is FALSE */
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); assert(!ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-do_save_prealloc",&do_save_prealloc,NULL); CHKERRQ(ierr);
         if(do_save_prealloc){
-            ierr = PetscFOpen(mpi_comm, (data_dir+std::string("HamiltonianPrealloc.json")).c_str(), "w", &fp_prealloc); assert(!ierr);
+            ierr = PetscFOpen(mpi_comm, (data_dir+std::string("HamiltonianPrealloc.json")).c_str(), "w", &fp_prealloc); CHKERRQ(ierr);
             if(!mpi_rank) fprintf(fp_prealloc,"[\n");
         }
 
@@ -178,31 +257,234 @@ public:
             printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
             printf( "=========================================\n");
         }
-        LoopType = WarmupStep;
+
+        /*  Setup the modes for performing the warmup and sweeps */
+        {
+            PetscBool   opt_mstates = PETSC_FALSE,
+                        opt_mwarmup = PETSC_FALSE,
+                        opt_nsweeps = PETSC_FALSE,
+                        opt_msweeps = PETSC_FALSE,
+                        opt_maxnsweeps = PETSC_FALSE;
+            PetscInt mstates, num_msweeps=1000;
+            msweeps.resize(num_msweeps);
+
+            ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,&opt_mstates); CHKERRQ(ierr);
+            ierr = PetscOptionsGetInt(NULL,NULL,"-mwarmup",&mwarmup,&opt_mwarmup); CHKERRQ(ierr);
+            ierr = PetscOptionsGetInt(NULL,NULL,"-nsweeps",&nsweeps,&opt_nsweeps); CHKERRQ(ierr);
+            ierr = PetscOptionsGetIntArray(NULL,NULL,"-msweeps",&msweeps.at(0),&num_msweeps,&opt_msweeps); CHKERRQ(ierr);
+            msweeps.resize(num_msweeps);
+
+            PetscInt num_maxnsweeps = 1000;
+            maxnsweeps.resize(num_maxnsweeps);
+            ierr = PetscOptionsGetIntArray(NULL,NULL,"-maxnsweeps",&maxnsweeps.at(0),&num_maxnsweeps,&opt_maxnsweeps); CHKERRQ(ierr);
+            maxnsweeps.resize(num_maxnsweeps);
+
+            /** @note
+                @parblock
+                This function also enforces some restrictions on command line inputs:
+                - either `-mstates` or `-mwarmup` has to be specified */
+            if(!opt_mstates && !opt_mwarmup)
+                SETERRQ(mpi_comm,1,"Either -mstates or -mwarmup has to be specified.");
+
+            /** - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other */
+            if(opt_mstates && !opt_mwarmup)
+                mwarmup = mstates;
+
+            /** - `-nsweeps` and `-msweeps` are incompatible and only one of them can be specified at a time */
+            if(opt_nsweeps && opt_msweeps)
+                SETERRQ(mpi_comm,1,"-msweeps and -nsweeps cannot both be specified at the same time.");
+
+            /** - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time */
+            if(opt_nsweeps && opt_msweeps)
+                SETERRQ(mpi_comm,1,"-nsweeps and -maxnsweeps cannot both be specified at the same time.");
+
+            if(opt_maxnsweeps && (num_maxnsweeps != num_msweeps))
+                SETERRQ2(mpi_comm,1,"-msweeps and -maxnsweeps must have the same number of items. "
+                    "Got %lld and %lld, respectively.", num_msweeps, num_maxnsweeps);
+
+            /** @endparblock */
+
+            /** @note
+                @parblock
+                The following criteria is used to decide the kind of sweeps to be performed:
+                - if `-nsweeps` is specified use SWEEP_MODE_NSWEEPS */
+            if(opt_nsweeps && !opt_msweeps)
+            {
+                sweep_mode = SWEEP_MODE_NSWEEPS;
+            }
+            else if(opt_msweeps && !opt_nsweeps)
+            {
+                if(opt_maxnsweeps)
+                {
+                    /** - if `-msweeps` and `-maxnsweeps` is specified use SWEEP_MODE_TOLERANCE_TEST */
+                    sweep_mode = SWEEP_MODE_TOLERANCE_TEST;
+                }
+                else
+                {
+                    /** - if `-msweeps` is specified, and not `-maxnsweeps`, use SWEEP_MODE_MSWEEPS */
+                    sweep_mode = SWEEP_MODE_MSWEEPS;
+                }
+            }
+            else if(!opt_msweeps && !opt_nsweeps)
+            {
+                sweep_mode = SWEEP_MODE_NULL;
+            }
+            else
+            {
+                SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
+            }
+
+            /** @endparblock */
+
+            /* printout some info */
+            if(!mpi_rank){
+                std::cout
+                    << "WARMUP\n"
+                    << "  NumStates to keep:           " << mwarmup << "\n"
+                    << "SWEEP\n"
+                    << "  Sweep mode:                  " << SweepModeToString.at(sweep_mode)
+                    << std::endl;
+
+                if(sweep_mode==SWEEP_MODE_NSWEEPS)
+                {
+                    std::cout << "  Number of sweeps:            " << nsweeps << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_MSWEEPS)
+                {
+                    std::cout << "  NumStates to keep:          ";
+                    for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
+                    std::cout << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
+                {
+                    std::cout << "  NumStates to keep, maxiter: ";
+                    for(size_t i = 0; i < msweeps.size(); ++i)
+                        std::cout << " (" << msweeps.at(i) << "," << maxnsweeps.at(i) << ")";
+                    std::cout << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_NULL)
+                {
+
+                }
+
+                PRINTLINES();
+            }
+        }
+
+        LoopType = WarmupStep; /*??????*/
         init = PETSC_TRUE;
+        return(0);
     }
 
-    /** Destroys all created blocks */
+    /** Calls the Destroy() method and deallocates container object */
     ~DMRGBlockContainer()
     {
-        PetscErrorCode ierr = Destroy(); assert(!ierr);
+        PetscErrorCode ierr = Destroy(); CPP_CHKERR(ierr);
     }
 
-    /** Sets up measurement of correlation functions at the end of each sweep */
+    /** Destroys the container object */
+    PetscErrorCode Destroy()
+    {
+        if(!init) return(0);
+        PetscInt ierr = 0;
+        ierr = SingleSite.Destroy(); CHKERRQ(ierr);
+        for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+        for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_step,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_step,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
+
+        if(!mpi_rank && !data_tabular) fprintf(fp_timings,"\n]\n");
+        if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
+
+        if(!mpi_rank) fprintf(fp_entanglement,"\n]\n");
+        ierr = PetscFClose(mpi_comm, fp_entanglement); CHKERRQ(ierr);
+
+        ierr = SaveLoopsData();
+        if(!mpi_rank) fprintf(fp_data,"\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_data); CHKERRQ(ierr);
+
+        if(!mpi_rank) fprintf(fp_corr,"\n  ]\n}\n");
+        ierr = PetscFClose(mpi_comm, fp_corr); CHKERRQ(ierr);
+
+        if(do_save_prealloc){
+            if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
+            ierr = PetscFClose(mpi_comm, fp_prealloc); CHKERRQ(ierr);
+        }
+
+        init = PETSC_FALSE;
+        return(0);
+    }
+
+    /** Sets up measurement of correlation functions at the end of each sweep. Sites are numbered according
+        to the superblock. This function is called once for each measurement. */
     PetscErrorCode SetUpCorrelation(
-        const std::vector< Op >& OpList
+        const std::vector< Op >& OpList,
+        const std::string& name,
+        const std::string& desc
         )
     {
+        CheckInitialization(init,mpi_comm);
+
+        /* Verify that the function is called before warm up and after initialization */
+        if(LoopType==SweepStep)
+            SETERRQ(mpi_comm,1,"Setup correlation functions should be called before starting the sweeps.");
+
+        /* Generate the measurement object */
+        Correlator m;
+        m.idx = measurements.size();
+        m.name = name;
+        m.desc1 = desc;
+        m.desc2 += "< ";
+        for(const Op& op: OpList) m.desc2 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
+        m.desc2 += ">";
+
+        /* Convert the input operators list into a measurement struct with site numbering according to blocks */
+        for(const Op& op: OpList){
+            if(0 <= op.idx && op.idx < num_sites/2){
+                m.SysOps.push_back(op);
+            }
+            else if(num_sites/2 <= op.idx && op.idx < num_sites ){
+                m.EnvOps.push_back({op.OpType, num_sites - 1 - op.idx});
+            }
+            else {
+                SETERRQ2(mpi_comm,1,"Operator index must be in the range [0,%D). Got %D.", num_sites, op.idx);
+            }
+        }
+
+        /* Reflection symmetry: if the resulting SysOps is empty, swap with EnvOps */
+        if(m.SysOps.empty())
+        {
+            m.SysOps = m.EnvOps;
+            m.EnvOps.clear();
+        }
+
+        /* Also printout the description in terms of local block indices */
+        m.desc3 += "< ( ";
+        for(const Op& op: m.SysOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
+        if(m.SysOps.size()==0) m.desc3 += "1 ";
+        m.desc3 += ") ⊗ ( ";
+        for(const Op& op: m.EnvOps) m.desc3 += OpToStr(op.OpType) + "_{" + std::to_string(op.idx) + "} ";
+        if(m.EnvOps.size()==0) m.desc3 += "1 ";
+        m.desc3 += ") >";
+
+        /* Printout some information */
+        // if(!mpi_rank) m.PrintInfo();
+
+        measurements.push_back(m);
         return(0);
     }
 
     /** Performs the warmup stage of DMRG.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
         of sites. All created system blocks are stored and will be represented by at most `MStates` number of basis states */
-    PetscErrorCode Warmup(
-        const PetscInt& MStates /**< [in] the maximum number of states to keep after each truncation */
-        )
+    PetscErrorCode Warmup()
     {
+        CheckInitialization(init,mpi_comm);
+        if(dry_run) return(0);
+
         PetscErrorCode ierr = 0;
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
         if(!mpi_rank) printf("WARMUP\n");
@@ -215,7 +497,7 @@ public:
         if(do_scratch_dir){
             PetscBool flg;
             ierr = PetscTestDirectory(scratch_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
-            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist.",scratch_dir.c_str());
+            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist. Please verify that -scratch_dir is specified correctly.",scratch_dir.c_str());
             if(!mpi_rank){
                 for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                     std::string path = BlockDir("Sys",iblock);
@@ -261,6 +543,12 @@ public:
                 }
             }
 
+            if(sys_ninit >= num_sites/2)
+            {
+                SETERRQ(mpi_comm,1,"No DMRG Steps were performed since all site operators were created exactly. "
+                    " Please change the system dimensions.");
+            }
+
             /*  Continuously enlarge the system block until it reaches half the total system size and use the largest
                 available environment block that forms a full lattice (multiple of nsites_cluster) */
             LoopType = WarmupStep;
@@ -288,31 +576,30 @@ public:
                     ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
                 }
                 ierr = SingleDMRGStep(
-                    sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], MStates,
-                    sys_blocks[sys_ninit],    sys_blocks[env_numsites]); CHKERRQ(ierr);
+                    sys_blocks[sys_ninit-1],  sys_blocks[env_numsites-1], mwarmup,
+                    sys_blocks[sys_ninit],    sys_blocks[env_numsites], PetscBool(sys_ninit+1==num_sites/2)); CHKERRQ(ierr);
 
                 ++sys_ninit;
 
                 #if defined(PETSC_USE_DEBUG)
-                    if(!mpi_rank && verbose) printf("  Number of system blocks: %d\n", sys_ninit);
+                    if(!mpi_rank && verbose) printf("  Number of system blocks: %lld\n", LLD(sys_ninit));
                 #endif
             }
         }
 
         if(sys_ninit != num_sites/2)
-            SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %d. Got %d.",num_sites/2, sys_ninit);
+            SETERRQ2(mpi_comm,1,"Expected sys_ninit = num_sites/2 = %lld. Got %lld.",LLD(num_sites/2), LLD(sys_ninit));
         /* Destroy environment blocks (if any) */
         for(PetscInt ienv = 0; ienv < env_ninit; ++ienv){
             ierr = env_blocks[0].Destroy(); CHKERRQ(ierr);
         }
         env_ninit = 0;
         warmed_up = PETSC_TRUE;
-        warmup_mstates = MStates;
 
         if(verbose){
             PetscPrintf(mpi_comm,
-                "  Initialized system blocks: %d\n"
-                "  Target number of sites:    %d\n\n", sys_ninit, num_sites);
+                "  Initialized system blocks: %lld\n"
+                "  Target number of sites:    %lld\n\n", LLD(sys_ninit), LLD(num_sites));
         }
         if(!mpi_rank) PRINTLINES();
         ++LoopIdx;
@@ -320,14 +607,89 @@ public:
     }
 
     /** Performs the sweep stage of DMRG. */
-    PetscErrorCode Sweep(
+    PetscErrorCode Sweeps()
+    {
+        if(dry_run) return(0);
+        PetscErrorCode ierr;
+        if(sweep_mode==SWEEP_MODE_NSWEEPS)
+        {
+            for(PetscInt isweep = 0; isweep < nsweeps; ++isweep)
+            {
+                ierr = SingleSweep(mwarmup); CHKERRQ(ierr);
+            }
+        }
+        else if(sweep_mode==SWEEP_MODE_MSWEEPS)
+        {
+            for(const PetscInt& mstates: msweeps)
+            {
+                ierr = SingleSweep(mstates); CHKERRQ(ierr);
+            }
+        }
+        else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
+        {
+            for(size_t imstates = 0; imstates < msweeps.size(); ++imstates)
+            {
+                PetscInt mstates  = msweeps.at(imstates);
+                PetscInt max_iter = maxnsweeps.at(imstates);
+                PetscInt iter = 0;
+                if(max_iter==0) continue;
+
+                PetscScalar prev_gse;
+                PetscReal   max_trn;
+                PetscReal   diff_gse;
+                bool        cont;
+
+                do
+                {
+                    prev_gse = gse;
+                    ierr = SingleSweep(mstates); CHKERRQ(ierr);
+                    diff_gse = PetscAbsScalar(gse-prev_gse);
+                    max_trn = *std::max_element(trunc_err.begin(), trunc_err.end());
+                    max_trn = std::max(max_trn,0.0);
+                    iter++;
+                    cont = (iter<max_iter) && (diff_gse > max_trn);
+
+                    if(!mpi_rank)
+                    {
+                        std::cout
+                            << "SWEEP_MODE_TOLERANCE_TEST\n"
+                            << "  Iterations / Max Iterations:       " << iter << "/" << max_iter << "\n"
+                            << "  Difference in ground state energy: " << diff_gse << "\n"
+                            << "  Largest truncation error:          " << max_trn << "\n"
+                            << "  " << (cont?"CONTINUE":"BREAK")
+                            << std::endl;
+                        PRINTLINES();
+                    }
+                }
+                while(cont);
+            }
+        }
+        else if(sweep_mode==SWEEP_MODE_NULL)
+        {
+
+        }
+        else
+        {
+            SETERRQ(mpi_comm,1,"Invalid sweep mode.");
+        }
+
+        return(0);
+    }
+
+    /** Performs a single sweep from center to right, and back to center */
+    PetscErrorCode SingleSweep(
         const PetscInt& MStates, /**< [in] the maximum number of states to keep after each truncation */
         const PetscInt& MinBlock = PETSC_DEFAULT /**< [in] the minimum block length when performing sweeps. Defaults to 1 */
         )
     {
+        CheckInitialization(init,mpi_comm);
+
         PetscErrorCode ierr;
         if(!warmed_up) SETERRQ(mpi_comm,1,"Warmup must be called first before performing sweeps.");
         if(!mpi_rank) printf("SWEEP MStates=%lld\n", LLD(MStates));
+
+        /*  Setup the attributes that will contain some information about this sweep */
+        trunc_err.clear();
 
         /*  Set a minimum number of blocks (min_block). Decide whether to set it statically or let
             the number correspond to the least number of sites needed to exactly build MStates. */
@@ -370,7 +732,7 @@ public:
                 ierr = SysBlocksActive(SysIdx); CHKERRQ(ierr);
             }
             ierr = SingleDMRGStep(sys_blocks[insys],  sys_blocks[inenv], MStates,
-                                    sys_blocks[outsys], sys_blocks[outenv]); CHKERRQ(ierr);
+                                    sys_blocks[outsys], sys_blocks[outenv], PetscBool(outsys==outenv)); CHKERRQ(ierr);
         }
         sweeps_mstates.push_back(MStates);
         ++LoopIdx;
@@ -378,38 +740,6 @@ public:
 
         return(0);
     };
-
-    /** Destroys the container object */
-    PetscErrorCode Destroy(){
-        if(!init) return(0);
-        PetscInt ierr = 0;
-        ierr = SingleSite.Destroy(); CHKERRQ(ierr);
-        for(Block blk: sys_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
-        for(Block blk: env_blocks) { ierr = blk.Destroy(); CHKERRQ(ierr); }
-
-        if(!mpi_rank && !data_tabular) fprintf(fp_step,"\n]\n");
-        if(!mpi_rank && data_tabular) fprintf(fp_step,"\n  ]\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_step); CHKERRQ(ierr);
-
-        if(!mpi_rank && !data_tabular) fprintf(fp_timings,"\n]\n");
-        if(!mpi_rank && data_tabular) fprintf(fp_timings,"\n  ]\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_timings); CHKERRQ(ierr);
-
-        if(!mpi_rank) fprintf(fp_entanglement,"\n]\n");
-        ierr = PetscFClose(mpi_comm, fp_entanglement); CHKERRQ(ierr);
-
-        ierr = SaveLoopsData();
-        if(!mpi_rank) fprintf(fp_data,"\n}\n");
-        ierr = PetscFClose(mpi_comm, fp_data); assert(!ierr);
-
-        if(do_save_prealloc){
-            if(!mpi_rank) fprintf(fp_prealloc,"\n]\n");
-            ierr = PetscFClose(mpi_comm, fp_prealloc); assert(!ierr);
-        }
-
-        init = PETSC_FALSE;
-        return(0);
-    }
 
     /** Accesses the specified system block */
     const Block& SysBlock(const PetscInt& BlockIdx) const {
@@ -432,9 +762,28 @@ public:
     /** Returns whether verbose printing is active */
     PetscBool Verbose() const { return verbose; }
 
+    /** Const reference to the Hamiltonian object for extracting its parameters */
     const Hamiltonian& HamiltonianRef() const { return Ham; }
 
 private:
+
+    /** Determines the type of sweep to be performed */
+    typedef enum
+    {
+        SWEEP_MODE_NULL,            /**< Do not perform any sweep */
+        SWEEP_MODE_NSWEEPS,         /**< Perform N sweeps with a fixed number of kept states */
+        SWEEP_MODE_MSWEEPS,         /**< Perform sweeps with a varying number of kept states */
+        SWEEP_MODE_TOLERANCE_TEST   /**< Perform sweeps with a certain number of kept states until the
+                                         a tolerance is reached, then change the number of kept states */
+    } SweepMode_t;
+
+    /** Gives the equivalent string for the sweep mode */
+    const std::map< SweepMode_t, std::string > SweepModeToString = {
+        {SWEEP_MODE_NULL, "SWEEP_MODE_NULL"},
+        {SWEEP_MODE_NSWEEPS, "SWEEP_MODE_NSWEEPS"},
+        {SWEEP_MODE_MSWEEPS, "SWEEP_MODE_MSWEEPS"},
+        {SWEEP_MODE_TOLERANCE_TEST, "SWEEP_MODE_TOLERANCE_TEST"}
+    };
 
     /** MPI Communicator */
     MPI_Comm    mpi_comm = PETSC_COMM_SELF;
@@ -451,14 +800,29 @@ private:
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
 
+    /** Tells whether to skip the warmup and sweep stages even when called */
+    PetscBool dry_run = PETSC_FALSE;
+
     /** Tells whether the object was initialized using Initialize() */
     PetscBool   warmed_up = PETSC_FALSE;
 
     /** Tells whether no quantum number symmetries will be implemented */
     PetscBool   no_symm = PETSC_FALSE;
 
+    /** Stores the mode of sweeps to be performed */
+    SweepMode_t sweep_mode = SWEEP_MODE_NULL;
+
     /** Number of states requested for warmup */
-    PetscInt    warmup_mstates = 0;
+    PetscInt    mwarmup = 0;
+
+    /** Number of sweeps to be performed with the number of states specified by mwarmup (for SWEEP_MODE_NSWEEPS only) */
+    PetscInt    nsweeps = 0;
+
+    /** Number of states for each sweep (for SWEEP_MODE_MSWEEPS and SWEEP_MODE_TOLERANCE_TEST only) */
+    std::vector< PetscInt > msweeps;
+
+    /** Maximum number of sweeps for each state in msweeps (for SWEEP_MODE_TOLERANCE_TEST only) */
+    std::vector< PetscInt > maxnsweeps;
 
     /** Records the number of states requested for each sweep, where each entry is a single
         call to Sweep() */
@@ -505,7 +869,7 @@ private:
 
     /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
         This is automatically set when indicating -scratch_dir */
-    PetscBool do_scratch_dir = PETSC_FALSE;
+    PetscBool do_scratch_dir = PETSC_TRUE;
 
     /** Tells whether data should be saved in tabular form, instead of verbose json */
     PetscBool data_tabular = PETSC_TRUE;
@@ -513,32 +877,53 @@ private:
     /** Tells whether to save preallocation data for the superblock Hamiltonian */
     PetscBool do_save_prealloc = PETSC_FALSE;
 
+    /** Whether to create an implicit MATSHELL matrix for the superblock Hamiltonian */
+    PetscBool do_shell = PETSC_TRUE;
+
     /** File to store basic data (energy, number of sites, etc) */
-    FILE *fp_step;
+    FILE *fp_step = NULL;
 
     /** File to store timings data for each section of a single iteration */
-    FILE *fp_timings;
+    FILE *fp_timings = NULL;
 
     /** File to store the entanglement spectrum of the reduced density matrices for a single iteration */
-    FILE *fp_entanglement;
+    FILE *fp_entanglement = NULL;
 
     /** File to store timings data for each section of a single iteration */
-    FILE *fp_data;
+    FILE *fp_data = NULL;
 
     /** File to store preallocation data of the superblock Hamiltonian */
     FILE *fp_prealloc = NULL;
+
+    /** File to store timings data for each section of a single iteration */
+    FILE *fp_corr = NULL;
 
     /** Global index key which must be unique for each record */
     PetscInt GlobIdx = 0;
 
     /** The type of step performed, whether as part of warmup or sweep */
-    Step_t   LoopType;
+    Step_t   LoopType = NullStep;
 
     /** Counter for this loop (the same counter for warmup and sweeps) */
     PetscInt LoopIdx = 0;
 
     /** Counter for the step inside this loop */
     PetscInt StepIdx = 0;
+
+    /** Stores the measurements to be performed at the end of each sweep */
+    std::vector< Correlator > measurements;
+
+    /** Tells whether the headers for the correlators have been printed */
+    PetscBool corr_headers_printed = PETSC_FALSE;
+
+    /** Tells whether a single entry for the correlators have been printed */
+    PetscBool corr_printed_first = PETSC_FALSE;
+
+    /** Stores the ground state energy at the end of a single dmrg step */
+    PetscScalar gse = 0.0;
+
+    /** Stores the truncation error at the end of a single dmrg step */
+    std::vector<PetscReal>  trunc_err;
 
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
@@ -547,7 +932,8 @@ private:
         Block& EnvBlock,            /**< [in] the old environment (right) block */
         const PetscInt& MStates,    /**< [in] the maximum number of states to keep */
         Block& SysBlockOut,         /**< [out] the new system (left) block */
-        Block& EnvBlockOut          /**< [out] the new environment (right) block */
+        Block& EnvBlockOut,         /**< [out] the new environment (right) block */
+        PetscBool do_measurements=PETSC_FALSE /**< [in] whether to do measurements for this step */
         )
     {
         PetscErrorCode ierr;
@@ -688,7 +1074,9 @@ private:
 
         ierr = KronBlocks.KronSumSetRedistribute(PETSC_TRUE); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumSetToleranceFromOptions(); CHKERRQ(ierr);
+        ierr = KronBlocks.KronSumSetShellMatrix(do_shell); CHKERRQ(ierr);
         ierr = KronBlocks.KronSumConstruct(Terms, H); CHKERRQ(ierr);
+        if(!H) SETERRQ(mpi_comm,1,"H is null.");
 
         ierr = PetscTime(&tkron); CHKERRQ(ierr);
         timings_data.tKron = tkron-tenlr;
@@ -737,6 +1125,10 @@ private:
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
         step_data.GSEnergy = gse_r;
+
+        if(do_shell){
+            ierr = MatDestroy_KronSumShell(&H); CHKERRQ(ierr);
+        }
         ierr = MatDestroy(&H); CHKERRQ(ierr);
 
         ierr = PetscTime(&tdiag); CHKERRQ(ierr);
@@ -754,8 +1146,6 @@ private:
         }
         #endif
 
-        /* TODO: Perform evaluation of inter-block correlation functions here */
-
         if(no_symm){
             ierr = MPI_Barrier(mpi_comm); CHKERRQ(ierr);
             SETERRQ(mpi_comm,PETSC_ERR_SUP,"Unsupported option: no_symm.");
@@ -763,13 +1153,18 @@ private:
 
         /*  Calculate the reduced density matrices in block-diagonal form, and from this we can calculate the
             (transposed) rotation matrix */
-        Mat             RotMatT_L, RotMatT_R;
-        QuantumNumbers  QN_L, QN_R;
-        PetscReal       TruncErr_L, TruncErr_R;
-        ierr = GetTruncation(KronBlocks, gsv_r, MStates, RotMatT_L, QN_L, TruncErr_L, RotMatT_R, QN_R, TruncErr_R); CHKERRQ(ierr);
-        /* TODO: Add an option to accept flg for redundant blocks */
+        BasisTransformation *BT_L, *BT_R;
+        BT_L = new BasisTransformation;
+        BT_R = new BasisTransformation;
+        ierr = GetTruncation(KronBlocks, gsv_r, MStates, *BT_L, *BT_R); CHKERRQ(ierr);
 
+        /* TODO: Add an option to accept flg for redundant blocks */
+        /* TODO: Retrieve reduced density matrices from this function */
+
+        /* TODO: Perform evaluation of inter-block correlation functions here */
         /* TODO: Perform evaluation of intra-block correlation functions */
+
+        ierr = CalculateCorrelations_BlockDiag(KronBlocks, gsv_r, *BT_L, do_measurements); CHKERRQ(ierr);
 
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
@@ -783,21 +1178,19 @@ private:
         timings_data.tRdms = trdms-tdiag;
         if(!mpi_rank && verbose) printf("* Eigendec. of RDMs:     %12.6f s\n", timings_data.tRdms);
 
-        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), QN_L); CHKERRQ(ierr);
-        ierr = SysBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
-        ierr = SysBlockOut.RotateOperators(SysBlockEnl, RotMatT_L); CHKERRQ(ierr);
+        ierr = SysBlockOut.Initialize(SysBlockEnl.NumSites(), BT_L->QN); CHKERRQ(ierr);
+        ierr = SysBlockOut.RotateOperators(SysBlockEnl, BT_L->RotMatT); CHKERRQ(ierr);
         ierr = SysBlockEnl.Destroy(); CHKERRQ(ierr);
         if(!flg){
-            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), QN_R); CHKERRQ(ierr);
-            ierr = EnvBlockEnl.EnsureRetrieved(); CHKERRQ(ierr);
-            ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, RotMatT_R); CHKERRQ(ierr);
+            ierr = EnvBlockOut.Initialize(EnvBlockEnl.NumSites(), BT_R->QN); CHKERRQ(ierr);
+            ierr = EnvBlockOut.RotateOperators(EnvBlockEnl, BT_R->RotMatT); CHKERRQ(ierr);
             ierr = EnvBlockEnl.Destroy(); CHKERRQ(ierr);
         }
 
         step_data.NumStates_SysRot = SysBlockOut.NumStates();
         step_data.NumStates_EnvRot = EnvBlockOut.NumStates();
-        step_data.TruncErr_Sys = TruncErr_L;
-        step_data.TruncErr_Env = TruncErr_R;
+        step_data.TruncErr_Sys = BT_L->TruncErr;
+        step_data.TruncErr_Env = BT_R->TruncErr;
 
         #if defined(PETSC_USE_DEBUG)
         {
@@ -813,48 +1206,64 @@ private:
         }
         #endif
 
-        ierr = MatDestroy(&RotMatT_L); CHKERRQ(ierr);
-        ierr = MatDestroy(&RotMatT_R); CHKERRQ(ierr);
-
         ierr = PetscTime(&trotb); CHKERRQ(ierr);
         timings_data.tRotb = trotb-trdms;
         if(!mpi_rank && verbose) printf("* Rotation of Operators: %12.6f s\n", timings_data.tRotb);
 
-        // TimingsData timings_data;
         timings_data.Total = trotb - t0;
         timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
 
         if(!mpi_rank && verbose){
+            const PetscReal pEnlr = 100*(timings_data.tEnlr)/timings_data.Total;
+            const PetscReal pKron = 100*(timings_data.tKron)/timings_data.Total;
+            const PetscReal pDiag = 100*(timings_data.tDiag)/timings_data.Total;
+            const PetscReal pRdms = 100*(timings_data.tRdms)/timings_data.Total;
+            const PetscReal pRotb = 100*(timings_data.tRotb)/timings_data.Total;
             printf("\n");
+            printf("  Sys Block In:\n");
+            printf("    NumStates:      %lld\n", LLD(SysBlock.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(SysBlock.NumSites()));
+            printf("  Env Block In:\n");
+            printf("    NumStates:      %lld\n", LLD(EnvBlock.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(EnvBlock.NumSites()));
+            printf("  Sys Block Enl:\n");
+            printf("    NumStates:      %lld\n", LLD(SysBlockEnl.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(SysBlockEnl.NumSites()));
+            printf("  Env Block Enl:\n");
+            printf("    NumStates:      %lld\n", LLD(EnvBlockEnl.Magnetization.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(EnvBlockEnl.NumSites()));
             printf("  Superblock:\n");
-            printf("    NumStates:   %lld\n", LLD(KronBlocks.NumStates()));
-            printf("    NumSites:    %lld\n", LLD(NumSitesTotal));
-            printf("    Energy:      %-10.10g\n", gse_r);
-            printf("    Energy/site: %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
+            printf("    NumStates:      %lld\n", LLD(KronBlocks.NumStates()));
+            printf("    NumSites:       %lld\n", LLD(NumSitesTotal));
+            printf("    Energy:         %-10.10g\n", gse_r);
+            printf("    Energy/site:    %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
             printf("  Sys Block Out\n"
-                   "    NumStates: %lld\n"
-                   "    TrunError: %g\n", LLD(QN_L.NumStates()), TruncErr_L);
+                   "    NumStates:      %lld\n"
+                   "    TrunError:      %g\n", LLD(BT_L->QN.NumStates()), BT_L->TruncErr);
             printf("  Env Block Out\n"
-                   "    NumStates: %lld\n"
-                   "    TrunError: %g\n", LLD(QN_R.NumStates()), TruncErr_R);
+                   "    NumStates:      %lld\n"
+                   "    TrunError:      %g\n", LLD(BT_R->QN.NumStates()), BT_R->TruncErr);
             printf("\n");
             printf("  Total Time:              %12.6f s\n", timings_data.Total);
-            printf("    Add One Site:          %12.6f s \t%6.2f %%\n",
-                timings_data.tEnlr, 100*(timings_data.tEnlr)/timings_data.Total);
-            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n",
-                timings_data.tKron, 100*(timings_data.tKron)/timings_data.Total);
-            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n",
-                timings_data.tDiag, 100*(timings_data.tDiag)/timings_data.Total);
-            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n",
-                timings_data.tRdms, 100*(timings_data.tRdms)/timings_data.Total);
-            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n",
-                timings_data.tRotb, 100*(timings_data.tRotb)/timings_data.Total);
+            printf("    Add One Site:          %12.6f s \t%6.2f %%\n", timings_data.tEnlr, pEnlr);
+            printf("    Build Superblock H:    %12.6f s \t%6.2f %%\n", timings_data.tKron, pKron);
+            printf("    Solve Ground State:    %12.6f s \t%6.2f %%\n", timings_data.tDiag, pDiag);
+            printf("    Eigendec. of RDMs:     %12.6f s \t%6.2f %%\n", timings_data.tRdms, pRdms);
+            printf("    Rotation of Operators: %12.6f s \t%6.2f %%\n", timings_data.tRotb, pRotb);
             printf("\n");
         }
+
+        /* Store some results to class attributes */
+        gse = gse_r;
+        trunc_err.push_back(BT_L->TruncErr);
 
         /* Save data */
         ierr = SaveStepData(step_data); CHKERRQ(ierr);
         ierr = SaveTimingsData(timings_data); CHKERRQ(ierr);
+
+        /* Delete context */
+        delete BT_L;
+        delete BT_R;
 
         /* Increment counters */
         ++GlobIdx;
@@ -867,12 +1276,8 @@ private:
         const KronBlocks_t& KronBlocks, /**< [in] Context for quantum numbers aware Kronecker product */
         const Vec& gsv_r,               /**< [in] Real part of the superblock ground state vector */
         const PetscInt& MStates,        /**< [in] the maximum number of states to keep */
-        Mat& RotMatT_L,                 /**< [out] rotation matrix for the system (left) block */
-        QuantumNumbers& QN_L,           /**< [out] quantum numbers context for the system (left) block */
-        PetscReal& TruncErr_L,          /**< [out] total weights of discarded states for the system (left) block */
-        Mat& RotMatT_R,                 /**< [out] rotation matrix for the environment (right) block */
-        QuantumNumbers& QN_R,           /**< [out] quantum numbers context for the environment (right) block */
-        PetscReal& TruncErr_R           /**< [out] total weights of discarded states for the environment (right) block */
+        BasisTransformation& BT_L,      /**< [out] basis transformation context for the system (left) block */
+        BasisTransformation& BT_R       /**< [out] basis transformation context for the environment (right) block */
         )
     {
         PetscErrorCode ierr;
@@ -907,7 +1312,6 @@ private:
 
         std::vector< Eigen_t > eigen_L, eigen_R;        /* Container for eigenvalues of the RDMs */
         std::vector< EPS > eps_list_L, eps_list_R;      /* Container for EPS objects */
-        std::vector< Mat > rdmd_list_L, rdmd_list_R;    /* Container for block diagonals of RMDs */
         std::vector< Vec > rdmd_vecs_L, rdmd_vecs_R;    /* Container for the corresponding vectors */
 
         /*  Do eigendecomposition on root process  */
@@ -969,7 +1373,7 @@ private:
 
                 #if defined(PETSC_USE_DEBUG)
                 if(flg){
-                    printf(" KB QN: %-6g  Left :%3d  Right: %3d\n", KronBlocks.QN(idx), Idx_L, Idx_R)   ;
+                    printf(" KB QN: %-6g  Left :%3lld  Right: %3lld\n", KronBlocks.QN(idx), LLD(Idx_L), LLD(Idx_R))   ;
                     ierr = MatPeek(rdmd_L, "rdmd_L"); CHKERRQ(ierr);
                     ierr = MatPeek(rdmd_R, "rdmd_R"); CHKERRQ(ierr);
                     printf("\n");
@@ -978,8 +1382,8 @@ private:
 
                 eps_list_L.push_back(eps_L);
                 eps_list_R.push_back(eps_R);
-                rdmd_list_L.push_back(rdmd_L);
-                rdmd_list_R.push_back(rdmd_R);
+                BT_L.rdmd_list[Idx_L] = rdmd_L;
+                BT_R.rdmd_list[Idx_R] = rdmd_R;
 
                 /*  Prepare the vectors for getting the eigenvectors */
                 Vec v_L, v_R;
@@ -992,9 +1396,11 @@ private:
             #if defined(PETSC_USE_DEBUG)
             if(flg){
                 printf("\nBefore sorting\n");
-                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n");
-                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n\n");
             }
             #endif
@@ -1011,9 +1417,11 @@ private:
             #if defined(PETSC_USE_DEBUG)
             if(flg){
                 printf("\nAfter sorting\n");
-                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n");
-                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n\n");
             }
             #endif
@@ -1034,9 +1442,11 @@ private:
         const PetscInt NStates_L = KronBlocks.LeftBlockRef().Magnetization.NumStates();
         const PetscInt NStates_R = KronBlocks.RightBlockRef().Magnetization.NumStates();
 
-        /*  The rotation matrices take have the dimension m x NStates so that it is actually*/
-        ierr = MatCreate(mpi_comm, &RotMatT_L); CHKERRQ(ierr);
-        ierr = MatCreate(mpi_comm, &RotMatT_R); CHKERRQ(ierr);
+        /*  The rotation matrices take have the dimension m x NStates */
+        ierr = MatCreate(mpi_comm, &BT_L.RotMatT); CHKERRQ(ierr);
+        ierr = MatCreate(mpi_comm, &BT_R.RotMatT); CHKERRQ(ierr);
+        Mat& RotMatT_L = BT_L.RotMatT;
+        Mat& RotMatT_R = BT_R.RotMatT;
         ierr = MatSetSizes(RotMatT_L, PETSC_DECIDE, PETSC_DECIDE, m_L, NStates_L); CHKERRQ(ierr);
         ierr = MatSetSizes(RotMatT_R, PETSC_DECIDE, PETSC_DECIDE, m_R, NStates_R); CHKERRQ(ierr);
         ierr = MatSetFromOptions(RotMatT_L); CHKERRQ(ierr);
@@ -1045,12 +1455,14 @@ private:
         ierr = MatSetUp(RotMatT_R); CHKERRQ(ierr);
 
         #if defined(PETSC_USE_DEBUG)
-            if(flg && !mpi_rank) printf("    m_L: %-d  m_R: %-d\n\n", m_L, m_R);
+            if(flg && !mpi_rank) printf("    m_L: %-lld  m_R: %-lld\n\n", LLD(m_L), LLD(m_R));
         #endif
 
         std::vector< PetscReal > qn_list_L, qn_list_R;
         std::vector< PetscInt >  qn_size_L, qn_size_R;
         PetscInt numBlocks_L, numBlocks_R;
+        PetscReal& TruncErr_L = BT_L.TruncErr;
+        PetscReal& TruncErr_R = BT_R.TruncErr;
         if(!mpi_rank)
         {
             /* Take only the first m states and sort in ascending order of blkIdx */
@@ -1062,9 +1474,11 @@ private:
             #if defined(PETSC_USE_DEBUG)
             if(flg) {
                 printf("\n\n");
-                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_L) printf(" L: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n");
-                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5d eps: %-5d blk: %-5d\n", eig.eigval, eig.seqIdx, eig.epsIdx, eig.blkIdx);
+                for(const Eigen_t& eig: eigen_R) printf(" R: %-16.10g seq: %-5lld eps: %-5lld blk: %-5lld\n",
+                    eig.eigval, LLD(eig.seqIdx), LLD(eig.epsIdx), LLD(eig.blkIdx));
                 printf("\n\n");
             }
             #endif
@@ -1098,9 +1512,9 @@ private:
 
             #if defined(PETSC_USE_DEBUG)
             if(flg){
-                for(PetscInt i = 0; i < numBlocks_L; ++i) printf("    %g  %d\n", qn_list_L[i], qn_size_L[i]);
+                for(PetscInt i = 0; i < numBlocks_L; ++i) printf("    %g  %lld\n", qn_list_L[i], LLD(qn_size_L[i]));
                 printf("\n");
-                for(PetscInt i = 0; i < numBlocks_R; ++i) printf("    %g  %d\n", qn_list_R[i], qn_size_R[i]);
+                for(PetscInt i = 0; i < numBlocks_R; ++i) printf("    %g  %lld\n", qn_list_R[i], LLD(qn_size_R[i]));
             }
             #endif
         }
@@ -1136,8 +1550,8 @@ private:
         }
         #endif
 
-        ierr = QN_L.Initialize(mpi_comm, qn_list_L, qn_size_L); CHKERRQ(ierr);
-        ierr = QN_R.Initialize(mpi_comm, qn_list_R, qn_size_R); CHKERRQ(ierr);
+        ierr = BT_L.QN.Initialize(mpi_comm, qn_list_L, qn_size_L); CHKERRQ(ierr);
+        ierr = BT_R.QN.Initialize(mpi_comm, qn_list_R, qn_size_R); CHKERRQ(ierr);
 
         for(EPS& eps: eps_list_L){
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
@@ -1145,12 +1559,12 @@ private:
         for(EPS& eps: eps_list_R){
             ierr = EPSDestroy(&eps); CHKERRQ(ierr);
         }
-        for(Mat& mat: rdmd_list_L){
-            ierr = MatDestroy(&mat); CHKERRQ(ierr);
-        }
-        for(Mat& mat: rdmd_list_R){
-            ierr = MatDestroy(&mat); CHKERRQ(ierr);
-        }
+        // for(Mat& mat: rdmd_list_L){
+        //     ierr = MatDestroy(&mat); CHKERRQ(ierr);
+        // }
+        // for(Mat& mat: rdmd_list_R){
+        //     ierr = MatDestroy(&mat); CHKERRQ(ierr);
+        // }
         for(Vec& vec: rdmd_vecs_L){
             ierr = VecDestroy(&vec); CHKERRQ(ierr);
         }
@@ -1207,7 +1621,7 @@ private:
         return(0);
     }
 
-    /** FIlls the rotation matrix assumming that the reduced density matrix has a block diagonal structure */
+    /** Fills the rotation matrix assumming that the reduced density matrix has a block diagonal structure */
     PetscErrorCode FillRotation_BlockDiag(
         const std::vector< Eigen_t >&   eigen_list,     /**< [in] full list of eigenstates */
         const std::vector< EPS >&       eps_list,       /**< [in] ordered list of EPS contexts */
@@ -1261,6 +1675,374 @@ private:
         return(0);
     }
 
+    /** Calculates the correlation functions. Must be called only at the end of a sweep since corresponding partitioning of the
+        lattice sites are embedded in the generation of Measurement objects, and reflection symmetry is assumed by taking in only
+        the system block. NOTE: May be generalized if needed. */
+    PetscErrorCode CalculateCorrelations_BlockDiag(
+        KronBlocks_t& KronBlocks, /**< [in] Kronblocks context of the superblock */
+        const Vec& gsv_r,               /**< [in] Real part of the superblock ground state vector */
+        const BasisTransformation& BT,  /**< [in] BasisTransformation context containing reduced density matrix */
+        const PetscBool flg=PETSC_TRUE  /**< [in] Whether to do the measurements */
+        )
+    {
+        if(!mpi_rank)
+        {
+            if(!corr_headers_printed)
+            {
+                fprintf(fp_corr, "{\n");
+                fprintf(fp_corr, "  \"info\" :\n");
+                fprintf(fp_corr, "  [\n");
+
+                for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                    if(icorr) fprintf(fp_corr, ",\n");
+                    Correlator& c = measurements[icorr];
+                    fprintf(fp_corr, "    {\n");
+                    fprintf(fp_corr, "      \"corrIdx\" : %lld,\n", LLD(c.idx));
+                    fprintf(fp_corr, "      \"name\"    : \"%s\",\n",  c.name.c_str());
+                    fprintf(fp_corr, "      \"desc1\"   : \"%s\",\n", c.desc1.c_str());
+                    fprintf(fp_corr, "      \"desc2\"   : \"%s\",\n", c.desc2.c_str());
+                    fprintf(fp_corr, "      \"desc3\"   : \"%s\"\n",  c.desc3.c_str());
+                    fprintf(fp_corr, "    }");
+                }
+
+                fprintf(fp_corr, "\n");
+                fprintf(fp_corr, "  ],\n");
+                fprintf(fp_corr, "  \"values\" :\n");
+                fprintf(fp_corr, "  [\n");
+                fflush(fp_corr);
+
+                corr_headers_printed = PETSC_TRUE;
+            }
+        }
+
+        if(!flg) return(0);
+        PetscErrorCode ierr;
+        std::vector< PetscScalar > CorrValues(measurements.size());
+
+        PetscBool debug = PETSC_FALSE; /* FIXME: Remove later */
+        if(debug && !mpi_rank) std::cout << "\n\n====" << __FUNCTION__ << "====" << std::endl;
+
+        #if 1
+        /* Explicitly build the operators in the Kronecker product space */
+        std::vector< Correlator > CorrSysEnv = measurements;
+        #else
+        /* Separately handle the case of a correlator of operators living only on the system block */
+        /*  Classify the correlators accordingly */
+        std::vector< Correlator > CorrSys;     /* For operators residing in the system block */
+        std::vector< Correlator > CorrSysEnv;  /* For operators residing in the system and environment blocks */
+
+        for(const Correlator& m: measurements){
+            if(m.SysOps.size()!=0 && m.EnvOps.size()==0){
+                CorrSys.push_back(m);
+            }
+            else if (m.SysOps.size()==0 && m.EnvOps.size()!=0){
+                SETERRQ(mpi_comm,1,"Reflection symmetry is imposed. Empty SysOps and non-empty EnvOps not permitted.");
+            }
+            else if (m.SysOps.size()!=0 && m.EnvOps.size()!=0){
+                CorrSysEnv.push_back(m);
+            }
+            else {
+                /* TODO: Skip correlators with no operators and simply return the  */
+            }
+        }
+
+        /*---- For correlators in the system block ----*/
+        /*  Send the elements of the reduced density matrix (diagonals) to their corresponding processors
+            Since each processor has a complete copy of KronBlocks, each one is aware of how much data
+            it will receive. */
+        if(CorrSys.size() > 0)
+        {
+
+            std::vector< PetscInt > Sizes = KronBlocks.LeftBlockRef().Magnetization.Sizes();
+            std::vector< PetscInt > Offsets = KronBlocks.LeftBlockRef().Magnetization.Offsets();
+            PetscInt NumSectors = KronBlocks.LeftBlockRef().Magnetization.NumSectors();
+            PetscInt NumStates = KronBlocks.LeftBlockRef().Magnetization.NumStates();
+
+            /* Verify the sizes of the reduced density matrix diagonals */
+            if(!mpi_rank){
+                for(PetscInt i=0; i<NumSectors; ++i){
+                    PetscInt M,N;
+                    if(BT.rdmd_list.find(i)==BT.rdmd_list.end()) continue;
+                    ierr = MatGetSize(BT.rdmd_list.at(i), &M, &N); CHKERRQ(ierr);
+                    if(M!=N)
+                        SETERRQ2(PETSC_COMM_SELF,1,"Matrix must be square. Got %D x %D instead.",M,N);
+                    if(M!=Sizes.at(i))
+                        SETERRQ2(mpi_comm,1,"Incorrect size. Expected %D. Got %D.", M, Sizes.at(i));
+                }
+            }
+
+            /* Load only needed operator matrices manually */
+            ierr = KronBlocks.LeftBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+
+            /* TODO: Implement in a subcommunicator */
+            MPI_Comm& sub_comm = mpi_comm;
+            {
+                PetscMPIInt sub_rank, sub_size;
+                ierr = MPI_Comm_rank(sub_comm, &sub_rank); CHKERRQ(ierr);
+                ierr = MPI_Comm_size(sub_comm, &sub_size); CHKERRQ(ierr);
+
+                /* Prepare an MPI dense matrix for the reduced density matrix */
+                Mat rho;
+                ierr = MatCreateDense(sub_comm,PETSC_DECIDE,PETSC_DECIDE,NumStates,NumStates,NULL,&rho); CHKERRQ(ierr);
+                ierr = MatSetOption(rho,MAT_ROW_ORIENTED,PETSC_TRUE); CHKERRQ(ierr);
+                if(!mpi_rank)
+                {
+                    PetscScalar *v;
+                    PetscInt *idx, max_size = 0;
+                    for(const PetscInt& s: Sizes) max_size = (max_size < s) ? s : max_size;
+                    ierr = PetscCalloc1(max_size,&idx); CHKERRQ(ierr);
+                    for(PetscInt iblk=0; iblk<NumSectors; ++iblk)
+                    {
+                        /*  Manually take care of the possiblity that a blk was not included in the sectors used.
+                            Although this is unlikely to happen when imposing symmetry and the target magnetization is zero */
+                        if(BT.rdmd_list.find(iblk) == BT.rdmd_list.end()) continue;
+                        PetscInt size = Sizes[iblk];
+                        PetscInt shift = Offsets[iblk];
+                        for(PetscInt is=0; is<size; ++is)
+                        {
+                            idx[is] = is + shift;
+                        }
+                        ierr = MatDenseGetArray(BT.rdmd_list.at(iblk), &v); CHKERRQ(ierr);
+                        for(PetscInt is=0; is<size; ++is)
+                        {
+                            PetscInt row = is + shift;
+                            ierr = MatSetValues(rho,1,&row,size,idx,v+is*size,INSERT_VALUES); CHKERRQ(ierr);
+                        }
+                        ierr = MatDenseRestoreArray(BT.rdmd_list.at(iblk), &v); CHKERRQ(ierr);
+                    }
+                    ierr = PetscFree(idx); CHKERRQ(ierr);
+                }
+                ierr = MatAssemblyBegin(rho, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+                ierr = MatAssemblyEnd(rho, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+
+                std::map< std::string, Mat > OpMats;
+                std::vector< Mat > AllOpProds; /* Store only the created operator products to avoid duplication */
+                std::vector< Mat > OpProds; /* Points to a matrix in AllOpProds or OpMats */
+
+                ierr = CalculateOperatorProducts(sub_comm,CorrSys,BlockSys,
+                    KronBlocks.LeftBlockRefMod(),OpMats,AllOpProds,OpProds); CHKERRQ(ierr);
+
+                /* Allocate space to store the local trace of each correlator */
+                PetscScalar *tr_rho;
+                ierr = PetscCalloc1(CorrSys.size(),&tr_rho); CHKERRQ(ierr);
+
+                /* Obtain the trace of the matrix products with the reduced density matrix */
+                PetscInt ncols_rho, ncols_corr, rstart, rend;
+                const PetscScalar *vals_rho, *vals_corr;
+                const PetscInt *cols_corr;
+                ierr = MatGetOwnershipRange(rho,&rstart,&rend); CHKERRQ(ierr);
+                for(PetscInt irow=rstart; irow<rend; ++irow)
+                {
+                    ierr = MatGetRow(rho,irow,&ncols_rho,NULL,&vals_rho); CHKERRQ(ierr);
+                    for(size_t icorr=0; icorr<CorrSys.size(); ++icorr)
+                    {
+                        ierr = MatGetRow(OpProds.at(icorr),irow,&ncols_corr,&cols_corr,&vals_corr); CHKERRQ(ierr);
+                        PetscScalar y = 0;
+                        for(PetscInt icol=0; icol<ncols_corr; ++icol)
+                        {
+                            y += vals_corr[icol]*vals_rho[cols_corr[icol]];
+                        }
+                        tr_rho[icorr] += y;
+                        ierr = MatRestoreRow(OpProds.at(icorr),irow,&ncols_corr,&cols_corr,&vals_corr); CHKERRQ(ierr);
+                    }
+                    ierr = MatRestoreRow(rho,irow,&ncols_rho,NULL,&vals_rho); CHKERRQ(ierr);
+                }
+
+                /* Do an MPI_Allreduce to sum all values */
+                ierr = MPI_Allreduce(MPI_IN_PLACE, tr_rho, PetscMPIInt(CorrSys.size()), MPIU_SCALAR, MPI_SUM, sub_comm); CHKERRQ(ierr);
+
+                for(size_t icorr=0; icorr<CorrSys.size(); ++icorr)
+                {
+                    CorrValues[CorrSys[icorr].idx] = tr_rho[icorr];
+                }
+
+                ierr = PetscFree(tr_rho); CHKERRQ(ierr);
+                for(Mat& op_prod: AllOpProds){
+                    ierr = MatDestroy(&op_prod); CHKERRQ(ierr);
+                }
+                for(auto& op_mat: OpMats){
+                    ierr = MatDestroy(&(op_mat.second)); CHKERRQ(ierr);
+                }
+
+                ierr = MatDestroy(&rho); CHKERRQ(ierr);
+            }
+        }
+        #endif
+        /* TODO: Also calculate CorrSys Quantities using the CorrSysEnv routine */
+
+        /*---- For correlators in the system and environment block ----*/
+        if(CorrSysEnv.size() > 0)
+        {
+            if(debug && !mpi_rank) std::cout << "\nCorrSysEnv" << std::endl;
+            if(debug && !mpi_rank) for(const Correlator& m: CorrSysEnv) m.PrintInfo();
+
+            /* Prepare products of the system and environment block operators */
+            std::map< std::string, Mat > OpMats;
+            std::vector< Mat > AllOpProds; /* Store only the created operator products to avoid duplication */
+            std::vector< Mat > OpProdsSys, OpProdsEnv; /* Points to a matrix in AllOpProds or OpMats */
+
+            ierr = KronBlocks.LeftBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+            ierr = KronBlocks.RightBlockRefMod().EnsureSaved(); CHKERRQ(ierr);
+
+            ierr = CalculateOperatorProducts(MPI_COMM_NULL, CorrSysEnv, BlockSys,
+                KronBlocks.LeftBlockRefMod(), OpMats, AllOpProds, OpProdsSys); CHKERRQ(ierr);
+
+            ierr = CalculateOperatorProducts(MPI_COMM_NULL, CorrSysEnv, BlockEnv,
+                KronBlocks.RightBlockRefMod(), OpMats, AllOpProds, OpProdsEnv); CHKERRQ(ierr);
+
+            for(size_t icorr=0; icorr < CorrSysEnv.size(); ++icorr)
+            {
+                /*  FIXME: Assume Sz-type inputs.
+                    TODO: implement a guesser based on the constituent operator types in the correlator */
+
+                /*  Prepare the kron shell matrix */
+                Mat KronOp = NULL;
+                Vec Op_Vec;
+                PetscScalar Vec_Op_Vec;
+                int OpTypeSys = OpSz;
+                int OpTypeEnv = OpSz;
+                for(const Op& op : CorrSysEnv[icorr].SysOps) OpTypeSys += int(op.OpType);
+                for(const Op& op : CorrSysEnv[icorr].EnvOps) OpTypeEnv += int(op.OpType);
+                ierr = KronBlocks.KronConstruct(OpProdsSys.at(icorr), Op_t(OpTypeSys),
+                                                OpProdsEnv.at(icorr), Op_t(OpTypeEnv), KronOp); CHKERRQ(ierr);
+                ierr = MatCreateVecs(KronOp, NULL, &Op_Vec); CHKERRQ(ierr);
+                ierr = MatMult(KronOp, gsv_r, Op_Vec); CHKERRQ(ierr);
+                ierr = VecDot(Op_Vec, gsv_r, &Vec_Op_Vec); CHKERRQ(ierr);
+                ierr = MatDestroy_KronSumShell(&KronOp); CHKERRQ(ierr);
+                ierr = MatDestroy(&KronOp); CHKERRQ(ierr);
+                ierr = VecDestroy(&Op_Vec); CHKERRQ(ierr);
+
+                CorrValues[CorrSysEnv[icorr].idx] = Vec_Op_Vec;
+            }
+
+            for(Mat& op_prod: AllOpProds){
+                ierr = MatDestroy(&op_prod); CHKERRQ(ierr);
+            }
+            for(auto& op_mat: OpMats){
+                ierr = MatDestroy(&(op_mat.second)); CHKERRQ(ierr);
+            }
+        }
+
+        if(debug && !mpi_rank){
+            std::cout << "\nValues" << std::endl;
+            for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                measurements[icorr].PrintInfo();
+                std::cout << "     = " << CorrValues[icorr] << std::endl << std::endl;
+            }
+        }
+
+        /* Print results to file */
+        if(!mpi_rank)
+        {
+            if(!corr_printed_first)
+            {
+                corr_printed_first = PETSC_TRUE;
+            }
+            else
+            {
+                fprintf(fp_corr, ",\n");
+            }
+            fprintf(fp_corr, "    [");
+            for(size_t icorr=0; icorr<measurements.size(); ++icorr){
+                if(icorr) fprintf(fp_corr, ",");
+                fprintf(fp_corr, " %g", CorrValues[icorr]);
+            }
+            fprintf(fp_corr, " ]");
+            fflush(fp_corr);
+        }
+
+        if(debug && !mpi_rank) std::cout << "\n\n" << std::endl;
+        return(0);
+    }
+
+    /** Calculates the products of operators that belong to a single block represented by the same basis. */
+    PetscErrorCode CalculateOperatorProducts(
+        const MPI_Comm& comm_in,                    /**< [in] communicator */
+        const std::vector< Correlator >& Corr,      /**< [in] list of correlators */
+        const Block_t& BlockType,                   /**< [in] block type (whether BlockSys or BlockEnv) */
+        Block& BlockRef,                            /**< [in] reference to the block (non-const since RetrieveOperator
+                                                              requires modification of the block object) */
+        std::map< std::string, Mat >& OpMats,       /**< [out] maps operator key strings to corresponding matrices */
+        std::vector< Mat >& AllOpProds,             /**< [out] list of all operator products generated and to be destroyed */
+        std::vector< Mat >& OpProds                 /**< [out] list of operator products requested in Corr */
+        )
+    {
+        PetscErrorCode ierr;
+        MPI_Comm comm = (comm_in==MPI_COMM_NULL) ? mpi_comm : comm_in;
+
+        for(size_t icorr=0; icorr<Corr.size(); ++icorr)
+        {
+            const Correlator& c = Corr.at(icorr);
+            const std::vector< Op >& OpsList = (BlockType == BlockSys)?c.SysOps:c.EnvOps;
+            for(const Op& o : OpsList)
+            {
+                std::string key = OpIdxToStr(o.OpType,o.idx);
+                if(OpMats.find(key)==OpMats.end())
+                {
+                    OpMats[key] = NULL;
+                    ierr = BlockRef.RetrieveOperator(
+                        OpToStr(o.OpType), o.idx, OpMats[key], comm); CHKERRQ(ierr);
+                }
+            }
+            if(OpsList.empty())
+            {
+                std::string key = "eye";
+                if(OpMats.find(key)==OpMats.end())
+                {
+                    Mat eye = NULL;
+                    PetscInt nstates = BlockRef.NumStates();
+                    ierr = MatEyeCreate(comm, eye, nstates); CHKERRQ(ierr);
+                    OpMats[key] = eye;
+                }
+            }
+        }
+
+        /* Prepare the operator products for each correlator */
+        OpProds.resize(Corr.size());
+        for(size_t icorr=0; icorr<Corr.size(); ++icorr)
+        {
+            const Correlator& c = Corr.at(icorr);
+            const std::vector< Op >& OpsList = (BlockType == BlockSys)?c.SysOps:c.EnvOps;
+            if(OpsList.size()==1)
+            {
+                /* Point to a matrix in OpMats */
+                OpProds.at(icorr) = GetOpMats(OpMats,OpsList,0);
+            }
+            else if(OpsList.size()>1)
+            {
+                /* Generate the operator products */
+                Mat Prod0=NULL, Prod1=NULL;
+                /* Perform the first multiplication */
+                ierr = MatMatMult(GetOpMats(OpMats,OpsList,0),GetOpMats(OpMats,OpsList,1),
+                    MAT_INITIAL_MATRIX,PETSC_DEFAULT,&Prod1); CHKERRQ(ierr);
+
+                /* Iterate over a swap and multiply*/
+                PetscInt nmults = OpsList.size()-1;
+                for(PetscInt imult=1; imult<nmults; ++imult)
+                {
+                    ierr = MatDestroy(&Prod0); CHKERRQ(ierr);
+                    Prod0 = Prod1;
+                    Prod1 = NULL;
+                    ierr = MatMatMult(Prod0,GetOpMats(OpMats,OpsList,imult+1),MAT_INITIAL_MATRIX,PETSC_DEFAULT,&Prod1); CHKERRQ(ierr);
+                }
+                ierr = MatDestroy(&Prod0); CHKERRQ(ierr);
+                AllOpProds.push_back(Prod1);
+                OpProds.at(icorr) = Prod1;
+            }
+            else if(OpsList.empty())
+            {
+                /* Populate with an identity instead of throwing an error */
+                OpProds.at(icorr) = OpMats["eye"];
+            }
+            else
+            {
+                SETERRQ1(mpi_comm,1,"%s should be non-empty.",(BlockType == BlockSys)?"SysOps":"EnvOps");
+            }
+        }
+
+        return(0);
+    }
+
     /** Ensure that required blocks are loaded while unrequired blocks are saved */
     PetscErrorCode SysBlocksActive(const std::set< PetscInt >& SysIdx)
     {
@@ -1281,7 +2063,8 @@ private:
     }
 
     /** Returns the path to the directory for the storage of a specific system block */
-    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock){
+    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock)
+    {
         std::ostringstream oss;
         oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
         return oss.str();
@@ -1476,7 +2259,7 @@ private:
         if(mpi_rank) return(0);
 
         fprintf(fp_data,"  \"Warmup\": {\n");
-        fprintf(fp_data,"    \"MStates\": %lld\n", LLD(warmup_mstates));
+        fprintf(fp_data,"    \"MStates\": %lld\n", LLD(mwarmup));
         fprintf(fp_data,"  },\n");
         fprintf(fp_data,"  \"Sweeps\": {\n");
         fprintf(fp_data,"    \"MStates\": [");
@@ -1491,8 +2274,10 @@ private:
         return(0);
     }
 
-
 };
+
+#undef OpIdxToStr
+#undef GetOpMats
 
 /**
     @}

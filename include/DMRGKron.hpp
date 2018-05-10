@@ -20,6 +20,97 @@
     - 3rd entry:  PetscInt - Number of states in the block */
 typedef std::tuple<PetscReal, PetscInt, PetscInt, PetscInt> KronBlock_t;
 
+PETSC_EXTERN PetscErrorCode MatMult_KronSumShell(Mat A, Vec x, Vec y);
+
+/** A single term of the KronSum.
+    If one matrix is set to null, then that matrix is interpreted as an identity */
+struct KronSumTerm {
+    PetscScalar a;
+    Op_t OpTypeA;
+    Mat A;
+    Op_t OpTypeB;
+    Mat B;
+};
+
+struct KronSumCtx {
+    PetscInt rstart=0;  /**< Starting index of local rows */
+    PetscInt rend=0;    /**< Index after last of local rows, exclusive */
+    PetscInt lrows=0;   /**< Number of local rows */
+    PetscInt cstart=0;  /**< Starting index of local columns */
+    PetscInt cend=0;    /**< Index after last of local columns, exclusive */
+    PetscInt lcols=0;   /**< Number of local columns */
+    PetscInt Nrows=0;   /**< Total number of rows */
+    PetscInt Ncols=0;   /**< Total number of columns */
+
+    /** Number of required rows of the left and right blocks */
+    PetscInt NReqRowsL, NReqRowsR;
+
+    /** List of required rows of the left and right blocks */
+    std::vector< PetscInt > ReqRowsL, ReqRowsR;
+
+    /** Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
+    std::unordered_map< PetscInt, PetscInt > MapRowsL, MapRowsR;
+
+    /** Lists down all the terms of the KronSum with Mat entries filled with local submatrices */
+    std::vector< KronSumTerm > Terms;
+
+    /** List of unique submatrices to be destroyed later */
+    std::vector< Mat* > LocalSubMats;
+
+    /** Preallocation data of the output matrix for local diagonal rows */
+    PetscInt *Dnnz;
+
+    /** Preallocation data of the output matrix for local off-diagonal diagonal rows */
+    PetscInt *Onnz;
+
+    /** Smallest non-zero index in the current set of local rows */
+    PetscInt MinIdx=0;
+
+    /** Largest non-zero index in the current set of local rows */
+    PetscInt MaxIdx=0;
+
+    /** Predicted maximum number of elements on each local row */
+    std::vector< PetscInt > Maxnnz;
+
+    PetscInt Nfiltered=0;
+
+    PetscInt Nnz=0;
+
+    PetscInt Nelts=0;
+};
+
+
+struct KronSumTermRow {
+    PetscInt    nz_L, nz_R, bks_L, col_NStatesR, fws_O;
+    PetscInt    *idx_L, *idx_R;
+    PetscScalar *v_L, *v_R;
+};
+
+/** Context for the shell matrix object */
+struct KronSumShellCtx {
+
+    /** Contains the usual ctx object for explicit matrices. This must be allocated and deallocated
+        with `new` and `delete`, respectively. */
+    KronSumCtx      *p_ctx;
+
+    /** Contains the KronSumTermRow's needed for calculating the terms of the full matrix */
+    KronSumTermRow  *kstr;
+    PetscInt        Nterms;
+    PetscInt        Nrowterms;
+
+    PetscInt        *Rows_L;
+    PetscInt        *Rows_R;
+    PetscScalar     *term_a;
+
+    PetscScalar     one;
+
+    /* Mat-Vec multiplication */
+    VecScatter      vsctx;
+    Vec             x_seq;
+};
+
+PetscErrorCode MatDestroy_KronSumShell(Mat *p_mat);
+
 /** A container of ordered KronBlock_t objects representing a Kronecker product structure */
 class KronBlocks_t
 {
@@ -120,7 +211,7 @@ public:
     };
 
     /** Returns the total number blocks */
-    size_t size() const { return KronBlocks.size(); }
+    PetscInt size() const { return PetscInt(KronBlocks.size()); }
 
     /** Returns a const reference to the KronBlocks object */
     const std::vector<KronBlock_t>& data() const { return KronBlocks; }
@@ -169,6 +260,12 @@ public:
     /** Returns a const reference to the right block object */
     const Block::SpinOneHalf& RightBlockRef() const { return RightBlock; }
 
+    /** Returns a non-const reference to the left block object */
+    Block::SpinOneHalf& LeftBlockRefMod(){ return LeftBlock; }
+
+    /** Returns a non-const reference to the right block object */
+    Block::SpinOneHalf& RightBlockRefMod(){ return RightBlock; }
+
     /** Returns the offsets for the KronBlock corresponding to a pair of left and right block indices */
     PetscInt Offsets(const PetscInt& lidx, const PetscInt& ridx) const {
         PetscInt idx = Map(lidx, ridx);
@@ -202,6 +299,25 @@ public:
         const std::vector< Hamiltonians::Term >& Terms, /**< [in]   indicates the Kronecker product terms to be constructed */
         Mat& MatOut                                     /**< [out]  resultant matrix */
         );
+
+    /** Constructs the explicit sum of Kronecker products of two matrices provided that they follow a fixed
+        Kronecker product structure according to the corresponding sub-blocks.
+        Imposing the latter condition is needed since this implementation requires that the given matrices have only
+        one non-zero quantum number block for each row / block row */
+    PetscErrorCode KronConstruct(
+        const Mat& Mat_L,
+        const Op_t& OpType_L,
+        const Mat& Mat_R,
+        const Op_t& OpType_R,
+        Mat& MatOut
+        );
+
+    /** Decide whether to create an implicit MATSHELL matrix */
+    PetscErrorCode KronSumSetShellMatrix(const PetscBool& do_shell_in)
+    {
+        do_shell = do_shell_in;
+        return(0);
+    }
 
     PetscErrorCode KronSumSetRedistribute(
         const PetscBool& do_redistribute_in = PETSC_TRUE
@@ -261,6 +377,18 @@ private:
     /** Whether to redistribute the resulting KronSum */
     PetscBool do_redistribute = PETSC_FALSE;
 
+    /** Whether to create an implicit MATSHELL matrix */
+    PetscBool do_shell = PETSC_FALSE;
+
+    /** Whether KronSumShellSplitOwnership has been called before */
+    PetscBool called_KronSumShellSplitOwnership = PETSC_FALSE;
+
+    /** Stores the resulting lrows of a previous call to KronSumShellSplitOwnership */
+    PetscInt  prev_lrows = 0;
+
+    /** Stores the resulting rstart of a previous call to KronSumShellSplitOwnership */
+    PetscInt  prev_rstart = 0;
+
     /** Tolerance */
     #if defined(PETSC_USE_REAL_DOUBLE)
     PetscReal ks_tol = 1.0e-16;
@@ -289,63 +417,29 @@ private:
         const Side_t& SideType
         );
 
-    /** A single term of the KronSum.
-        If one matrix is set to null, then that matrix is interpreted as an identity */
-    typedef struct {
-        PetscScalar a;
-        Op_t OpTypeA;
-        Mat A;
-        Op_t OpTypeB;
-        Mat B;
-    } KronSumTerm;
+    PetscErrorCode KronGetSubmatrices(
+        const Mat& Mat_L,
+        const Op_t& OpType_L,
+        const Mat& Mat_R,
+        const Op_t& OpType_R,
+        KronSumCtx& ctx
+        );
 
-    typedef struct {
-        PetscInt rstart=0;  /**< Starting index of local rows */
-        PetscInt rend=0;    /**< Index after last of local rows, exclusive */
-        PetscInt lrows=0;   /**< Number of local rows */
-        PetscInt cstart=0;  /**< Starting index of local columns */
-        PetscInt cend=0;    /**< Index after last of local columns, exclusive */
-        PetscInt lcols=0;   /**< Number of local columns */
-        PetscInt Nrows=0;   /**< Total number of rows */
-        PetscInt Ncols=0;   /**< Total number of columns */
+    PetscErrorCode KronSumConstructExplicit(
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        Mat& MatOut
+        );
 
-        /** Number of required rows of the left and right blocks */
-        PetscInt NReqRowsL, NReqRowsR;
+    PetscErrorCode KronSumConstructShell(
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        Mat& MatOut
+        );
 
-        /** List of required rows of the left and right blocks */
-        std::vector< PetscInt > ReqRowsL, ReqRowsR;
+    PetscErrorCode KronSumSetUpShellTerms(
+        KronSumShellCtx *shellctx
+        );
 
-        /** Maps the global indices of the rows of L and R to their local indices in the corresponding submatrices */
-        std::unordered_map< PetscInt, PetscInt > MapRowsL, MapRowsR;
-
-        /** Lists down all the terms of the KronSum with Mat entries filled with local submatrices */
-        std::vector< KronSumTerm > Terms;
-
-        /** List of unique submatrices to be destroyed later */
-        std::vector< Mat* > LocalSubMats;
-
-        /** Preallocation data of the output matrix for local diagonal rows */
-        PetscInt *Dnnz;
-
-        /** Preallocation data of the output matrix for local off-diagonal diagonal rows */
-        PetscInt *Onnz;
-
-        /** Smallest non-zero index in the current set of local rows */
-        PetscInt MinIdx=0;
-
-        /** Largest non-zero index in the current set of local rows */
-        PetscInt MaxIdx=0;
-
-        /** Predicted maximum number of elements on each local row */
-        std::vector< PetscInt > Maxnnz;
-
-        PetscInt Nfiltered=0;
-
-        PetscInt Nnz=0;
-
-    } KronSumCtx;
-
-    PetscErrorCode KronSumPrepare(
+    PetscErrorCode KronSumGetSubmatrices(
         const Mat& OpProdSumLL,
         const Mat& OpProdSumRR,
         const std::vector< Hamiltonians::Term >& TermsLR,
@@ -354,6 +448,15 @@ private:
 
     PetscErrorCode KronSumCalcPreallocation(
         KronSumCtx& ctx
+        );
+
+    PetscErrorCode KronSumShellSplitOwnership(
+        const Mat& OpProdSumLL,
+        const Mat& OpProdSumRR,
+        const std::vector< Hamiltonians::Term >& TermsLR,
+        const PetscInt Nrows,
+        PetscInt& lrows,
+        PetscInt& rstart
         );
 
     PetscErrorCode KronSumRedistribute(

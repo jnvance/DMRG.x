@@ -1,3 +1,7 @@
+"""
+Python module for post-processing data files produced by a DMRG.x application.
+"""
+
 import os
 import numpy as np
 import json
@@ -26,6 +30,13 @@ def LoadJSONFile(file,appendStr,funcName,count=0):
         fh.close()
         return LoadJSONFile(file,appendStr,funcName,count+1)
 
+def LoadJSONDict(file):
+    """
+    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
+    appending "}".
+    """
+    return LoadJSONFile(file,"}","LoadJSONDict")
+
 def LoadJSONTable(file):
     """
     Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
@@ -50,9 +61,26 @@ class Data:
         """
         self._base_dir = os.path.join(jobs_dir,base_dir)
         self._label = label
+        self._run = None
+        self._sweepIdx = None
         self._steps = None
         self._timings = None
         self._hamPrealloc = None
+        self._entSpectra = None
+        self._corr = None
+        self._corrLookup = None
+        self._color = None
+
+    #
+    #   Run data
+    #
+    def _LoadRun(self):
+        if self._run is None:
+                self._run = LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
+        return self._run
+
+    def RunData(self):
+        return self._LoadRun()
 
     #
     #   Steps data
@@ -70,13 +98,33 @@ class Data:
             self._idxNStatesH = self._stepsHeaders.index('NumStates_H')
             self._steps = steps['table']
 
-    def Steps(self):
+    def Steps(self,header=None):
         self._LoadSteps()
-        return copy.deepcopy(self._steps)
+        if header is None:
+            return copy.deepcopy(self._steps)
+        else:
+            idx = self._stepsHeaders.index(header)
+            return np.array([row[idx] for row in self._steps])
 
     def StepsHeaders(self):
         self._LoadSteps()
-        return copy.deepcopy(self._stepsHeaders)
+        return self._stepsHeaders
+
+    def SweepIdx(self,show_all=False):
+        NSites_Sys = self.Steps("NSites_Sys")
+        NSites_Env = self.Steps("NSites_Env")
+
+        if self._sweepIdx is None:
+            StepIdx = self.Steps("StepIdx")
+            LoopIdx = self.Steps("LoopIdx")
+            # Look for the maximum position for each loop index
+            self._sweepIdx = [max(np.where(LoopIdx==i)[0]) for i in list(set(LoopIdx))]
+
+        if show_all:
+            return self._sweepIdx
+        else:
+            # Include only the positions where the number of sites in the system == environment
+            return [ j for j in self._sweepIdx if NSites_Sys[j]==NSites_Env[j]]
 
     def EnergyPerSite(self):
         self._LoadSteps()
@@ -94,19 +142,36 @@ class Data:
         self._LoadSteps()
         energy_iter = np.array(self.EnergyPerSite())
         self._p = plt.plot(energy_iter,label=self._label,**kwargs)
-        # color = self._p[-1].get_color()
-        # for d in dm:
-        #     plt.axvline(x=d,color=color,linewidth=1)
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
         plt.ylabel(r'$E_0/N$')
+
+    def PlotErrorEnergyPerSite(self,which='abs',**kwargs):
+        self._LoadSteps()
+        if which=='abs':
+            energy_iter = np.array(self.EnergyPerSite())
+            energy_iter = np.abs((energy_iter - np.min(energy_iter)))
+            plt.ylabel(r'$E_0/N - \mathrm{min}(E_0/N)$')
+        elif which=='rel':
+            energy_iter = np.array(self.EnergyPerSite())
+            energy_iter = np.abs((energy_iter - np.min(energy_iter))/np.min(energy_iter))
+            plt.ylabel(r'$[E_0/N - \mathrm{min}(E_0/N)] / \mathrm{min}(E_0/N)$')
+        else:
+            raise ValueError("The value of which can only be 'abs' or 'rel'. Got {}".format(which))
+
+        self._p = plt.semilogy(energy_iter,label=self._label,**kwargs)
+        self._color = self._p[-1].get_color()
+        plt.xlabel('DMRG Steps')
 
     def PlotLoopBars(self,**kwargs):
         self._LoadSteps()
         LoopIdx = [row[self._idxLoopidx] for row in self._steps]
         dm = np.where([LoopIdx[i] - LoopIdx[i-1] for i in range(1,len(LoopIdx))])[0]
         for d in dm:
-            plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
+            if self._color is None:
+                plt.axvline(x=d,linewidth=1,**kwargs)
+            else:
+                plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
 
     #
     #   Timings data
@@ -130,9 +195,14 @@ class Data:
         self._LoadTimings()
         return np.array([row[self._idxTimeTot] for row in self._timings])
 
-    def PlotTotalTime(self,**kwargs):
+    def PlotTotalTime(self,which='plot',**kwargs):
         totTime = self.TotalTime()
-        self._p = plt.plot(totTime,label=self._label,**kwargs)
+        if which=='plot':
+            self._p = plt.plot(totTime,label=self._label,**kwargs)
+        elif which=='semilogy':
+            self._p = plt.semilogy(totTime,label=self._label,**kwargs)
+        else:
+            raise ValueError("which='{}' unsupported. Choose among ['plot','semilogy']".format(which))
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
         plt.ylabel('Time Elapsed per Step (s)')
@@ -163,13 +233,87 @@ class Data:
             self._p = plt.plot(Dnnz,label='Dnnz: {}'.format(n),color=color,marker='s',**kwargs)
             self._p = plt.plot(Onnz,label='Onnz: {}'.format(n),color=color,marker='^',**kwargs)
 
+    #
+    #   Entanglement Spectra
+    #
+    def _LoadSpectra(self):
+        if self._entSpectra is None:
+            spectra = LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
+            # determine which global indices are the ends of a sweep
+
+            self._entSpectra = spectra
+
+    def EntanglementSpectra(self):
+        ''' Loads the entanglement spectrum at the end of each sweep '''
+        self._LoadSpectra()
+        return [self._entSpectra[row]['Sys'] for row in self.SweepIdx()]
+
+    def EntanglementEntropy(self):
+        ''' Calculates the entanglement entropy using eigenvalues from all sectors '''
+        a = self.EntanglementSpectra()
+        l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
+        return [-np.sum( [np.log(lii)*lii  for lii in li if lii > 0] ) for li in l]
+
+    #
+    #   Correlations
+    #
+    def _LoadCorrelations(self):
+        if self._corr is None:
+            self._corr = LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
+
+    def _LoadCorrelationsLookup(self):
+        self._LoadCorrelations()
+        if self._corrLookup is None:
+            self._corrLookup = {}
+            for key in self._corr['info'][0].keys(): self._corrLookup[key] = []
+            for corr in self._corr['info']:
+                for key in corr:
+                    self._corrLookup[key].append(corr[key])
+
+    def Correlations(self):
+        self._LoadCorrelations()
+        return self._corr
+
+    def CorrelationsInfo(self):
+        return self.Correlations()['info']
+
+    def CorrelationsValues(self, key=None, labels=None):
+        if labels is None:
+            return np.array(self.Correlations()['values'])
+        elif labels is not None and key is None:
+            raise ValueError('key must be given when labels is not None')
+        else:
+            idx = self.CorrelationsInfoGetIndex(key, labels)
+            return np.array(self.Correlations()['values'])[:,idx]
+
+    def CorrelationsInfoGetIndex(self, key=None, value=None):
+        self._LoadCorrelationsLookup()
+
+        if key is None and value is None:
+            return self._corrLookup
+
+        elif key is not None and value is None:
+            try:
+                return self._corrLookup[key]
+            except KeyError:
+                raise ValueError("Incorrect key='{}'. Choose among {}".format(key, self._corrLookup.keys()))
+
+        elif key is None and value is not None:
+            raise ValueError('key must be given when value is not None')
+
+        else: # both key and value are not none
+            if isinstance(value,(list,tuple,np.ndarray)):
+                return [self._corrLookup[key].index(v) for v in value]
+            else:
+                return self._corrLookup[key].index(value)
+
 class DataSeries:
     """
     Post-processing for multiple DMRG runs
     """
 
     def __init__(self, base_dir_list, *args, label_list=None, **kwargs):
-        if label_list==None:
+        if label_list is None:
             self.DataList = [ Data(base_dir, *args, label=base_dir, **kwargs) for base_dir in base_dir_list ]
         else:
             self.DataList = [ Data(base_dir, *args, label=label, **kwargs) for (base_dir, label) in zip(base_dir_list,label_list) ]
