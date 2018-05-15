@@ -60,10 +60,16 @@ markdown/github version (links marked as **[md]**) and others may work only for 
 References
 ----------
 
+This application was developed as part of the following thesis for the [Master in High Performance Computing Programme](http://mhpc.it):
+ - J. Vance. "Large-Scale Implementation of the Density Matrix Renormalization Group Algorithm." (2017).
+
 For more information on the DMRG algorithm, we recommend the following reading materials:
  - U. Schollwöck. "The density-matrix renormalization group." Rev. Mod. Phys. 77, 259 – Published 26 April 2005
     [[doi](https://doi.org/10.1103/RevModPhys.77.259)]
  - A E Feiguin. "The Density Matrix Renormalization Group". In: Strongly Correlated Systems. Berlin, Heidelberg: Springer Berlin Heidelberg, Apr. 2013, pp. 31–65. [[link](https://www.springer.com/cda/content/document/cda_downloaddocument/9783642351051-c2.pdf?SGWID=0-0-45-1391718-p174727662)]
+
+To learn DMRG through a simpler implementation, we suggest starting from the following Python code:
+ - James R. Garrison, & Ryan V. Mishmash. (2017, November 29). simple-dmrg/simple-dmrg: Simple DMRG 1.0 (Version v1.0.0). Zenodo. [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1068359.svg)](https://doi.org/10.5281/zenodo.1068359)
 
 <!--
 Table of Contents
@@ -90,9 +96,11 @@ Contributing
 
 Credits
 -------
-This application was developed as part of a [thesis](http://hdl.handle.net/20.500.11767/68070) for the [Master in High Performance Computing](http://www.mhpc.it)
-in collaboration with the [Condensed Matter and Statistical Physics Section](https://www.ictp.it/research/cmsp.aspx) of the
-[The Abdus Salam International Centre for Theoretical Physics](http://www.ictp.it).
+This application was developed in collaboration with the
+[Condensed Matter and Statistical Physics Section](https://www.ictp.it/research/cmsp.aspx) of the
+[The Abdus Salam International Centre for Theoretical Physics](http://www.ictp.it), under the supervision of:
+ - [Marcello Dalmonte](https://www.ictp.it/research/cmsp/members/long-term-visiting-researchers/marcello-dalmonte.aspx)
+ - [Ivan Girotto](https://www.mhpc.it/people/ivan-girotto)
 
 <!--
 License

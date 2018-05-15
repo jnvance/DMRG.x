@@ -282,32 +282,41 @@ public:
             /** @note
                 @parblock
                 This function also enforces some restrictions on command line inputs:
-                - either `-mstates` or `-mwarmup` has to be specified */
+                - either `-mstates` or `-mwarmup` has to be specified
+                @endparblock */
             if(!opt_mstates && !opt_mwarmup)
                 SETERRQ(mpi_comm,1,"Either -mstates or -mwarmup has to be specified.");
 
-            /** - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other */
+            /** @parblock
+                - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other
+                @endparblock */
             if(opt_mstates && !opt_mwarmup)
                 mwarmup = mstates;
 
-            /** - `-nsweeps` and `-msweeps` are incompatible and only one of them can be specified at a time */
+            /** @parblock
+                - `-nsweeps` and `-msweeps` are incompatible and only one of them can be specified at a time
+                @endparblock */
             if(opt_nsweeps && opt_msweeps)
                 SETERRQ(mpi_comm,1,"-msweeps and -nsweeps cannot both be specified at the same time.");
 
-            /** - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time */
+            /** @parblock
+                - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time
+                @endparblock */
             if(opt_nsweeps && opt_msweeps)
                 SETERRQ(mpi_comm,1,"-nsweeps and -maxnsweeps cannot both be specified at the same time.");
 
+            /** @parblock
+                - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time
+                @endparblock */
             if(opt_maxnsweeps && (num_maxnsweeps != num_msweeps))
                 SETERRQ2(mpi_comm,1,"-msweeps and -maxnsweeps must have the same number of items. "
                     "Got %lld and %lld, respectively.", num_msweeps, num_maxnsweeps);
 
-            /** @endparblock */
-
             /** @note
                 @parblock
                 The following criteria is used to decide the kind of sweeps to be performed:
-                - if `-nsweeps` is specified use SWEEP_MODE_NSWEEPS */
+                - if `-nsweeps` is specified use SWEEP_MODE_NSWEEPS
+                @endparblock */
             if(opt_nsweeps && !opt_msweeps)
             {
                 sweep_mode = SWEEP_MODE_NSWEEPS;
@@ -316,12 +325,16 @@ public:
             {
                 if(opt_maxnsweeps)
                 {
-                    /** - if `-msweeps` and `-maxnsweeps` is specified use SWEEP_MODE_TOLERANCE_TEST */
+                    /** @parblock
+                        - if `-msweeps` and `-maxnsweeps` is specified use SWEEP_MODE_TOLERANCE_TEST
+                        @endparblock */
                     sweep_mode = SWEEP_MODE_TOLERANCE_TEST;
                 }
                 else
                 {
-                    /** - if `-msweeps` is specified, and not `-maxnsweeps`, use SWEEP_MODE_MSWEEPS */
+                    /** @parblock
+                        - if `-msweeps` is specified, and not `-maxnsweeps`, use SWEEP_MODE_MSWEEPS
+                        @endparblock */
                     sweep_mode = SWEEP_MODE_MSWEEPS;
                 }
             }
@@ -333,8 +346,6 @@ public:
             {
                 SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
             }
-
-            /** @endparblock */
 
             /* printout some info */
             if(!mpi_rank){

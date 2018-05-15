@@ -7,8 +7,7 @@ static char help[] =
 #include "Hamiltonians.hpp"
 #include "DMRGBlockContainer.hpp"
 
-#define MAX_SWEEPS 100
-
+/** Alias for the DMRGBlockContainer object */
 typedef DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG_t;
 PetscErrorCode Correlators(DMRG_t& DMRG);
 
