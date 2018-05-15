@@ -4,6 +4,11 @@ DMRG.x
 A distributed-memory implementation of the DMRG algorithm based on the [PETSc](https://www.mcs.anl.gov/petsc/) and
 [SLEPc](http://slepc.upv.es/) libraries.
 
+[![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=develop)](http://dmrgx.readthedocs.io/en/develop/?badge=develop)
+
+Abstract
+--------
+
 The Density Matrix Renormalization Group (DMRG) algorithm is a numerical technique used in the study of low-dimensional
 strongly correlated quantum systems. With this implementation, one can study two-dimensional spin systems using a one-dimensional
 traversal of the lattice.
@@ -47,7 +52,9 @@ Documentation
 
  - [Usage](docs/usage.md)
 
-To generate more detailed **Doxygen documentation**, go to the root directory and execute
+**Full documentation** generated with doxygen may be found at [dmrgx.readthedocs.io](http://dmrgx.readthedocs.io).
+
+To generate this yourself, go to the root directory and execute
 
     doxygen
 
