@@ -4,6 +4,10 @@ DMRG.x
 A distributed-memory implementation of the DMRG algorithm based on the [PETSc](https://www.mcs.anl.gov/petsc/) and
 [SLEPc](http://slepc.upv.es/) libraries.
 
+**Source code**: [https://github.com/jnvance/DMRG/tree/develop](https://github.com/jnvance/DMRG/tree/develop)
+
+**Documentation**: [https://dmrgx.readthedocs.io/en/develop/](https://dmrgx.readthedocs.io/en/develop/)
+
 [![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=develop)](http://dmrgx.readthedocs.io/en/develop/?badge=develop)
 
 Abstract
@@ -28,33 +32,12 @@ which maps to a Heisenberg model when J₁ = 1/2 and J₂ = Δ₂ = 0, and to th
 To reduce the computational cost, we exploit *U*(1) symmetry through conservation of the total magnetization (Sz).
 We also implement a matrix-free approach in the diagonalization of the superblock Hamiltonian.
 
-Prerequisites
--------------
-The current version requires the following libraries to be installed
- - [PETSc 3.8.4](http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz)
- - [SLEPc 3.8.3](http://slepc.upv.es/download/distrib/slepc-3.8.3.tar.gz)
-
-These will also require a working installation of MPI and a suitable BLAS/LAPACK library.
-The program may work with more recent versions of PETSc and SLEPc but it has not yet been tested for compatibility.
-
-To properly use the Makefiles for generating executables, the following environment variables must also be defined with the correct values:
- - `PETSC_DIR`
- - `PETSC_ARCH`
- - `SLEPC_DIR`
-
-For information on configuring and installing the required libraries, see:
- - [https://www.mcs.anl.gov/petsc/documentation/installation.html](https://www.mcs.anl.gov/petsc/documentation/installation.html)
- - [http://slepc.upv.es/documentation/](http://slepc.upv.es/documentation/)
-
 Documentation
 -------------
-**Additional documentation** may be found in their respective pages inside the `docs` directory:
-
+ - [Prerequisites](docs/prerequisites.md)
  - [Usage](docs/usage.md)
 
-**Full documentation** generated with doxygen may be found at [dmrgx.readthedocs.io](http://dmrgx.readthedocs.io).
-
-To generate this yourself, go to the root directory and execute
+To generate the doxygen documentation yourself, go to the root directory and execute
 
     doxygen
 
@@ -76,7 +59,10 @@ For more information on the DMRG algorithm, we recommend the following reading m
  - A E Feiguin. "The Density Matrix Renormalization Group". In: Strongly Correlated Systems. Berlin, Heidelberg: Springer Berlin Heidelberg, Apr. 2013, pp. 31–65. [[link](https://www.springer.com/cda/content/document/cda_downloaddocument/9783642351051-c2.pdf?SGWID=0-0-45-1391718-p174727662)]
 
 To learn DMRG through a simpler implementation, we suggest starting from the following Python code:
- - James R. Garrison, & Ryan V. Mishmash. (2017, November 29). simple-dmrg/simple-dmrg: Simple DMRG 1.0 (Version v1.0.0). Zenodo. [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1068359.svg)](https://doi.org/10.5281/zenodo.1068359)
+ - James R. Garrison, & Ryan V. Mishmash. (2017, November 29). simple-dmrg/simple-dmrg: Simple DMRG 1.0 (Version v1.0.0). Zenodo.
+    [[https://simple-dmrg.readthedocs.io]](https://simple-dmrg.readthedocs.io)
+    [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1068359.svg)](https://doi.org/10.5281/zenodo.1068359)
+
 
 <!--
 Table of Contents
