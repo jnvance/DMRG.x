@@ -1,5 +1,4 @@
-Installation
-============
+/** @page installation Installation
 
 The current version requires a Linux/Mac machine installed with the following libraries:
  -  [PETSc 3.8.4](https://www.mcs.anl.gov/petsc/)
@@ -25,3 +24,5 @@ To download and use the source code:
 This will default to the master branch. To use the latest development version of the code:
 
     git checkout develop
+
+*/

@@ -1,13 +1,9 @@
-Usage
-=====
-
-Calculating correlators for a square lattice
---------------------------------------------
+/** @page usage Running a Calculation
 
 A sample source code for a stand-alone executable can be found in src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp
 [[md](../src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp)].
 
-### Compiling the executable
+@section compiling Compiling the executable
 
 To compile the executable, go to the root directory and execute the command:
 
@@ -16,7 +12,7 @@ To compile the executable, go to the root directory and execute the command:
 The resulting program is generated in `bin/DMRG-SpinOneHalf-J1J2XXZSquare.x`.
 For more details see Makefile [[md](../Makefile)]  [[dox](../../Makefile)].
 
-### Preparing the directories
+@section preparing Preparing the directories
 
 The application requires two directories to be specified at run-time:
   - `DATA_DIR` for storing the calculated values
@@ -43,9 +39,9 @@ Then, we can create these directories using:
     mkdir -p $DATA_DIR
     mkdir -p $SCRATCH_DIR
 
-### Executing the program
+@section executing Executing the program
 
-#### Basics
+@subsection basics Basics
 
 The program may be executed on a single processor using
 
@@ -67,7 +63,7 @@ The following additional general options may also be specified:
  - `-verbose <bool>` - printout more detailed information of each DMRG step
  - `-dry_run <bool>` - test initial inputs and do not perform warmup and sweeps
 
-#### Setting the sweep stage
+@subsection settingsweep Setting the sweep stage
 
 The sweep stage of DMRG may be performed using three possible modes. See: DMRGBlockContainer< Block, Hamiltonian >::SweepMode_t
 
@@ -85,7 +81,7 @@ The sweep stage of DMRG may be performed using three possible modes. See: DMRGBl
 For a full list of these command line arguments, see the documentation for
 DMRGBlockContainer< Block, Hamiltonian >::Initialize() in DMRGBlockContainer.hpp [[md]](../include/DMRGBlockContainer.hpp)
 
-#### Setting the lattice dimensions, coupling constants and boundary conditions
+@subsection settinghamiltonian Setting-up the lattice and Hamiltonian
 
 The system size and the interactions are set to default values but may be modified by setting the
 following options:
@@ -110,7 +106,7 @@ The default boundary condition is cylindrical (open along Lx and periodic along 
 For a full list of these command line arguments, see the documentation for
 Hamiltonians::J1J2XXZModel_SquareLattice::SetFromOptions() in Hamiltonians.hpp [[md]](../include/Hamiltonians.hpp)
 
-#### Example
+@subsection example Example
 
 In this example, we want to run a simulation on our local machine with 2 processors.
 We choose the Heisenberg model with open boundary conditions on a 12x6 lattice with anisotropy Jz1 = 0.4.
@@ -121,3 +117,4 @@ We also want to use 20 states for warmup and use SWEEP_MODE_TOLERANCE_TEST with 
         -scratch_dir $SCRATCH_DIR -data_dir $DATA_DIR \
         -Lx 12 -Ly 6 -heisenberg 0.4 -BCOpen \
         -mwarmup 20 -msweeps 40,80,160 -maxnsweeps 4,2,2
+*/

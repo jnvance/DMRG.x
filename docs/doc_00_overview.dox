@@ -1,3 +1,12 @@
+/** @mainpage Overview
+
+- @subpage installation
+- @subpage usage
+
+
+--------------------
+<!-- COPY README.md file below this line -->
+
 DMRG.x
 ======
 
@@ -95,10 +104,15 @@ This application was developed in collaboration with the
  - [Marcello Dalmonte](https://www.ictp.it/research/cmsp/members/long-term-visiting-researchers/marcello-dalmonte.aspx)
  - [Ivan Girotto](https://www.mhpc.it/people/ivan-girotto)
 
-<!--
+<!-- ![](https://www.ictp.it/img/ictp_head_logo.png =100x) -->
+
 License
 -------
 
 MIT License. Copyright (c) 2018 James Vance.
 
 See full text of license [here](./LICENSE).
+
+
+<!-- COPY README.md file above this line -->
+ */
