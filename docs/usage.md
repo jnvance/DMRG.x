@@ -1,6 +1,8 @@
-# Usage
+Usage
+=====
 
-## Calculating correlators for a square lattice
+Calculating correlators for a square lattice
+--------------------------------------------
 
 A sample source code for a stand-alone executable can be found in src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp
 [[md](../src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp)].

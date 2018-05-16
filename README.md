@@ -51,7 +51,8 @@ References
 ----------
 
 This application was developed as part of the following thesis for the [Master in High Performance Computing Programme](http://mhpc.it):
- - J. Vance. "Large-Scale Implementation of the Density Matrix Renormalization Group Algorithm." (2017).
+ - J. Vance. "Large-Scale Implementation of the Density Matrix Renormalization Group Algorithm." (2017). [[link]](http://hdl.handle.net/20.500.11767/68070
+)
 
 For more information on the DMRG algorithm, we recommend the following reading materials:
  - U. Schollwöck. "The density-matrix renormalization group." Rev. Mod. Phys. 77, 259 – Published 26 April 2005
@@ -60,7 +61,7 @@ For more information on the DMRG algorithm, we recommend the following reading m
 
 To learn DMRG through a simpler implementation, we suggest starting from the following Python code:
  - James R. Garrison, & Ryan V. Mishmash. (2017, November 29). simple-dmrg/simple-dmrg: Simple DMRG 1.0 (Version v1.0.0). Zenodo.
-    [[https://simple-dmrg.readthedocs.io]](https://simple-dmrg.readthedocs.io)
+    [https://simple-dmrg.readthedocs.io](https://simple-dmrg.readthedocs.io)
     [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1068359.svg)](https://doi.org/10.5281/zenodo.1068359)
 
 
@@ -98,4 +99,7 @@ This application was developed in collaboration with the
 <!--
 License
 -------
--->
+
+MIT License. Copyright (c) 2018 James Vance.
+
+See full text of license [here](./LICENSE).

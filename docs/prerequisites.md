@@ -1,13 +1,13 @@
-Prerequisites
-=============
+Installation
+============
 
-The current version requires the following libraries to be installed
+The current version requires a Linux/Mac machine installed with the following libraries:
  -  [PETSc 3.8.4](https://www.mcs.anl.gov/petsc/)
     [[download]](http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz)
-    [[installation]](https://www.mcs.anl.gov/petsc/documentation/installation.html)
+    [[installation info]](https://www.mcs.anl.gov/petsc/documentation/installation.html)
  -  [SLEPc 3.8.3](http://slepc.upv.es/)
     [[download]](http://slepc.upv.es/download/distrib/slepc-3.8.3.tar.gz)
-    [[installation]](http://slepc.upv.es/documentation/instal.htm)
+    [[installation info]](http://slepc.upv.es/documentation/instal.htm)
 
 These will also require a working installation of MPI and a suitable BLAS/LAPACK library.
 The program may work with more recent versions of PETSc and SLEPc but it has not yet been tested for compatibility.
@@ -16,3 +16,12 @@ To properly use the Makefiles for generating executables, the following environm
  - `PETSC_DIR`
  - `PETSC_ARCH`
  - `SLEPC_DIR`
+
+To download and use the source code:
+
+    git clone https://github.com/jnvance/DMRG.git DMRG
+    cd DMRG
+
+This will default to the master branch. To use the latest development version of the code:
+
+    git checkout develop
