@@ -34,8 +34,8 @@ We also implement a matrix-free approach in the diagonalization of the superbloc
 
 Documentation
 -------------
- - [Prerequisites](docs/prerequisites.md)
- - [Usage](docs/usage.md)
+
+ - [Overview](docs/doc_00_overview.md)
 
 To generate the doxygen documentation yourself, go to the root directory and execute
 
