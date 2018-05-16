@@ -40,11 +40,11 @@ To generate the documentation yourself, go to the root directory and execute
 
     doxygen
 
-Then open `docs/html/index.html` [[md]](docs/html/index.html)  [[dox]](./index.html).
+then open `docs/html/index.html` [[md]](docs/html/index.html)  [[dox]](./index.html).
 
-__NOTE:__
+<!-- __NOTE:__
 Since the same markdown files were used in generating the Doxygen documentation, some links may be available only for the
-markdown/github version (links marked as __[md]__) and others may work only for the doxygen version (marked as __[dox]__).
+markdown/github version (links marked as __[md]__) and others may work only for the doxygen version (marked as __[dox]__). -->
 
 References
 ----------
@@ -95,10 +95,11 @@ This application was developed in collaboration with the
  - [Marcello Dalmonte](https://www.ictp.it/research/cmsp/members/long-term-visiting-researchers/marcello-dalmonte.aspx)
  - [Ivan Girotto](https://www.mhpc.it/people/ivan-girotto)
 
-<!--
+<!-- ![](https://www.ictp.it/img/ictp_head_logo.png =100x) -->
+
 License
 -------
 
 MIT License. Copyright (c) 2018 James Vance.
 
-See full text of license [here](./LICENSE).
+See full text of license: [[md]](./LICENSE) [[dox]](https://github.com/jnvance/DMRG/blob/develop/LICENSE).

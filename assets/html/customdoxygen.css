@@ -176,9 +176,11 @@ pre.fragment {
         word-wrap: break-word;
         font-size:  9pt;
         line-height: 125%;
-        font-family: monospace, fixed;
+        /*font-family: monospace, fixed;*/
+        font-family: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,Courier,monospace
         font-size: 105%;
 }
+
 
 div.fragment {
         padding: 0px;
