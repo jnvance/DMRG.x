@@ -1525,6 +1525,7 @@ PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
     PetscInt& rstart
     )
 {
+    FUNCTION_TIMINGS_BEGIN();
     PetscErrorCode ierr;
     if(Nrows!=num_states) SETERRQ2(mpi_comm,1,"Invalid input Nrows. Expected %lld. Got %lld.", LLD(num_states), LLD(Nrows));
 
@@ -1608,7 +1609,9 @@ PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
         PetscMPIInt nnz_loc_size;
         ierr = PetscMPIIntCast(PetscInt(nnz_loc.size()),&nnz_loc_size); CHKERRQ(ierr);
         nnzs[key].resize(side_nrows.at(side));
-        ierr = MPI_Gatherv(&nnz_loc.at(0), nnz_loc_size, MPIU_INT,
+        /* Redirect to NULL if the vector is empty */
+        const PetscInt *nnz_loc_val = nnz_loc.empty() ? NULL : &nnz_loc.at(0);
+        ierr = MPI_Gatherv(nnz_loc_val, nnz_loc_size, MPIU_INT,
             &nnzs.at(key).at(0), &side_lrows.at(side).at(0), &side_offset.at(side).at(0),
             MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
     }
@@ -1696,6 +1699,7 @@ PetscErrorCode KronBlocks_t::KronSumShellSplitOwnership(
     prev_rstart = rstart;
     called_KronSumShellSplitOwnership = PETSC_TRUE;
 
+    FUNCTION_TIMINGS_END();
     return (0);
 }
 
