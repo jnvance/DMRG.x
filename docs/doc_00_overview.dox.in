@@ -1,8 +1,7 @@
 /** @mainpage DMRG.x
 
-- @subpage installation
-- @subpage usage
-
+ - @ref installation "Installation"
+ - @ref usage "Usage"
 
 --------------------
 

@@ -1,5 +1,7 @@
 /** @page installation Installation
 
+@brief Installing and configuring dependencies and getting the source code
+
 The current version requires a Linux/Mac machine installed with the following libraries:
  -  [PETSc 3.8.4](https://www.mcs.anl.gov/petsc/)
     [[download]](http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz)
