@@ -93,7 +93,7 @@ Credits
 -------
 
 Author:
- - James Vance
+ - [James Vance](https://www.github.com/jnvance)
 
 This application was developed in collaboration with the
 [Condensed Matter and Statistical Physics Section](https://www.ictp.it/research/cmsp.aspx) of the
