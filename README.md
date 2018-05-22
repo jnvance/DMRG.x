@@ -38,9 +38,9 @@ Documentation
 The full documentation generated with doxygen may be viewed in the link above.
 To generate the documentation yourself, go to the root directory and execute
 
-    doxygen
+    $ make docs-default
 
-then open `docs/html/index.html` [[md]](docs/html/index.html)  [[dox]](./index.html).
+which places the documentation in `docs/html/index.html`.
 
 <!-- __NOTE:__
 Since the same markdown files were used in generating the Doxygen documentation, some links may be available only for the

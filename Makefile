@@ -12,17 +12,20 @@ ${TARGET}: ${TARGET_OBJ} ${TARGET_DEPS} chkopts
 	-${CLINKER} -o ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS} ${SLEPC_EPS_LIB}
 	${RM} ${TARGET_OBJ}
 
-docs: FORCE
+docs: docs-generate-files FORCE
 	doxygen Doxyfile
 
-docs-default: FORCE
+docs-default: docs-generate-files FORCE
 	echo "HTML_HEADER=\nHTML_FOOTER=\nHTML_STYLESHEET=\nHTML_EXTRA_STYLESHEET=\nHTML_EXTRA_FILES=" | \
 	(cat Doxyfile && cat) | doxygen -
+
+docs-generate-files: FORCE
+	sed $$'/[@][@][@]/{r README.md\nd}' docs/doc_00_overview.dox.in > docs/doc_00_overview.dox
 
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
 	${RM} src/*.optrpt
-	${RM} -rf docs/html docs/latex
+	${RM} -rf docs/html docs/latex docs/doc_00_overview.dox
 
 FORCE:
 

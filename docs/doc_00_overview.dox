@@ -5,7 +5,6 @@
 
 
 --------------------
-<!-- COPY README.md file below this line -->
 
 DMRG.x
 ======
@@ -47,9 +46,10 @@ Documentation
 The full documentation generated with doxygen may be viewed in the link above.
 To generate the documentation yourself, go to the root directory and execute
 
-    doxygen
+    $ make docs-default
+    $ open docs/html/index.html
 
-then open `docs/html/index.html` [[md]](docs/html/index.html)  [[dox]](./index.html).
+then open `docs/html/index.html`.
 
 <!-- __NOTE:__
 Since the same markdown files were used in generating the Doxygen documentation, some links may be available only for the
@@ -117,5 +117,4 @@ MIT License. Copyright (c) 2018 James Vance.
 
 See full text of license: [[md]](./LICENSE) [[dox]](https://github.com/jnvance/DMRG/blob/develop/LICENSE).
 
-<!-- COPY README.md file above this line -->
  */
