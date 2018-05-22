@@ -1175,7 +1175,14 @@ private:
         /* TODO: Perform evaluation of inter-block correlation functions here */
         /* TODO: Perform evaluation of intra-block correlation functions */
 
+        PetscLogDouble tcorr0,tcorr1;
+        ierr = PetscTime(&tcorr0); CHKERRQ(ierr);
+
         ierr = CalculateCorrelations_BlockDiag(KronBlocks, gsv_r, *BT_L, do_measurements); CHKERRQ(ierr);
+
+        ierr = PetscTime(&tcorr1); CHKERRQ(ierr);
+        if(do_measurements && !mpi_rank && verbose)
+            printf("  * Calc. of Correlators %12.6f s\n", tcorr1-tcorr0);
 
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
