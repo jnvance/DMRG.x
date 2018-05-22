@@ -152,17 +152,33 @@ class Data:
         self._LoadTimings()
         return np.array([row[self._idxTimeTot] for row in self._timings])
 
-    def PlotTotalTime(self,which='plot',**kwargs):
+    def PlotTotalTime(self,which='plot',cumulative=False,units='s',**kwargs):
         totTime = self.TotalTime()
+        ylabel = "Time Elapsed per Step"
+
+        if cumulative:
+            totTime = np.cumsum(totTime)
+            ylabel = "Cumulative Time Elapsed"
+
+        if units=='m':
+            totTime /= 60.
+        elif units=='h':
+            totTime /= 3600.
+        elif units=='s':
+            pass
+        else:
+            raise ValueError("units='{}' unsupported. Choose among ['s','m','h']".format(units))
+
         if which=='plot':
             self._p = plt.plot(totTime,label=self._label,**kwargs)
         elif which=='semilogy':
             self._p = plt.semilogy(totTime,label=self._label,**kwargs)
         else:
             raise ValueError("which='{}' unsupported. Choose among ['plot','semilogy']".format(which))
+
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
-        plt.ylabel('Time Elapsed per Step (s)')
+        plt.ylabel('{} ({})'.format(ylabel,units))
 
     #
     #   Preallocation data
@@ -270,6 +286,14 @@ class DataSeries:
     """
 
     def __init__(self, base_dir_list, *args, label_list=None, **kwargs):
+        if base_dir_list:
+            # if non-empty check whether the first entry is a tuple
+            if len(base_dir_list[0]) == 2:
+                dirs = [dl[0] for dl in base_dir_list]
+                labels = [dl[1] for dl in base_dir_list]
+                base_dir_list = dirs
+                label_list = labels
+                # note: overrides the input label_list
         if label_list is None:
             self.DataList = [ Data(base_dir, *args, label=base_dir, **kwargs) for base_dir in base_dir_list ]
         else:
@@ -280,6 +304,9 @@ class DataSeries:
 
     def PlotEnergyPerSite(self,**kwargs):
         for obj in self.DataList: obj.PlotEnergyPerSite(**kwargs)
+
+    def PlotErrorEnergyPerSite(self,which='abs',**kwargs):
+        for obj in self.DataList: obj.PlotErrorEnergyPerSite(which='abs',**kwargs)
 
     def PlotTotalTime(self,**kwargs):
         for obj in self.DataList: obj.PlotTotalTime(**kwargs)
