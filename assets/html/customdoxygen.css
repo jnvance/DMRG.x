@@ -112,6 +112,7 @@ font-size: 1.15em !important;
 table{
     /*white-space:pre-wrap !important;*/
     /*white-space:none;*/
+    white-space:initial;
 }
 /*
  ===========================
@@ -490,8 +491,4 @@ span.SRScope {
     background-image: none;
     margin-top: 0px;
     width: 100%;
-}
-
-code {
-    color: #3c763d;
 }
