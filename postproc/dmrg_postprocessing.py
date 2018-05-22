@@ -4,52 +4,9 @@ Python module for post-processing data files produced by a DMRG.x application.
 
 import os
 import numpy as np
-import json
 import matplotlib.pyplot as plt
 import copy
-from shutil import copyfile
-
-def LoadJSONFile(file,appendStr,funcName,count=0):
-    """
-    Loads data from a JSON file and corrects unfinished runs by appending a string to the file.
-    """
-    filemod = file[:-5]+"-mod"+".json"
-    try:
-        if count == 0:
-            data = json.load(open(file))
-        elif count == 1:
-            data = json.load(open(filemod))
-        else:
-            raise ValueError('LoadJSONFile was not able to correct the file "{}" with an appended "{}". '
-                'Check the file manually.'.format(file,appendStr))
-        return data
-    except json.JSONDecodeError:
-        copyfile(file,filemod)
-        fh = open(filemod, "a")
-        fh.write(appendStr)
-        fh.close()
-        return LoadJSONFile(file,appendStr,funcName,count+1)
-
-def LoadJSONDict(file):
-    """
-    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
-    appending "}".
-    """
-    return LoadJSONFile(file,"}","LoadJSONDict")
-
-def LoadJSONTable(file):
-    """
-    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
-    appending "]}".
-    """
-    return LoadJSONFile(file,"]}","LoadJSONTable")
-
-def LoadJSONArray(file):
-    """
-    Loads data from a JSON file represented as an array of dictionary entries and corrects
-    unfinished runs by appending "]".
-    """
-    return LoadJSONFile(file,"]","LoadJSONArray")
+import dmrg_json_utils as ju
 
 class Data:
     """
@@ -76,7 +33,7 @@ class Data:
     #
     def _LoadRun(self):
         if self._run is None:
-                self._run = LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
+                self._run = ju.LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
         return self._run
 
     def RunData(self):
@@ -89,7 +46,7 @@ class Data:
         """ Loads data from DMRGSteps.json and extracts
         """
         if self._steps is None:
-            steps = LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
+            steps = ju.LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
             self._stepsHeaders = steps['headers']
             self._idxEnergy = self._stepsHeaders.index('GSEnergy')
             self._idxNSysEnl = self._stepsHeaders.index('NSites_SysEnl')
@@ -178,7 +135,7 @@ class Data:
     #
     def _LoadTimings(self):
         if self._timings is None:
-            timings = LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
+            timings = ju.LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
             self._timingsHeaders = timings['headers']
             self._idxTimeTot = self._timingsHeaders.index('Total')
             self._timings = timings['table']
@@ -212,7 +169,7 @@ class Data:
     #
     def PreallocData(self,n=None,key=None):
         if self._hamPrealloc is None:
-            self._hamPrealloc = LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
+            self._hamPrealloc = ju.LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
         if n is None:
             return self._hamPrealloc
         else:
@@ -238,7 +195,7 @@ class Data:
     #
     def _LoadSpectra(self):
         if self._entSpectra is None:
-            spectra = LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
+            spectra = ju.LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
             # determine which global indices are the ends of a sweep
 
             self._entSpectra = spectra
@@ -259,7 +216,7 @@ class Data:
     #
     def _LoadCorrelations(self):
         if self._corr is None:
-            self._corr = LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
+            self._corr = ju.LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
 
     def _LoadCorrelationsLookup(self):
         self._LoadCorrelations()
