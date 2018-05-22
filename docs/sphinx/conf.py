@@ -69,7 +69,7 @@ exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
 pygments_style = 'sphinx'
 
 import subprocess
-subprocess.call('cd ../../ ; make docs', shell=True)
+subprocess.call('cd ../../ ; ./docs/docs_generate_files.sh; doxygen Doxyfile', shell=True)
 
 
 # -- Options for HTML output -------------------------------------------------

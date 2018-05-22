@@ -20,7 +20,7 @@ docs-default: docs-generate-files FORCE
 	(cat Doxyfile && cat) | doxygen -
 
 docs-generate-files: FORCE
-	sed $$'/[@][@][@]/{r README.md\nd}' docs/doc_00_overview.dox.in > docs/doc_00_overview.dox
+	./docs/docs_generate_files.sh
 
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
