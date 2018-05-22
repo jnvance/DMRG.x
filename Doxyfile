@@ -2481,3 +2481,11 @@ GENERATE_LEGEND        = YES
 # This tag requires that the tag HAVE_DOT is set to YES.
 
 DOT_CLEANUP            = YES
+
+## Uncomment next lines to revert to default doxygen theme
+
+# HTML_HEADER            =
+# HTML_FOOTER            =
+# HTML_STYLESHEET        =
+# HTML_EXTRA_STYLESHEET  =
+# HTML_EXTRA_FILES       =

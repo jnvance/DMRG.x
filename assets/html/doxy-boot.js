@@ -52,8 +52,8 @@ $( document ).ready(function() {
     $("div.ttname a").css("color", 'white');
     $("div.ttdef,div.ttdoc,div.ttdeci").addClass("panel-body");
 
-    $('div.fragment.well div.line:first').css('margin-top', '2px');
-    $('div.fragment.well div.line:last').css('margin-bottom', '2px');
+    // $('div.fragment.well div.line:first').css('margin-top', '2px');
+    // $('div.fragment.well div.line:last').css('margin-bottom', '2px');
 
 	$('table.doxtable').removeClass('doxtable').addClass('table table-striped table-bordered').each(function(){
 		$(this).prepend('<thead></thead>');
@@ -66,10 +66,10 @@ $( document ).ready(function() {
 
 
 
-    if($('div.fragment.well div.ttc').length > 0)
-    {
-        $('div.fragment.well div.line:first').parent().removeClass('fragment well');
-    }
+    // if($('div.fragment.well div.ttc').length > 0)
+    // {
+    //     $('div.fragment.well div.line:first').parent().removeClass('fragment well');
+    // }
 
     $('table.memberdecls').find('.memItemRight').each(function(){
         $(this).contents().appendTo($(this).siblings('.memItemLeft'));
