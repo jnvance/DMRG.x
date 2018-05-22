@@ -3,7 +3,7 @@
 
 /**
     @defgroup   DMRGBlock   DMRGBlock
-    @brief      Implementation of the Block_SpinOneHalf class which contains the data and methods
+    @brief      Implementation of the Block classes which contain the data and methods
                 for a block of spin sites
     @addtogroup DMRGBlock
     @{ */
