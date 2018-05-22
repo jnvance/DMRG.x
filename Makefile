@@ -15,6 +15,10 @@ ${TARGET}: ${TARGET_OBJ} ${TARGET_DEPS} chkopts
 docs: FORCE
 	doxygen Doxyfile
 
+docs-default: FORCE
+	echo "HTML_HEADER=\nHTML_FOOTER=\nHTML_STYLESHEET=\nHTML_EXTRA_STYLESHEET=\nHTML_EXTRA_FILES=" | \
+	(cat Doxyfile && cat) | doxygen -
+
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
 	${RM} src/*.optrpt
