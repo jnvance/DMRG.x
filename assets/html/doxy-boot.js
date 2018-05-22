@@ -101,9 +101,9 @@ $( document ).ready(function() {
 
 
   /* responsive search box */
-  //$('#MSearchBox').parent().remove();
+  $('#MSearchBox').parent().remove();
 
-    /*
+
   var nav_container = $('<div class="row"></div>');
   $('#navrow1').parent().prepend(nav_container);
 
@@ -162,7 +162,7 @@ $( document ).ready(function() {
   searchBox.DOMSearchClose = function(){
     return document.getElementById("search-close");
   }
-  */
+
   /* search results */
 
   var results_iframe = $('#MSearchResults').detach();
