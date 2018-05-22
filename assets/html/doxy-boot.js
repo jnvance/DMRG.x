@@ -33,7 +33,7 @@ $( document ).ready(function() {
     $("table.directory").addClass("table table-striped");
     $("div.summary > a").addClass("btn btn-default btn-xs");
     $("table.fieldtable").addClass("table");
-    $(".fragment").addClass("well");
+    // $(".fragment").addClass("well");
     $(".memitem").addClass("panel panel-default");
     $(".memproto").addClass("panel-heading");
     $(".memdoc").addClass("panel-body");
