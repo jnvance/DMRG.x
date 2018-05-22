@@ -524,6 +524,9 @@ public:
             }
         }
 
+        /*  Initialize timings */
+        ierr = PetscTime(&t0abs); CHKERRQ(ierr);
+
         /*  Initialize the 0th system block with one site  */
         ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
 
@@ -936,6 +939,9 @@ private:
     /** Stores the truncation error at the end of a single dmrg step */
     std::vector<PetscReal>  trunc_err;
 
+    /** Stores the absolute time started */
+    PetscLogDouble t0abs = 0.0;
+
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
     PetscErrorCode SingleDMRGStep(
@@ -950,7 +956,7 @@ private:
         PetscErrorCode ierr;
         PetscLogDouble t0, tenlr, tkron, tdiag, trdms, trotb;
         TimingsData timings_data;
-        ierr = PetscTime(&t0); CHKERRQ(ierr);
+        t0 = t0abs;
 
         /* Fill-in data from input blocks */
         StepData step_data;
@@ -1229,7 +1235,7 @@ private:
         if(!mpi_rank && verbose) printf("* Rotation of Operators: %12.6f s\n", timings_data.tRotb);
 
         timings_data.Total = trotb - t0;
-        timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
+        ierr = PetscTime(&t0abs); CHKERRQ(ierr);
 
         if(!mpi_rank && verbose){
             const PetscReal pEnlr = 100*(timings_data.tEnlr)/timings_data.Total;

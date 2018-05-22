@@ -110,7 +110,8 @@ font-size: 1.15em !important;
  border: 0px solid #222 !important;
 }
 table{
-    white-space:pre-wrap !important;
+    /*white-space:pre-wrap !important;*/
+    /*white-space:none;*/
 }
 /*
  ===========================
@@ -485,8 +486,12 @@ span.SRScope {
 }
 
 .memtitle {
-    font-size: 12px;
+    font-size: 14px;
     background-image: none;
     margin-top: 0px;
     width: 100%;
+}
+
+code {
+    color: #3c763d;
 }
