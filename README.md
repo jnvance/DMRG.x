@@ -19,8 +19,8 @@ The Density Matrix Renormalization Group (DMRG) algorithm is a numerical techniq
 strongly correlated quantum systems. With this implementation, one can study two-dimensional spin systems using a one-dimensional
 traversal of the lattice.
 
-In particular, the current version deals with a __square-type lattice__ with longitudinal dimension _Lx_ and transverse
-dimension _Ly_ shown in the following figure.
+In particular, the current version deals with a __square-type lattice__ with longitudinal dimension \f$ L_x \f$ and transverse
+dimension \f$ L_y \f$ shown in the following figure.
 The spin sites can interact with their nearest neighbor (NN) and next-nearest neighbors (NNN), and different boundary conditions may be implemented on the two directions (such as the cylindrical boundary conditions illustrated below).
 
 ![](./assets/img/lattice-j1-j2-square.png)
@@ -29,9 +29,9 @@ The Hamiltonian for this implementation takes the form:
 
 ![](./assets/img/equation-j1-j2.png)
 
-which maps to a Heisenberg model when J₁ = 1/2 and J₂ = Δ₂ = 0, and to the J1-J2 XY model when Δ₁ = Δ₂ = 0.
+which maps to a Heisenberg model when \f$ J_1 = 1/2 \f$ and \f$ J_2 = \Delta_2 = 0 \f$, and to the J1-J2 XY model when \f$ \Delta_1 = \Delta_2 = 0 \f$.
 
-To reduce the computational cost, we exploit _U_(1) symmetry through conservation of the total magnetization (Sz).
+To reduce the computational cost, we exploit \f$ U(1) \f$ symmetry through conservation of the total magnetization (\f$ S_z \f$).
 We also implement a matrix-free approach in the diagonalization of the superblock Hamiltonian.
 
 Documentation
@@ -57,12 +57,12 @@ This application was developed as part of the following thesis for the [Master i
 
 For more information on the DMRG algorithm, we recommend the following reading materials:
  - U. Schollwöck. "The density-matrix renormalization group." Rev. Mod. Phys. 77, 259 – Published 26 April 2005
-    [[doi](https://doi.org/10.1103/RevModPhys.77.259)]
- - A E Feiguin. "The Density Matrix Renormalization Group". In: Strongly Correlated Systems. Berlin, Heidelberg: Springer Berlin Heidelberg, Apr. 2013, pp. 31–65. [[link](https://www.springer.com/cda/content/document/cda_downloaddocument/9783642351051-c2.pdf?SGWID=0-0-45-1391718-p174727662)]
+    [[doi]](https://doi.org/10.1103/RevModPhys.77.259)
+ - A E Feiguin. "The Density Matrix Renormalization Group". In: Strongly Correlated Systems. Berlin, Heidelberg: Springer Berlin Heidelberg, Apr. 2013, pp. 31–65. [[link]](https://www.springer.com/cda/content/document/cda_downloaddocument/9783642351051-c2.pdf?SGWID=0-0-45-1391718-p174727662)
 
 To learn DMRG through a simpler implementation, we suggest starting from the following Python code:
  - James R. Garrison, & Ryan V. Mishmash. (2017, November 29). simple-dmrg/simple-dmrg: Simple DMRG 1.0 (Version v1.0.0). Zenodo.
-    [https://simple-dmrg.readthedocs.io](https://simple-dmrg.readthedocs.io)
+    [[link]](https://simple-dmrg.readthedocs.io)
     [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1068359.svg)](https://doi.org/10.5281/zenodo.1068359)
 
 

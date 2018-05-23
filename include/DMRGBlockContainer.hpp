@@ -3,7 +3,7 @@
 
 /**
     @defgroup   DMRGBlockContainer   DMRGBlockContainer
-    @brief      Implementation of the DMRGBlockContainer class
+    @brief      Implementation of the DMRGBlockContainer class which 
     @addtogroup DMRGBlockContainer
     @{ */
 
