@@ -1192,6 +1192,7 @@ HTML_EXTRA_STYLESHEET  = ./assets/html/customdoxygen.css
 HTML_EXTRA_FILES       = ./assets/html/doxy-boot.js \
                          ./assets/html/jquery.smartmenus.js \
                          ./assets/addons/bootstrap/jquery.smartmenus.bootstrap.js \
+                         ./assets/addons/bootstrap/jquery.smartmenus.bootstrap.min.js \
                          ./assets/addons/bootstrap/jquery.smartmenus.bootstrap.css
 
 # The HTML_COLORSTYLE_HUE tag controls the color of the HTML output. Doxygen

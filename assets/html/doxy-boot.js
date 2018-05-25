@@ -2,12 +2,15 @@ $( document ).ready(function() {
     $("div.headertitle").addClass("page-header");
     $("div.title").addClass("h1");
 
-    $('li > a[href="index.html"] > span').before("<i class='fa fa-cog'></i> ");
-    $('li > a[href="modules.html"] > span').before("<i class='fa fa-square'></i> ");
-    $('li > a[href="namespaces.html"] > span').before("<i class='fa fa-bars'></i> ");
-    $('li > a[href="annotated.html"] > span').before("<i class='fa fa-list-ul'></i> ");
+    $('li > a[href="index.html"] > span').before("<i class='fas fa-home'></i> ");
+    $('li > a[href="pages.html"] > span').before("<i class='fab fa-readme'></i> ");
+    $('li > a[href="modules.html"] > span').before("<i class='fas fa-cubes'></i> ");
+    $('li > a[href="namespaces.html"] > span').before("<i class='fas fa-th-large'></i> ");
+    $('li > a[href="namespacemembers.html"] > span').before("<i class='fas fa-th'></i> ");
+    $('li > a[href="annotated.html"] > span').before("<i class='fas fa-project-diagram'></i> ");
     $('li > a[href="classes.html"] > span').before("<i class='fa fa-book'></i> ");
     $('li > a[href="inherits.html"] > span').before("<i class='fa fa-sitemap'></i> ");
+    $('li > a[href="files.html"] > span').before("<i class='far fa-file-alt'></i> ");
     $('li > a[href="functions.html"] > span').before("<i class='fa fa-list'></i> ");
     $('li > a[href="functions_func.html"] > span').before("<i class='fa fa-list'></i> ");
     $('li > a[href="functions_vars.html"] > span').before("<i class='fa fa-list'></i> ");

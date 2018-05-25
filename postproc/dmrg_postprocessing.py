@@ -28,6 +28,9 @@ class Data:
         self._corrLookup = None
         self._color = None
 
+    def Label(self):
+        return self._label
+
     #
     #   Run data
     #
