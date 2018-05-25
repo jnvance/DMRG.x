@@ -3,7 +3,8 @@
 
 /**
     @defgroup   DMRGKron   DMRGKron
-    @brief      Implementation of the Kronecker product routines
+    @brief      Implementation of the Kronecker product routines such as KronBlocks_t that use symmetries
+                in the QuantumNumbers class
     @addtogroup DMRGKron
     @{ */
 

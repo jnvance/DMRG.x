@@ -16,7 +16,7 @@ docs: docs-generate-files FORCE
 	doxygen Doxyfile
 
 docs-default: docs-generate-files FORCE
-	echo "HTML_HEADER=\nHTML_FOOTER=\nHTML_STYLESHEET=\nHTML_EXTRA_STYLESHEET=\nHTML_EXTRA_FILES=" | \
+	echo "HTML_HEADER=\nHTML_FOOTER=\nHTML_STYLESHEET=\nHTML_EXTRA_STYLESHEET=\nHTML_EXTRA_FILES=\nLAYOUT_FILE=\n" | \
 	(cat Doxyfile && cat) | doxygen -
 
 docs-generate-files: FORCE

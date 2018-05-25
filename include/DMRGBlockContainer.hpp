@@ -3,7 +3,8 @@
 
 /**
     @defgroup   DMRGBlockContainer   DMRGBlockContainer
-    @brief      Implementation of the DMRGBlockContainer class which 
+    @brief      Implementation of the DMRGBlockContainer class which is the core container
+                class for DMRG objects and operations
     @addtogroup DMRGBlockContainer
     @{ */
 
