@@ -20,8 +20,13 @@ To properly use the Makefiles for generating executables, the following environm
 
 To download and use the source code:
 
-    git clone https://github.com/jnvance/DMRG.git DMRG
-    cd DMRG
+    $ git clone https://github.com/jnvance/DMRG.git DMRG
+    $ cd DMRG
+
+```
+git clone https://github.com/jnvance/DMRG.git DMRG
+cd DMRG
+```
 
 This will default to the master branch. To use the latest development version of the code:
 

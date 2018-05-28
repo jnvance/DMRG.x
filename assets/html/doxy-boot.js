@@ -255,7 +255,7 @@ $( document ).ready(function() {
     $("td.mlabels-right").removeClass('mlabels-right');
 	$(".navpath").removeClass('navpath');
 	$("li.navelem").removeClass('navelem');
-	$("a.el").removeClass('el');
+	// $("a.el").removeClass('el');
 	$("div.ah").removeClass('ah');
 	$("div.header").removeClass("header");
 

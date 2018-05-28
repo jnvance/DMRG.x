@@ -236,18 +236,19 @@ pre.fragment {
     font-size:  9pt;
     line-height: 125%;
     font-family: monospace, fixed;
-    font-size: 105%;
+    font-size: 100%;
 }
 
 div.fragment {
     padding: 4px 6px;
     margin: 4px 8px 4px 2px;
     border: 1px solid #C4CFE5;
+    border-radius: 4px; /* To get the same look as in code.less */
 }
 
 div.line {
     font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
-    font-size: 12px;
+    font-size: 100%;
     min-height: 13px;
     line-height: 1.0;
     text-wrap: unrestricted;

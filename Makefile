@@ -14,6 +14,7 @@ ${TARGET}: ${TARGET_OBJ} ${TARGET_DEPS} chkopts
 
 docs: docs-generate-files FORCE
 	doxygen Doxyfile
+	cp assets/html/dynsections.js.in docs/html/dynsections.js
 
 docs-default: docs-generate-files FORCE
 	echo "HTML_HEADER=\nHTML_FOOTER=\nHTML_STYLESHEET=\nHTML_EXTRA_STYLESHEET=\nHTML_EXTRA_FILES=\nLAYOUT_FILE=\n" | \

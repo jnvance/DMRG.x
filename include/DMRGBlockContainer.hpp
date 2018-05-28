@@ -152,8 +152,14 @@ private:
 
 public:
 
-    /** The constructor only takes in the MPI communicator; Initialize() has to be called next. */
+    /** The constructor only takes in the MPI communicator; Initialize() has to be called explicitly next. */
     explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm){}
+
+    /** Calls the Destroy() method and deallocates container object */
+    ~DMRGBlockContainer()
+    {
+        PetscErrorCode ierr = Destroy(); CPP_CHKERR(ierr);
+    }
 
     /** Initializes the container object with blocks of one site on each of the system and environment.
 
@@ -386,12 +392,6 @@ public:
         LoopType = WarmupStep; /*??????*/
         init = PETSC_TRUE;
         return(0);
-    }
-
-    /** Calls the Destroy() method and deallocates container object */
-    ~DMRGBlockContainer()
-    {
-        PetscErrorCode ierr = Destroy(); CPP_CHKERR(ierr);
     }
 
     /** Destroys the container object */
