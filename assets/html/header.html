@@ -24,7 +24,7 @@
         $search
         $mathjax
         <link href="$relpath^$stylesheet" rel="stylesheet" type="text/css" />
-        $extrastylesheet
+        <!-- $extrastylesheet -->
         <link href='https://fonts.googleapis.com/css?family=Roboto+Slab' rel='stylesheet' type='text/css'>
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.css">
         <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.js"></script>
@@ -34,6 +34,8 @@
         <!-- SmartMenus jQuery Bootstrap Addon -->
         <script type="text/javascript" src="$relpath^jquery.smartmenus.bootstrap.js"></script>
         <!-- SmartMenus jQuery plugin -->
+        <!-- Extrastylesheet file (customdoxygen.css) should have highest precedence -->
+        $extrastylesheet
     </head>
     <body>
         <nav class="navbar navbar-default" role="navigation">
