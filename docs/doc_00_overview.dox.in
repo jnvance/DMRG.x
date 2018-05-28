@@ -1,5 +1,9 @@
 /** @mainpage DMRG.x
 
+A distributed-memory implementation of the DMRG algorithm based on the PETSc and SLEPc libraries.
+
+--------------------
+
  - @ref installation "Installation"
  - @ref usage "Usage"
 
