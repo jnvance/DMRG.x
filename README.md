@@ -109,4 +109,4 @@ License
 
 MIT License. Copyright (c) 2018 James Vance.
 
-See full text of license: [[md]](./LICENSE) [[dox]](https://github.com/jnvance/DMRG/blob/develop/LICENSE).
+See full text of LICENSE (also on [github](https://github.com/jnvance/DMRG/blob/develop/LICENSE)).
