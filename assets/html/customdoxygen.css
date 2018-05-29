@@ -1,19 +1,42 @@
 body, table, table.directory, div, p, dl {
-    font: 400 16px/24px 'Open Sans',sans-serif;
+    font: 400 16px/24px 'Source Sans Pro',sans-serif;
 }
 
 h1, .h1, h2, .h2, h3, .h3, .title {
-    font-weight: 700 !important;
+    font-weight: 800 !important;
     font-family: 'Roboto Slab', serif;
+    color: #276CAF;
 }
 
-h1, .h1 { font-size: 30px; }
+a {
+    color: #2F83D5;
+}
 
-h2, .h2 { font-size: 24px; font-weight: 600}
+.contents a:visited {
+    color: #276CAF;
+}
 
-h3, .h3 { font-size: 20px; font-weight: 500}
+.title {
+    font-size: 36px;
+    color: #23609B;
+}
 
-.title { font-size: 36px; }
+h1, .h1 {
+    font-size: 30px;
+    color: #276CAF;
+}
+
+h2, .h2 {
+    font-size: 24px;
+    font-weight: 500;
+    color: #2F83D5;
+}
+
+h3, .h3 {
+    font-size: 20px;
+    font-weight: 400;
+    color: #418ED8;
+}
 
 .sm-dox a span.sub-arrow {
     position: absolute;
@@ -580,4 +603,8 @@ div.foot {
 
 div.foot a, div.foot a:visited {
     color:          #8FB6D7
+}
+
+a:hover {
+    color: #276CAF;
 }
