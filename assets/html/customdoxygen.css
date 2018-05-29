@@ -547,11 +547,11 @@ a.navbar-brand {
     font-size: 20px;
 }
 
-li > a:hover {
-    background-color: #C7DAEB !important;
+ul.tablist.nav li > a:hover {
+    background-color: #CCDDEC !important;
 }
 
-li.active > a:hover {
+ul.tablist.nav li.active > a:hover {
     background-color: #265986 !important;
 }
 
