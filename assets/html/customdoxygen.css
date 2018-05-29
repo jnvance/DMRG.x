@@ -1,11 +1,19 @@
-body, table, div, p, dl {
-    font: 400 16px/24px Lato,sans-serif;
+body, table, table.directory, div, p, dl {
+    font: 400 16px/24px 'Open Sans',sans-serif;
 }
 
-h1, .h1, h2, .h2, h3, .h3{
+h1, .h1, h2, .h2, h3, .h3, .title {
     font-weight: 700 !important;
     font-family: 'Roboto Slab', serif;
 }
+
+h1, .h1 { font-size: 30px; }
+
+h2, .h2 { font-size: 24px; font-weight: 600}
+
+h3, .h3 { font-size: 20px; font-weight: 500}
+
+.title { font-size: 36px; }
 
 .sm-dox a span.sub-arrow {
     position: absolute;
@@ -16,7 +24,7 @@ h1, .h1, h2, .h2, h3, .h3{
     width: 28px;
     height: 28px;
     overflow: hidden;
-    font: bold 12px / 28px monospace !important;
+    font: bold 12,px / 28px "Roboto Mono", monospace !important;
     text-align: center;
     text-shadow: none;
     background: rgba(255, 255, 255, 0.5);
@@ -239,7 +247,7 @@ pre.fragment {
     overflow: auto;
     word-wrap: break-word;
     line-height: 125%;
-    font-family: monospace, fixed;
+    font-family: "Roboto Mono",monospace, fixed;
     font-size: 100%;
 }
 
@@ -251,7 +259,7 @@ div.fragment {
 }
 
 div.line {
-    font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-family: "Roboto Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace;
     font-size: 100%;
     min-height: 13px;
     line-height: 1.0;
@@ -294,7 +302,7 @@ span.lineno {
     border-left: 1px solid #EEE;
     background-color: #FFF;
     white-space: pre;
-    font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace ;
+    font-family: "Roboto Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace ;
 }
 span.lineno a {
     background-color: #FAFAFA;
@@ -499,17 +507,25 @@ span.SRScope {
 }
 
 code {
-    color: #333;
-    background-color: rgba(27,31,35,0.05);
-    font-size: 85%;
+    color: #0A0C0D;
+    font-size: 90%;
+    /*border: 1px solid #C4CFE5;*/
+    background-color: #F4F8FB;
+    padding: -4px -6px;
+    /*margin: 4px 8px 4px 2px;*/
+    overflow: auto;
+    word-wrap: break-word;
+    font-family: "Roboto Mono",monospace, fixed;
 }
 
 div.line {
-    font-size: 85%;
+    font-size: 90%;
+    line-height: 1.2;
 }
 
 pre.fragment {
-    font-size: 85%;
+    font-size: 90%;
+    line-height: 1.2;
 }
 
 .nav-justified {
@@ -529,4 +545,39 @@ body {
 a.navbar-brand {
     color: #ffffff !important;
     font-size: 20px;
+}
+
+li > a:hover {
+    background-color: #C7DAEB !important;
+}
+
+li.active > a:hover {
+    background-color: #265986 !important;
+}
+
+
+/* Table of contents */
+
+div.toc {
+    width: 300px;
+}
+
+div.toc li {
+    font-size: 12px !important;
+}
+
+div.toc h3 {
+    font-size: 14px !important;
+}
+
+div.foot {
+    font-size:      10px;
+    text-align:     center;
+    margin-top:     10px;
+    margin-bottom:  30px;
+    color:          #7D90A0;
+}
+
+div.foot a, div.foot a:visited {
+    color:          #8FB6D7
 }

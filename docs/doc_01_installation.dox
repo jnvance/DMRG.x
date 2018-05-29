@@ -2,7 +2,11 @@
 
 @brief Installing and configuring dependencies and getting the source code
 
-The current version requires a Linux/Mac machine installed with the following libraries:
+@tableofcontents
+
+@section installationOverview Overview
+
+The current version of DMRG.x requires a Linux/Mac machine installed with the following libraries:
  -  [PETSc 3.8.4](https://www.mcs.anl.gov/petsc/)
     [[download]](http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz)
     [[installation info]](https://www.mcs.anl.gov/petsc/documentation/installation.html)
@@ -10,21 +14,110 @@ The current version requires a Linux/Mac machine installed with the following li
     [[download]](http://slepc.upv.es/download/distrib/slepc-3.8.3.tar.gz)
     [[installation info]](http://slepc.upv.es/documentation/instal.htm)
 
-These will also require a working installation of MPI and a suitable BLAS/LAPACK library.
 The program may work with more recent versions of PETSc and SLEPc but it has not yet been tested for compatibility.
+These will also require a working installation of MPI and a suitable BLAS/LAPACK library.
+
+__Note:__
+
+ -  If your computer does not have any MPI library installed, consider installing it through
+    your package manager (`apt`, `yum`, `brew`, etc.)
+ -  On a computing cluster, the correct libraries may be obtained using the `module` utility
 
 To properly use the Makefiles for generating executables, the following environment variables must also be defined with the correct values:
  - `PETSC_DIR`
- - `PETSC_ARCH`
  - `SLEPC_DIR`
+ - `PETSC_ARCH`
+
+
+@section installationSlepc Tutorial: Installing PETSc and SLEPc on your local machine
+
+In this section, we give a step-by-step approach to install the PETSc and SLEPc libraries
+on our local machine. The steps may vary depending on the specifications and pre-existing
+libraries for each computer, so we will try to give the most generic steps possible.
+
+@subsection installationSetup Setting up source codes and environment variables
+
+First, create a subdirectory in your home folder where you will place the slepc
+and petsc installation
+
+    $ mkdir -p $HOME/slepc
+    $ cd $HOME/slepc
+
+Then, download and extract the source codes from the download links above to a folder in your
+home directory.
+
+    $ wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz
+    $ wget http://slepc.upv.es/download/distrib/slepc-3.8.3.tar.gz
+    $ tar xzf petsc-3.8.4.tar.gz
+    $ tar xzf slepc-3.8.3.tar.gz
+
+We should now have two directories: `petsc-3.8.4` and `slepc-3.8.3`
+
+    $ ls
+    > petsc-3.8.4  petsc-3.8.4.tar.gz  slepc-3.8.3  slepc-3.8.3.tar.gz
+
+Edit your rc file (e.g. `~/.bashrc` if you are using `bash`) with any text editor and add the
+following lines:
+
+    export PETSC_DIR="$HOME/slepc/petsc-3.8.4"
+    export SLEPC_DIR="$HOME/slepc/slepc-3.8.3"
+    export PETSC_ARCH="arch-linux-opt"
+
+To implement these commands, source the rc file
+
+    $ source ~/.bashrc
+
+or restart the terminal. Now check that the environment variables have been set correctly:
+
+    $ cd $PETSC_DIR && pwd
+    $ cd $SLEPC_DIR && pwd
+    $ echo $PETSC_ARCH
+
+@subsection installationConfiguration Configuration and Compilation
+
+PETSc and SLEPc need to be configured according to the software and hardware specifications
+of your machine. This is done through the `configure` utility in `$PETSC_DIR`.
+
+    $ cd $PETSC_DIR
+    $ ls configure
+
+If you wish to see all arguments to the configure command,
+
+    $ ./configure --help
+
+Assuming that the required libraries have been installed correctly, (on systems where MPI and
+BLAS/LAPACK are installed), the configure utility whill automatically locate these so that
+only the following minimal commands need to be used:
+
+    $ ./configure
+    $ make all test
+
+For more detailed information on configuration, see [[installation info]](
+https://www.mcs.anl.gov/petsc/documentation/installation.html)
+in the links above.
+
+Once PETSc has been configured and installed, we can now do the same on SLEPc.
+This step is now simpler since the `configure` utility will obtain
+the corresponding settings from PETSc:
+
+    $ cd $SLEPC_DIR
+    $ ./configure
+    $ make all test
+
+@section installationDMRG Installing DMRG.x
 
 To download and use the source code:
 
-    $ git clone https://github.com/jnvance/DMRG.git DMRG
-    $ cd DMRG
+    $ cd path/to/place/DMRG.x
+    $ git clone https://github.com/jnvance/DMRG.x.git DMRG.x
+    $ cd DMRG.x
 
 This will default to the master branch. To use the latest development version of the code:
 
     $ git checkout develop
+
+Details on the compilation of the executable may be found in @ref usage.
+
+--------------------
 
 */

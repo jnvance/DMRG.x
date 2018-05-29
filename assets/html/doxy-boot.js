@@ -1,6 +1,5 @@
 $( document ).ready(function() {
     $("div.headertitle").addClass("page-header");
-    $("div.title").addClass("h1");
 
     $('li > a[href="index.html"] > span').before("<i class='fas fa-home'></i> ");
     $('li > a[href="pages.html"] > span').before("<i class='fab fa-readme'></i> ");
