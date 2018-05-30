@@ -60,6 +60,8 @@ The minimum required `OPTIONS` to be specified are the following:
 
 where `<MWARMUP>` is the number of states kept during the warmup stage and `<MX>` is the number of
 states kept during the `X`th loop of the sweep stage.
+When `-scratch_dir` and `-data_dir` are not specified, default ones will be created in
+the current directory.
 
 The following additional general options may also be specified:
  - `-verbose <bool>` - printout more detailed information of each DMRG step
