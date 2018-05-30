@@ -106,15 +106,21 @@ class Data:
         plt.xlabel('DMRG Steps')
         plt.ylabel(r'$E_0/N$')
 
-    def PlotErrorEnergyPerSite(self,which='abs',**kwargs):
+    def PlotErrorEnergyPerSite(self,which='abs',compare_with='min',**kwargs):
         self._LoadSteps()
+        if compare_with=='min':
+            best = lambda energy_iter: np.min(energy_iter)
+        elif compare_with=='last':
+            best = lambda energy_iter: energy_iter[-1]
+        else:
+            raise ValueError("The value of compare_with can only be 'min' or 'last'. Got {}".format(compare_with))
         if which=='abs':
             energy_iter = np.array(self.EnergyPerSite())
-            energy_iter = np.abs((energy_iter - np.min(energy_iter)))
+            energy_iter = np.abs((energy_iter - best(energy_iter)))
             plt.ylabel(r'$E_0/N - \mathrm{min}(E_0/N)$')
         elif which=='rel':
             energy_iter = np.array(self.EnergyPerSite())
-            energy_iter = np.abs((energy_iter - np.min(energy_iter))/np.min(energy_iter))
+            energy_iter = np.abs((energy_iter - best(energy_iter))/best(energy_iter))
             plt.ylabel(r'$[E_0/N - \mathrm{min}(E_0/N)] / \mathrm{min}(E_0/N)$')
         else:
             raise ValueError("The value of which can only be 'abs' or 'rel'. Got {}".format(which))
