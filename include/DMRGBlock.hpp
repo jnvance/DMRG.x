@@ -3,7 +3,7 @@
 
 /**
     @defgroup   DMRGBlock   DMRGBlock
-    @brief      Implementation of the Block_SpinOneHalf class which contains the data and methods
+    @brief      Implementation of the Block classes which contain the data and methods
                 for a block of spin sites
     @addtogroup DMRGBlock
     @{ */
@@ -34,7 +34,10 @@ static const std::map<Op_t, std::string> OpString =
     {OpSp, "Sp"}
 };
 
+/** Convert the input Op_t to a C-style string */
 #define OpToCStr(OP)    ((OpString.find(OP)->second).c_str())
+
+/** Convert the input Op_t to a C++ string */
 #define OpToStr(OP)     (OpString.find(OP)->second)
 
 /** Identifies the sides of the DMRG block */

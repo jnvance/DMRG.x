@@ -4,52 +4,9 @@ Python module for post-processing data files produced by a DMRG.x application.
 
 import os
 import numpy as np
-import json
 import matplotlib.pyplot as plt
 import copy
-from shutil import copyfile
-
-def LoadJSONFile(file,appendStr,funcName,count=0):
-    """
-    Loads data from a JSON file and corrects unfinished runs by appending a string to the file.
-    """
-    filemod = file[:-5]+"-mod"+".json"
-    try:
-        if count == 0:
-            data = json.load(open(file))
-        elif count == 1:
-            data = json.load(open(filemod))
-        else:
-            raise ValueError('LoadJSONFile was not able to correct the file "{}" with an appended "{}". '
-                'Check the file manually.'.format(file,appendStr))
-        return data
-    except json.JSONDecodeError:
-        copyfile(file,filemod)
-        fh = open(filemod, "a")
-        fh.write(appendStr)
-        fh.close()
-        return LoadJSONFile(file,appendStr,funcName,count+1)
-
-def LoadJSONDict(file):
-    """
-    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
-    appending "}".
-    """
-    return LoadJSONFile(file,"}","LoadJSONDict")
-
-def LoadJSONTable(file):
-    """
-    Loads data from a JSON file with keys "headers" and "table", and corrects unfinished runs by
-    appending "]}".
-    """
-    return LoadJSONFile(file,"]}","LoadJSONTable")
-
-def LoadJSONArray(file):
-    """
-    Loads data from a JSON file represented as an array of dictionary entries and corrects
-    unfinished runs by appending "]".
-    """
-    return LoadJSONFile(file,"]","LoadJSONArray")
+import dmrg_json_utils as ju
 
 class Data:
     """
@@ -71,12 +28,15 @@ class Data:
         self._corrLookup = None
         self._color = None
 
+    def Label(self):
+        return self._label
+
     #
     #   Run data
     #
     def _LoadRun(self):
         if self._run is None:
-                self._run = LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
+                self._run = ju.LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
         return self._run
 
     def RunData(self):
@@ -89,7 +49,7 @@ class Data:
         """ Loads data from DMRGSteps.json and extracts
         """
         if self._steps is None:
-            steps = LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
+            steps = ju.LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
             self._stepsHeaders = steps['headers']
             self._idxEnergy = self._stepsHeaders.index('GSEnergy')
             self._idxNSysEnl = self._stepsHeaders.index('NSites_SysEnl')
@@ -146,15 +106,21 @@ class Data:
         plt.xlabel('DMRG Steps')
         plt.ylabel(r'$E_0/N$')
 
-    def PlotErrorEnergyPerSite(self,which='abs',**kwargs):
+    def PlotErrorEnergyPerSite(self,which='abs',compare_with='min',**kwargs):
         self._LoadSteps()
+        if compare_with=='min':
+            best = lambda energy_iter: np.min(energy_iter)
+        elif compare_with=='last':
+            best = lambda energy_iter: energy_iter[-1]
+        else:
+            raise ValueError("The value of compare_with can only be 'min' or 'last'. Got {}".format(compare_with))
         if which=='abs':
             energy_iter = np.array(self.EnergyPerSite())
-            energy_iter = np.abs((energy_iter - np.min(energy_iter)))
+            energy_iter = np.abs((energy_iter - best(energy_iter)))
             plt.ylabel(r'$E_0/N - \mathrm{min}(E_0/N)$')
         elif which=='rel':
             energy_iter = np.array(self.EnergyPerSite())
-            energy_iter = np.abs((energy_iter - np.min(energy_iter))/np.min(energy_iter))
+            energy_iter = np.abs((energy_iter - best(energy_iter))/best(energy_iter))
             plt.ylabel(r'$[E_0/N - \mathrm{min}(E_0/N)] / \mathrm{min}(E_0/N)$')
         else:
             raise ValueError("The value of which can only be 'abs' or 'rel'. Got {}".format(which))
@@ -178,7 +144,7 @@ class Data:
     #
     def _LoadTimings(self):
         if self._timings is None:
-            timings = LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
+            timings = ju.LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
             self._timingsHeaders = timings['headers']
             self._idxTimeTot = self._timingsHeaders.index('Total')
             self._timings = timings['table']
@@ -195,24 +161,40 @@ class Data:
         self._LoadTimings()
         return np.array([row[self._idxTimeTot] for row in self._timings])
 
-    def PlotTotalTime(self,which='plot',**kwargs):
+    def PlotTotalTime(self,which='plot',cumulative=False,units='s',**kwargs):
         totTime = self.TotalTime()
+        ylabel = "Time Elapsed per Step"
+
+        if cumulative:
+            totTime = np.cumsum(totTime)
+            ylabel = "Cumulative Time Elapsed"
+
+        if units=='m':
+            totTime /= 60.
+        elif units=='h':
+            totTime /= 3600.
+        elif units=='s':
+            pass
+        else:
+            raise ValueError("units='{}' unsupported. Choose among ['s','m','h']".format(units))
+
         if which=='plot':
             self._p = plt.plot(totTime,label=self._label,**kwargs)
         elif which=='semilogy':
             self._p = plt.semilogy(totTime,label=self._label,**kwargs)
         else:
             raise ValueError("which='{}' unsupported. Choose among ['plot','semilogy']".format(which))
+
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
-        plt.ylabel('Time Elapsed per Step (s)')
+        plt.ylabel('{} ({})'.format(ylabel,units))
 
     #
     #   Preallocation data
     #
     def PreallocData(self,n=None,key=None):
         if self._hamPrealloc is None:
-            self._hamPrealloc = LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
+            self._hamPrealloc = ju.LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
         if n is None:
             return self._hamPrealloc
         else:
@@ -238,7 +220,7 @@ class Data:
     #
     def _LoadSpectra(self):
         if self._entSpectra is None:
-            spectra = LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
+            spectra = ju.LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
             # determine which global indices are the ends of a sweep
 
             self._entSpectra = spectra
@@ -259,7 +241,7 @@ class Data:
     #
     def _LoadCorrelations(self):
         if self._corr is None:
-            self._corr = LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
+            self._corr = ju.LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
 
     def _LoadCorrelationsLookup(self):
         self._LoadCorrelations()
@@ -313,6 +295,14 @@ class DataSeries:
     """
 
     def __init__(self, base_dir_list, *args, label_list=None, **kwargs):
+        if base_dir_list:
+            # if non-empty check whether the first entry is a tuple
+            if len(base_dir_list[0]) == 2:
+                dirs = [dl[0] for dl in base_dir_list]
+                labels = [dl[1] for dl in base_dir_list]
+                base_dir_list = dirs
+                label_list = labels
+                # note: overrides the input label_list
         if label_list is None:
             self.DataList = [ Data(base_dir, *args, label=base_dir, **kwargs) for base_dir in base_dir_list ]
         else:
@@ -323,6 +313,9 @@ class DataSeries:
 
     def PlotEnergyPerSite(self,**kwargs):
         for obj in self.DataList: obj.PlotEnergyPerSite(**kwargs)
+
+    def PlotErrorEnergyPerSite(self,which='abs',**kwargs):
+        for obj in self.DataList: obj.PlotErrorEnergyPerSite(which='abs',**kwargs)
 
     def PlotTotalTime(self,**kwargs):
         for obj in self.DataList: obj.PlotTotalTime(**kwargs)

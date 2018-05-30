@@ -3,7 +3,8 @@
 
 /**
     @defgroup   DMRGKron   DMRGKron
-    @brief      Implementation of the Kronecker product routines
+    @brief      Implementation of the Kronecker product routines such as KronBlocks_t that use symmetries
+                in the QuantumNumbers class
     @addtogroup DMRGKron
     @{ */
 
@@ -32,6 +33,7 @@ struct KronSumTerm {
     Mat B;
 };
 
+/** Context struct for the KronSumShell matrix */
 struct KronSumCtx {
     PetscInt rstart=0;  /**< Starting index of local rows */
     PetscInt rend=0;    /**< Index after last of local rows, exclusive */
@@ -79,7 +81,7 @@ struct KronSumCtx {
     PetscInt Nelts=0;
 };
 
-
+/** Context structure defining a single row of KronSumShell */
 struct KronSumTermRow {
     PetscInt    nz_L, nz_R, bks_L, col_NStatesR, fws_O;
     PetscInt    *idx_L, *idx_R;

@@ -1,0 +1,20 @@
+/** @mainpage DMRG.x Documentation
+
+The following pages provide a quick overview into __DMRG.x__, a distributed-memory
+implementation of the DMRG algorithm based on the PETSc and SLEPc libraries.
+
+--------------------
+
+ - @ref installation "Installation"
+ - @ref usage "Usage"
+
+
+--------------------
+
+<!-- A portion of the README will be inserted here -->
+
+@@@
+
+--------------------
+
+ */

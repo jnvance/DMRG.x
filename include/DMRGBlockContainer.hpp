@@ -3,7 +3,8 @@
 
 /**
     @defgroup   DMRGBlockContainer   DMRGBlockContainer
-    @brief      Implementation of the DMRGBlockContainer class
+    @brief      Implementation of the DMRGBlockContainer class which is the core container
+                class for DMRG objects and operations
     @addtogroup DMRGBlockContainer
     @{ */
 
@@ -151,8 +152,14 @@ private:
 
 public:
 
-    /** The constructor only takes in the MPI communicator; Initialize() has to be called next. */
+    /** The constructor only takes in the MPI communicator; Initialize() has to be called explicitly next. */
     explicit DMRGBlockContainer(const MPI_Comm& mpi_comm): mpi_comm(mpi_comm){}
+
+    /** Calls the Destroy() method and deallocates container object */
+    ~DMRGBlockContainer()
+    {
+        PetscErrorCode ierr = Destroy(); CPP_CHKERR(ierr);
+    }
 
     /** Initializes the container object with blocks of one site on each of the system and environment.
 
@@ -282,32 +289,41 @@ public:
             /** @note
                 @parblock
                 This function also enforces some restrictions on command line inputs:
-                - either `-mstates` or `-mwarmup` has to be specified */
+                - either `-mstates` or `-mwarmup` has to be specified
+                @endparblock */
             if(!opt_mstates && !opt_mwarmup)
                 SETERRQ(mpi_comm,1,"Either -mstates or -mwarmup has to be specified.");
 
-            /** - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other */
+            /** @parblock
+                - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other
+                @endparblock */
             if(opt_mstates && !opt_mwarmup)
                 mwarmup = mstates;
 
-            /** - `-nsweeps` and `-msweeps` are incompatible and only one of them can be specified at a time */
+            /** @parblock
+                - `-nsweeps` and `-msweeps` are incompatible and only one of them can be specified at a time
+                @endparblock */
             if(opt_nsweeps && opt_msweeps)
                 SETERRQ(mpi_comm,1,"-msweeps and -nsweeps cannot both be specified at the same time.");
 
-            /** - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time */
+            /** @parblock
+                - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time
+                @endparblock */
             if(opt_nsweeps && opt_msweeps)
                 SETERRQ(mpi_comm,1,"-nsweeps and -maxnsweeps cannot both be specified at the same time.");
 
+            /** @parblock
+                - `-nsweeps` and `-maxnsweeps` are incompatible and only one of them can be specified at a time
+                @endparblock */
             if(opt_maxnsweeps && (num_maxnsweeps != num_msweeps))
                 SETERRQ2(mpi_comm,1,"-msweeps and -maxnsweeps must have the same number of items. "
                     "Got %lld and %lld, respectively.", num_msweeps, num_maxnsweeps);
 
-            /** @endparblock */
-
             /** @note
                 @parblock
                 The following criteria is used to decide the kind of sweeps to be performed:
-                - if `-nsweeps` is specified use SWEEP_MODE_NSWEEPS */
+                - if `-nsweeps` is specified use SWEEP_MODE_NSWEEPS
+                @endparblock */
             if(opt_nsweeps && !opt_msweeps)
             {
                 sweep_mode = SWEEP_MODE_NSWEEPS;
@@ -316,12 +332,16 @@ public:
             {
                 if(opt_maxnsweeps)
                 {
-                    /** - if `-msweeps` and `-maxnsweeps` is specified use SWEEP_MODE_TOLERANCE_TEST */
+                    /** @parblock
+                        - if `-msweeps` and `-maxnsweeps` is specified use SWEEP_MODE_TOLERANCE_TEST
+                        @endparblock */
                     sweep_mode = SWEEP_MODE_TOLERANCE_TEST;
                 }
                 else
                 {
-                    /** - if `-msweeps` is specified, and not `-maxnsweeps`, use SWEEP_MODE_MSWEEPS */
+                    /** @parblock
+                        - if `-msweeps` is specified, and not `-maxnsweeps`, use SWEEP_MODE_MSWEEPS
+                        @endparblock */
                     sweep_mode = SWEEP_MODE_MSWEEPS;
                 }
             }
@@ -333,8 +353,6 @@ public:
             {
                 SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
             }
-
-            /** @endparblock */
 
             /* printout some info */
             if(!mpi_rank){
@@ -374,12 +392,6 @@ public:
         LoopType = WarmupStep; /*??????*/
         init = PETSC_TRUE;
         return(0);
-    }
-
-    /** Calls the Destroy() method and deallocates container object */
-    ~DMRGBlockContainer()
-    {
-        PetscErrorCode ierr = Destroy(); CPP_CHKERR(ierr);
     }
 
     /** Destroys the container object */
@@ -512,6 +524,9 @@ public:
                 ierr = sys_blocks[iblock].InitializeSave(path); CHKERRQ(ierr);
             }
         }
+
+        /*  Initialize timings */
+        ierr = PetscTime(&t0abs); CHKERRQ(ierr);
 
         /*  Initialize the 0th system block with one site  */
         ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
@@ -925,6 +940,9 @@ private:
     /** Stores the truncation error at the end of a single dmrg step */
     std::vector<PetscReal>  trunc_err;
 
+    /** Stores the absolute time started */
+    PetscLogDouble t0abs = 0.0;
+
     /** Performs a single DMRG iteration taking in a system and environment block, adding one site
         to each and performing a truncation to at most MStates */
     PetscErrorCode SingleDMRGStep(
@@ -939,7 +957,7 @@ private:
         PetscErrorCode ierr;
         PetscLogDouble t0, tenlr, tkron, tdiag, trdms, trotb;
         TimingsData timings_data;
-        ierr = PetscTime(&t0); CHKERRQ(ierr);
+        t0 = t0abs;
 
         /* Fill-in data from input blocks */
         StepData step_data;
@@ -1164,7 +1182,14 @@ private:
         /* TODO: Perform evaluation of inter-block correlation functions here */
         /* TODO: Perform evaluation of intra-block correlation functions */
 
+        PetscLogDouble tcorr0,tcorr1;
+        ierr = PetscTime(&tcorr0); CHKERRQ(ierr);
+
         ierr = CalculateCorrelations_BlockDiag(KronBlocks, gsv_r, *BT_L, do_measurements); CHKERRQ(ierr);
+
+        ierr = PetscTime(&tcorr1); CHKERRQ(ierr);
+        if(do_measurements && !mpi_rank && verbose)
+            printf("  * Calc. of Correlators %12.6f s\n", tcorr1-tcorr0);
 
         ierr = VecDestroy(&gsv_r); CHKERRQ(ierr);
         ierr = VecDestroy(&gsv_i); CHKERRQ(ierr);
@@ -1211,7 +1236,7 @@ private:
         if(!mpi_rank && verbose) printf("* Rotation of Operators: %12.6f s\n", timings_data.tRotb);
 
         timings_data.Total = trotb - t0;
-        timings_data.Total += (timings_data.Total < 0) * 86400.0; /* Just in case it transitions from a previous day */
+        ierr = PetscTime(&t0abs); CHKERRQ(ierr);
 
         if(!mpi_rank && verbose){
             const PetscReal pEnlr = 100*(timings_data.tEnlr)/timings_data.Total;
