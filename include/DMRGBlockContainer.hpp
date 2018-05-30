@@ -206,23 +206,34 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-dry_run",&dry_run,NULL); CHKERRQ(ierr);
         /*  The scratch space to save temporary data*/
         char path[512];
-        PetscBool opt_do_scratch_dir;
+        PetscBool opt_do_scratch_dir = PETSC_FALSE;
         ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); CHKERRQ(ierr);
-        do_scratch_dir = opt_do_scratch_dir;
-        ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); CHKERRQ(ierr);
-        if(do_scratch_dir){
+        if(opt_do_scratch_dir){
             scratch_dir = std::string(path);
             if(scratch_dir.back()!='/') scratch_dir += '/';
+        } else {
+            scratch_dir = "./scratch_dir/";
+            if(!mpi_rank){
+                ierr = Makedir(scratch_dir); CHKERRQ(ierr);
+            }
         }
+        /* NOTE: Scratch dir is mandatory */
+        do_scratch_dir = PETSC_TRUE;
+        // ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); CHKERRQ(ierr);
 
         /* The location to save basic data */
         memset(path,0,sizeof(path));
         std::string data_dir;
-        PetscBool opt_data_dir;
+        PetscBool opt_data_dir = PETSC_FALSE;
         ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); CHKERRQ(ierr);
         if(opt_data_dir){
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
+        } else {
+            data_dir = "./data_dir/";
+            if(!mpi_rank){
+                ierr = Makedir(data_dir); CHKERRQ(ierr);
+            }
         }
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("DMRGSteps.json")).c_str(), "w", &fp_step); CHKERRQ(ierr);
         ierr = SaveStepHeaders(); CHKERRQ(ierr);
@@ -261,7 +272,7 @@ public:
             printf( "DIRECTORIES\n");
             if(do_scratch_dir) printf(
                     "  Scratch: %s\n", scratch_dir.c_str());
-            printf( "  Data:    %s\n", opt_data_dir ? data_dir.c_str() : "." );
+            printf( "  Data:    %s\n", data_dir.c_str());
             printf( "=========================================\n");
         }
 
