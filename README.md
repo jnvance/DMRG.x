@@ -7,11 +7,11 @@ A distributed-memory implementation of the DMRG algorithm based on the [PETSc](h
 
 <!--end01-->
 
-__Source code__: [https://github.com/jnvance/DMRG/tree/develop](https://github.com/jnvance/DMRG/tree/develop)
+__Source code__: [https://github.com/jnvance/DMRG.x](https://github.com/jnvance/DMRG.x)
 
-__Documentation__: [https://dmrgx.readthedocs.io/en/develop/](https://dmrgx.readthedocs.io/en/develop/)
+__Documentation__: [https://dmrgx.readthedocs.io](http://dmrgx.readthedocs.io)
 
-[![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=develop)](http://dmrgx.readthedocs.io/en/develop/?badge=develop)
+[![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=master)](https://dmrgx.readthedocs.io/en/master/?badge=master)
 
 Abstract
 --------
@@ -109,4 +109,4 @@ License
 
 MIT License. Copyright (c) 2018 James Vance.
 
-See full text of LICENSE (also on [github](https://github.com/jnvance/DMRG/blob/develop/LICENSE)).
+See full text of LICENSE (view on [github](https://github.com/jnvance/DMRG/blob/master/LICENSE)).
