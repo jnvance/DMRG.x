@@ -9,7 +9,7 @@ A distributed-memory implementation of the DMRG algorithm based on the [PETSc](h
 
 __Source code__: [https://github.com/jnvance/DMRG.x](https://github.com/jnvance/DMRG.x)
 
-__Documentation__: [https://dmrgx.readthedocs.io](http://dmrgx.readthedocs.io)
+__Documentation__: [https://dmrgx.readthedocs.io](https://dmrgx.readthedocs.io)
 
 [![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=master)](https://dmrgx.readthedocs.io/en/master/?badge=master)
 
