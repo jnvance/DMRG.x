@@ -608,3 +608,10 @@ div.foot a, div.foot a:visited {
 a:hover {
     color: #276CAF;
 }
+
+/* Separator between navbars */
+@media (max-width: 768px) {
+    ul.tablist.nav {
+        border-bottom: 1px solid #ccc;
+    }
+}
