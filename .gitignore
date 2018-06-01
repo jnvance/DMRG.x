@@ -33,3 +33,7 @@
 
 # Timings folder
 timings
+
+# Default data folders
+data_dir
+scratch_dir
