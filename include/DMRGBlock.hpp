@@ -178,6 +178,12 @@ namespace Block {
             const QuantumNumbers& qn_in
             );
 
+        /** Initializes block object from data located in the directory `block_path`. */
+        PetscErrorCode InitializeFromDisk(
+            const MPI_Comm& comm_in,
+            const std::string& block_path
+            );
+
         /** Initializes the writing of the block matrices to file */
         PetscErrorCode InitializeSave(
             const std::string& save_dir_in
@@ -188,6 +194,13 @@ namespace Block {
 
         /** Save all the matrix operators to file and destroy the current storage */
         PetscErrorCode SaveAndDestroy();
+
+        /** Save some information about the block that could be used to reconstruct it later.
+
+            Information to be saved:
+              -
+         */
+        PetscErrorCode SaveBlockInfo();
 
         /** Retrieves a single operator */
         PetscErrorCode RetrieveOperator(

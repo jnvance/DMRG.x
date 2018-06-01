@@ -35,8 +35,8 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     PetscErrorCode ierr;
     if(mpi_init) SETERRQ(mpi_comm,1,"This initializer should only be called once.");
     mpi_comm = comm_in;
-    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CPP_CHKERRQ(ierr);
-    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CPP_CHKERRQ(ierr);
+    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
+    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
     mpi_init = PETSC_TRUE;
     return(0);
 }
@@ -162,6 +162,29 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     Magnetization = qn_in;
 
     return ierr;
+}
+
+PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
+    const MPI_Comm& comm_in,
+    const std::string& block_path)
+{
+    PetscErrorCode ierr;
+    PetscInt num_sites_in;
+    const std::vector<PetscReal> qn_list_in;
+    const std::vector<PetscInt> qn_size_in;
+
+    ierr = Initialize(comm_in); CHKERRQ(ierr);
+
+    /* Proc0: Read the number of sites in */
+    /* Proc0: Read the number of states in */
+    /* Proc0: Read the qn_list_in */
+    /* Proc0: Read the qn_size_in */
+    /* Broadcast this data to comm world */
+    /* Generate the quantum numbers object */
+    /* Call initializer */
+    // ierr = Initialize()
+
+    return(0);
 }
 
 PetscErrorCode Block::SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
@@ -660,6 +683,13 @@ PetscErrorCode Block::SpinOneHalf::SaveOperator(
 }
 
 
+PetscErrorCode Block::SpinOneHalf::SaveBlockInfo()
+{
+
+    return(0);
+}
+
+
 PetscErrorCode Block::SpinOneHalf::RetrieveOperator(
     const std::string& OpName,
     const size_t& isite,
@@ -704,6 +734,7 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
     if(H){
         ierr = SaveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
     }
+    ierr = SaveBlockInfo(); CHKERRQ(ierr);
     ierr = Destroy(); CHKERRQ(ierr);
     init = PETSC_FALSE;
     saved = PETSC_TRUE;
