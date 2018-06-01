@@ -69,7 +69,11 @@ exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
 pygments_style = 'sphinx'
 
 import subprocess
-subprocess.call('cd ../../ ; ./docs/docs_generate_files.sh; doxygen Doxyfile', shell=True)
+subprocess.call(
+    'cd ../../ ;'
+    './docs/docs_generate_files.sh;'
+    'doxygen Doxyfile;'
+    'cp assets/html/dynsections.js.in docs/html/dynsections.js;', shell=True)
 
 
 # -- Options for HTML output -------------------------------------------------
