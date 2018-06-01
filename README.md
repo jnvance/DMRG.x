@@ -1,6 +1,5 @@
 <!--start01-->
-DMRG.x
-======
+# DMRG.x
 
 A distributed-memory implementation of the DMRG algorithm based on the [PETSc](https://www.mcs.anl.gov/petsc/) and
 [SLEPc](http://slepc.upv.es/) libraries.
@@ -13,8 +12,8 @@ __Documentation__: [https://dmrgx.readthedocs.io](https://dmrgx.readthedocs.io)
 
 [![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=master)](https://dmrgx.readthedocs.io/en/master/?badge=master)
 
-Abstract
---------
+## Abstract
+
 
 The Density Matrix Renormalization Group (DMRG) algorithm is a numerical technique used in the study of low-dimensional
 strongly correlated quantum systems. With this implementation, one can study two-dimensional spin systems using a one-dimensional
@@ -35,8 +34,8 @@ which maps to a Heisenberg model when \f$ J_1 = 1/2 \f$ and \f$ J_2 = \Delta_2 =
 To reduce the computational cost, we exploit \f$ U(1) \f$ symmetry through conservation of the total magnetization (\f$ S_z \f$).
 We also implement a matrix-free approach in the diagonalization of the superblock Hamiltonian.
 
-Documentation
--------------
+## Documentation
+
 
 The full documentation generated with doxygen may be viewed in the link above.
 To generate the documentation yourself, go to the root directory and execute
@@ -49,8 +48,8 @@ which places the documentation in `docs/html/index.html`.
 Since the same markdown files were used in generating the Doxygen documentation, some links may be available only for the
 markdown/github version (links marked as __[md]__) and others may work only for the doxygen version (marked as __[dox]__). -->
 
-References
-----------
+## References
+
 
 This application was developed as part of the following thesis for the [Master in High Performance Computing Programme](http://mhpc.it):
  - J. Vance. "Large-Scale Implementation of the Density Matrix Renormalization Group Algorithm." (2017). [[link]](http://hdl.handle.net/20.500.11767/68070
@@ -67,31 +66,7 @@ To learn DMRG through a simpler implementation, we suggest starting from the fol
     [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1068359.svg)](https://doi.org/10.5281/zenodo.1068359)
 
 
-<!--
-Table of Contents
------------------
- - [Prerequisites](#prerequisites)
- - [Installation](#installation)
- - [Usage](#usage)
- - [Contributing](#contributing)
- - [Credits](#credits)
- - [License](#license)
-
-Prerequisites
--------------
-
-Installation
-------------
-
-Usage
------
-
-Contributing
-------------
--->
-
-Credits
--------
+## Credits
 
 Author:
  - [James Vance](https://www.github.com/jnvance)
@@ -104,8 +79,8 @@ This application was developed in collaboration with the
 
 <!-- ![](https://www.ictp.it/img/ictp_head_logo.png =100x) -->
 
-License
--------
+## License
+
 
 MIT License. Copyright (c) 2018 James Vance.
 

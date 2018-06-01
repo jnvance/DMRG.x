@@ -1,42 +1,47 @@
-body, table, table.directory, div, p, dl {
-    font: 400 16px/24px 'Source Sans Pro',sans-serif;
+body, table, table.directory, div, p, dl, div.toc, div.toc h3, div.toc li {
+    font-size: 16px;
+    line-height: 24px;
+    font-family: 'Open Sans', sans-serif;
 }
 
-h1, .h1, h2, .h2, h3, .h3, .title {
-    font-weight: 800 !important;
-    font-family: 'Roboto Slab', serif;
-    color: #276CAF;
+p {
+    margin-bottom: 16px;
+}
+
+
+h1, .h1, h2, .h2, h3, .h3, .title, a.navbar-brand {
+    font-family: 'Merriweather', sans-serif;
+    font-weight: bold;
+    color: #23609B;
 }
 
 a {
-    color: #2F83D5;
+    color: #23609B;
 }
 
 .contents a:visited {
-    color: #276CAF;
+    color: #23609B;
+}
+
+.page-header {
+    border-bottom: 1.2px solid #ddd;
 }
 
 .title {
-    font-size: 36px;
+    font-size: 28px;
     color: #23609B;
 }
 
 h1, .h1 {
-    font-size: 30px;
-    color: #276CAF;
+    font-size: 24px;
+    border-bottom: 1.0px solid #ddd;
 }
 
 h2, .h2 {
-    font-size: 24px;
-    font-weight: 500;
-    color: #2F83D5;
+    font-size: 20px;
 }
 
-h3, .h3 {
-    font-size: 20px;
-    font-weight: 400;
-    color: #418ED8;
-}
+h3, .h3 { font-size: 16px; }
 
 .sm-dox a span.sub-arrow {
     position: absolute;
@@ -161,6 +166,7 @@ html,
 body {
     height: 100%;
     /* The html and body elements cannot have any padding or margin. */
+    text-rendering: optimizeLegibility;
 }
 
 /* Wrapper for page content to push down footer */
@@ -262,23 +268,11 @@ dl.el {
     margin-left: -1cm;
 }
 
-pre.fragment {
-    border: 1px solid #C4CFE5;
-    background-color: #FBFCFD;
-    padding: 4px 6px;
-    margin: 4px 8px 4px 2px;
-    overflow: auto;
-    word-wrap: break-word;
-    line-height: 125%;
-    font-family: "Roboto Mono",monospace, fixed;
-    font-size: 100%;
-}
-
 div.fragment {
     padding: 4px 6px;
     margin: 4px 8px 4px 2px;
     border: 1px solid #C4CFE5;
-    border-radius: 4px; /* To get the same look as in code.less */
+    border-radius: 2px; /* To get the same look as in code.less */
 }
 
 div.line {
@@ -464,6 +458,10 @@ span.SRScope {
   padding: 7px 8px 6px 8px;
 }
 
+td.desc {
+    padding-top: 7px !important;
+}
+
 .table > tbody > tr > td.memSeparator {
   line-height: 0;
   .table-hover;
@@ -533,12 +531,13 @@ code {
     color: #0A0C0D;
     font-size: 90%;
     /*border: 1px solid #C4CFE5;*/
-    background-color: #F4F8FB;
+    /*background-color: #F4F8FB;*/
     padding: -4px -6px;
     /*margin: 4px 8px 4px 2px;*/
     overflow: auto;
     word-wrap: break-word;
-    font-family: "Roboto Mono",monospace, fixed;
+    font-family: "Roboto Mono", monospace, fixed;
+    background-color: #eff0f1;
 }
 
 div.line {
@@ -547,8 +546,21 @@ div.line {
 }
 
 pre.fragment {
+    /*border: 1px solid #C4CFE5;*/
+    /*background-color: #F4F8FB;*/
+    padding: 4px 6px;
+    margin: 14px 8px 14px 2px;
+    overflow: auto;
+    word-wrap: break-word;
+    line-height: 125%;
+    font-family: "Roboto Mono", monospace, fixed;
+
+    font-size: 100%;
+    border-radius: 2px;
     font-size: 90%;
-    line-height: 1.2;
+    line-height: 1.5;
+    border: 0px solid #C4CFE5;
+    background-color: #eff0f1;
 }
 
 .nav-justified {
@@ -556,7 +568,7 @@ pre.fragment {
 }
 
 body {
-    background-color: rgba(27,31,35,0.05);
+    background-color: #F3F3F3;
 }
 
 /* Top bar */
@@ -570,12 +582,23 @@ a.navbar-brand {
     font-size: 20px;
 }
 
+/* Menu bar */
+
+ul.tablist.nav li.active > a {
+    background-color: #23609B;
+}
+
+ul.tablist.nav li > a {
+    margin-right: 2px !important;
+}
+
 ul.tablist.nav li > a:hover {
-    background-color: #CCDDEC !important;
+    background-color: #20588D !important;
+    color: #fff !important;
 }
 
 ul.tablist.nav li.active > a:hover {
-    background-color: #265986 !important;
+    /*background-color: #265986 !important;*/
 }
 
 
@@ -583,14 +606,16 @@ ul.tablist.nav li.active > a:hover {
 
 div.toc {
     width: 300px;
+    margin-right: 0px;
 }
 
 div.toc li {
-    font-size: 12px !important;
+    font-size: 14px !important;
+    line-height: 16px;
 }
 
 div.toc h3 {
-    font-size: 14px !important;
+    font-size: 16px !important;
 }
 
 div.foot {
@@ -614,4 +639,9 @@ a:hover {
     ul.tablist.nav {
         border-bottom: 1px solid #ccc;
     }
+}
+
+.panel {
+    background-color: white;
+    padding-top: 8px !important;
 }

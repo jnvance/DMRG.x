@@ -29,7 +29,7 @@ To properly use the Makefiles for generating executables, the following environm
  - `PETSC_ARCH`
 
 
-@section installationSlepc Tutorial: Installing PETSc and SLEPc on your local machine
+@section installationSlepc Installing PETSc and SLEPc
 
 In this section, we give a step-by-step approach to install the PETSc and SLEPc libraries
 on our local machine. The steps may vary depending on the specifications and pre-existing
