@@ -9,7 +9,7 @@ p {
 }
 
 
-h1, .h1, h2, .h2, h3, .h3, .title, a.navbar-brand {
+h1, .h1, h2, .h2, h3, .h3, .title, a.navbar-brand, h2.groupheader {
     font-family: 'Merriweather', sans-serif;
     font-weight: bold;
     color: #23609B;
@@ -37,7 +37,7 @@ h1, .h1 {
     border-bottom: 1.0px solid #ddd;
 }
 
-h2, .h2 {
+h2, .h2, h2.groupheader {
     font-size: 20px;
 }
 
@@ -565,6 +565,7 @@ pre.fragment {
 
 .nav-justified {
     font-size: 14px;
+    padding-top: 7px;
 }
 
 body {
@@ -641,7 +642,21 @@ a:hover {
     }
 }
 
-.panel {
-    background-color: white;
-    padding-top: 8px !important;
+/* Class index table */
+table.classindex {
+    font-size: 12px;
+    width: 100%;
+}
+
+/* Member documentation */
+table.memname {
+    margin-left: 0px;
+}
+
+table.memname td {
+    padding-left: 2px;
+}
+
+table.exception td.paramname {
+    padding-right: 12px;
 }

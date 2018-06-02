@@ -17,7 +17,14 @@ docs: docs-generate-files FORCE
 	cp assets/html/dynsections.js.in docs/html/dynsections.js
 
 docs-default: docs-generate-files FORCE
-	echo "HTML_HEADER=\nHTML_FOOTER=\nHTML_STYLESHEET=\nHTML_EXTRA_STYLESHEET=\nHTML_EXTRA_FILES=\nLAYOUT_FILE=\n" | \
+	echo "HTML_HEADER=\n" \
+		"HTML_FOOTER=\n" \
+		"HTML_STYLESHEET=\n" \
+		"HTML_EXTRA_STYLESHEET=\n" \
+		"HTML_EXTRA_FILES=\n "\
+		"LAYOUT_FILE=\n" \
+		"OUTPUT_DIRECTORY = ./docs/default\n" \
+		"GENERATE_TREEVIEW = YES\n" | \
 	(cat Doxyfile && cat) | doxygen -
 
 docs-generate-files: FORCE
@@ -26,7 +33,7 @@ docs-generate-files: FORCE
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
 	${RM} src/*.optrpt
-	${RM} -rf docs/html docs/latex docs/doc_00_overview.dox
+	${RM} -rf docs/html docs/latex docs/doc_00_overview.dox docs/default
 
 FORCE:
 
