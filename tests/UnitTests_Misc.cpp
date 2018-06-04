@@ -78,3 +78,59 @@ PETSC_EXTERN PetscErrorCode CatchErrorCode(const MPI_Comm& comm, const PetscInt&
 
     return ierr;
 }
+
+PETSC_EXTERN PetscErrorCode SetSz0(const Mat& Sz)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = SetRow(Sz, 0, {0,1}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 1, {1}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 2, {2,3,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 3, {3}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 4, {2,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 5, {5,6}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 7, {7}); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+PETSC_EXTERN PetscErrorCode SetSp0(const Mat& Sp)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = SetRow(Sp, 0, {2,3,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 1, {2,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 2, {5,6}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 3, {5}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 4, {6}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 6, {7}); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+PETSC_EXTERN PetscErrorCode SetSz1(const Mat& Sz)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = SetRow(Sz, 0, {0,1}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 1, {1}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 3, {3}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 4, {2,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 5, {5,6}); CHKERRQ(ierr);
+    ierr = SetRow(Sz, 7, {7}); CHKERRQ(ierr);
+
+    return ierr;
+}
+
+PETSC_EXTERN PetscErrorCode SetSp1(const Mat& Sp)
+{
+    PetscErrorCode ierr = 0;
+
+    ierr = SetRow(Sp, 0, {2,3,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 1, {2,4}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 2, {5,6}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 4, {6}); CHKERRQ(ierr);
+    ierr = SetRow(Sp, 6, {7}); CHKERRQ(ierr);
+
+    return ierr;
+}

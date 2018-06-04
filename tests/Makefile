@@ -1,5 +1,6 @@
 
 TARGETS = 	UnitTests_DMRGBlock.x \
+			UnitTests_DMRGBlock_SaveInfo.x \
 			UnitTests_DMRGKron.x \
 			UnitTests_DMRGBlockContainer.x
 
@@ -19,6 +20,10 @@ UnitTests_DMRGBlock.x: UnitTests_DMRGBlock.o ${UnitTests_DMRGBlock_DEPS} chkopts
 	-${CLINKER} -o UnitTests_DMRGBlock.x UnitTests_DMRGBlock.o ${UnitTests_DMRGBlock_DEPS} ${SLEPC_EPS_LIB}
 	${RM} UnitTests_DMRGBlock.o
 
+UnitTests_DMRGBlock_SaveInfo.x: UnitTests_DMRGBlock_SaveInfo.o ${UnitTests_DMRGBlock_DEPS} chkopts
+	-${CLINKER} -o UnitTests_DMRGBlock_SaveInfo.x UnitTests_DMRGBlock_SaveInfo.o ${UnitTests_DMRGBlock_DEPS} ${SLEPC_EPS_LIB}
+	${RM} UnitTests_DMRGBlock_SaveInfo.o
+
 UnitTests_DMRGBlockContainer.x: UnitTests_DMRGBlockContainer.o ${UnitTests_DMRGBlockContainer_DEPS} ../include/DMRGBlockContainer.hpp chkopts
 	-${CLINKER} -o UnitTests_DMRGBlockContainer.x UnitTests_DMRGBlockContainer.o ${UnitTests_DMRGBlockContainer_DEPS} ${SLEPC_EPS_LIB}
 	${RM} UnitTests_DMRGBlockContainer.o
@@ -36,5 +41,6 @@ flush: clean
 	${RM} -rf test_reshape/*
 	${RM} -rf data/*
 	${RM} -rf trash_block_test
+	${RM} -rf trash_block_test_save
 
 include ${SLEPC_DIR}/lib/slepc/conf/slepc_common

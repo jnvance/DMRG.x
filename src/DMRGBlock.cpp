@@ -2,6 +2,7 @@
 #include <numeric> // partial_sum
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 
 #include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
@@ -129,6 +130,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     return ierr;
 }
 
+
 PetscErrorCode Block::SpinOneHalf::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
@@ -151,6 +153,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     return ierr;
 }
 
+
 PetscErrorCode Block::SpinOneHalf::Initialize(
     const PetscInt& num_sites_in,
     const QuantumNumbers& qn_in)
@@ -163,6 +166,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
 
     return ierr;
 }
+
 
 PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
     const MPI_Comm& comm_in,
@@ -186,6 +190,7 @@ PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
 
     return(0);
 }
+
 
 PetscErrorCode Block::SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 {
@@ -685,6 +690,26 @@ PetscErrorCode Block::SpinOneHalf::SaveOperator(
 
 PetscErrorCode Block::SpinOneHalf::SaveBlockInfo()
 {
+    CheckInit(__FUNCTION__);
+    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+
+    PetscErrorCode ierr;
+
+    std::string filename = save_dir + "BlockInfo.dat";
+    std::ofstream infofile;
+    infofile.open(filename.c_str());
+
+    #if defined(PETSC_USE_COMPLEX)
+        int PetscUseComplex = 1;
+    #else
+        int PetscUseComplex = 0;
+    #endif
+
+    infofile << "NumBytesPetscInt:     " << sizeof(PetscInt) << std::endl;
+    infofile << "NumBytesPetscScalar:  " << sizeof(PetscScalar) << std::endl;
+    infofile << "PetscUseComplex:      " << PetscUseComplex << std::endl;
+
+    infofile.close();
 
     return(0);
 }
