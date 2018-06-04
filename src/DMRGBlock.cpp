@@ -173,21 +173,20 @@ PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
     const std::string& block_path_in)
 {
     PetscErrorCode ierr;
-    PetscInt num_sites_in;
-    PetscInt num_states_in;
+    PetscInt num_sites_in, num_states_in, num_sectors_in;
     std::vector<PetscReal> qn_list_in;
     std::vector<PetscInt> qn_size_in;
 
-    ierr = Initialize(comm_in); CHKERRQ(ierr);
+    PetscMPIInt mpi_rank_in;
+    ierr = MPI_Comm_rank(comm_in,&mpi_rank_in); CHKERRQ(ierr);
 
-    if(!mpi_rank)
+    std::string block_path = block_path_in;
+    if(block_path.back()!='/') block_path += '/';
+
+    if(!mpi_rank_in)
     {
-        std::string block_path = block_path_in;
-        /* If the last character is not a slash then add one */
-        if(block_path.back()!='/') block_path += '/';
-
+        /* Read data for Block */
         std::ifstream infofile((block_path + "BlockInfo.dat").c_str());
-
         std::map< std::string, PetscInt > infomap;
         std::string line;
         if (!infofile.is_open())
@@ -228,21 +227,51 @@ PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
         /* Assign variables */
         num_sites_in = infomap.at("NumSites");
         num_states_in = infomap.at("NumStates");
-
-        /* TODO: Read data from quantum numbers object */
+        num_sectors_in = infomap.at("NumSectors");
     }
 
-    ierr = MPI_Bcast(&num_sites_in, 1, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
-    ierr = MPI_Bcast(&num_states_in, 1, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
-    qn_list_in.resize(num_states_in);
-    qn_size_in.resize(num_states_in);
+    ierr = MPI_Bcast(&num_sites_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&num_states_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&num_sectors_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    qn_list_in.resize(num_sectors_in);
+    qn_size_in.resize(num_sectors_in);
 
-    /* Proc0: Read the qn_list_in */
-    /* Proc0: Read the qn_size_in */
-    /* Broadcast this data to comm world */
-    /* Generate the quantum numbers object */
-    /* Call initializer */
-    // ierr = Initialize()
+    if(num_sectors_in > 0)
+    {
+        if(!mpi_rank_in)
+        {
+            /* Read data for quantum numbers */
+            std::string filename = block_path + "QuantumNumbers.dat";
+            std::ifstream qnfile(filename.c_str());
+            std::string line;
+            if (!qnfile.is_open())
+                perror("error while opening file");
+            PetscInt ctr = 0;
+            while (qnfile && std::getline(qnfile, line)) {
+                std::istringstream iss(line);
+                iss >> qn_size_in.at(ctr) >> qn_list_in.at(ctr);
+                ++ctr;
+            }
+            if (qnfile.bad())
+                perror("error while reading file");
+            if(ctr!=num_sectors_in)
+                SETERRQ3(PETSC_COMM_SELF,1,"Incorrect number of data points in %s. "
+                    "Expected %lld. Got %lld.", filename.c_str(), num_sectors_in, ctr);
+
+            qnfile.close();
+        }
+
+        ierr = MPI_Bcast(qn_size_in.data(), num_sectors_in, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+        ierr = MPI_Bcast(qn_list_in.data(), num_sectors_in, MPIU_REAL, 0, comm_in); CHKERRQ(ierr);
+    }
+    else
+    {
+        SETERRQ(comm_in,1,"NumSectors cannot be zero.");
+    }
+
+    ierr = Initialize(mpi_comm, num_sites_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
+
+    /* TODO: Read-in the operators */
 
     return(0);
 }
@@ -750,28 +779,43 @@ PetscErrorCode Block::SpinOneHalf::SaveBlockInfo()
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
     if(mpi_rank) return(0);
 
-    std::string filename = save_dir + "BlockInfo.dat";
-    std::ofstream infofile;
-    infofile.open(filename.c_str());
+    /* Save block information */
+    {
+        std::ofstream infofile;
+        infofile.open((save_dir + "BlockInfo.dat").c_str());
 
-    #if defined(PETSC_USE_COMPLEX)
-        PetscInt PetscUseComplex = 1;
-    #else
-        PetscInt PetscUseComplex = 0;
-    #endif
+        #if defined(PETSC_USE_COMPLEX)
+            PetscInt PetscUseComplex = 1;
+        #else
+            PetscInt PetscUseComplex = 0;
+        #endif
 
-    #define SaveInfo(KEY,VALUE) infofile << std::left << std::setfill(' ') \
-            << std::setw(30) << KEY << " " << VALUE << std::endl;
+        #define SaveInfo(KEY,VALUE) infofile << std::left << std::setfill(' ') \
+                << std::setw(30) << KEY << " " << VALUE << std::endl;
+        SaveInfo("NumBytesPetscInt",    sizeof(PetscInt));
+        SaveInfo("NumBytesPetscScalar", sizeof(PetscScalar));
+        SaveInfo("PetscUseComplex",     PetscUseComplex);
+        SaveInfo("NumSites",            num_sites);
+        SaveInfo("NumStates",           num_states);
+        SaveInfo("NumSectors",          Magnetization.NumSectors());
+        #undef SaveInfo
 
-    SaveInfo("NumBytesPetscInt",    sizeof(PetscInt));
-    SaveInfo("NumBytesPetscScalar", sizeof(PetscScalar));
-    SaveInfo("PetscUseComplex",     PetscUseComplex);
-    SaveInfo("NumSites",            num_sites);
-    SaveInfo("NumStates",           num_states);
+        infofile.close();
+    }
 
-    #undef SaveInfo
+    /* Save quantum numbers information */
+    {
+        std::ofstream qnfile;
+        qnfile.open((save_dir + "QuantumNumbers.dat").c_str());
+        std::vector<PetscInt>  qn_size = Magnetization.Sizes();
+        std::vector<PetscReal> qn_list = Magnetization.List();
+        PetscInt num_sectors = Magnetization.NumSectors();
+        for(PetscInt idx=0; idx<num_sectors; idx++)
+            qnfile  << qn_size.at(idx) << " "
+                    << qn_list.at(idx) << std::endl;
+        qnfile.close();
+    }
 
-    infofile.close();
     return(0);
 }
 
