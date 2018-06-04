@@ -170,17 +170,73 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
 
 PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
     const MPI_Comm& comm_in,
-    const std::string& block_path)
+    const std::string& block_path_in)
 {
     PetscErrorCode ierr;
     PetscInt num_sites_in;
-    const std::vector<PetscReal> qn_list_in;
-    const std::vector<PetscInt> qn_size_in;
+    PetscInt num_states_in;
+    std::vector<PetscReal> qn_list_in;
+    std::vector<PetscInt> qn_size_in;
 
     ierr = Initialize(comm_in); CHKERRQ(ierr);
 
-    /* Proc0: Read the number of sites in */
-    /* Proc0: Read the number of states in */
+    if(!mpi_rank)
+    {
+        std::string block_path = block_path_in;
+        /* If the last character is not a slash then add one */
+        if(block_path.back()!='/') block_path += '/';
+
+        std::ifstream infofile((block_path + "BlockInfo.dat").c_str());
+
+        std::map< std::string, PetscInt > infomap;
+        std::string line;
+        if (!infofile.is_open())
+            perror("error while opening file");
+        while (infofile && std::getline(infofile, line)) {
+            std::string key;
+            PetscInt val;
+            std::istringstream iss(line);
+            iss >> key >> val;
+            infomap[key] = val;
+        }
+        if (infofile.bad())
+            perror("error while reading file");
+
+        infofile.close();
+
+        /* Verify compatibility */
+        {
+            if(infomap.at("NumBytesPetscInt") != sizeof(PetscInt))
+                SETERRQ2(PETSC_COMM_SELF,1,"Incompatible NumBytesPetscInt. Expected %lld. Got %lld.",
+                    PetscInt(sizeof(PetscInt)), infomap.at("NumBytesPetscInt"));
+
+            if(infomap.at("NumBytesPetscScalar") != sizeof(PetscScalar))
+                SETERRQ2(PETSC_COMM_SELF,1,"Incompatible NumBytesPetscScalar. Expected %lld. Got %lld.",
+                    PetscInt(sizeof(PetscScalar)), infomap.at("NumBytesPetscScalar"));
+
+            #if defined(PETSC_USE_COMPLEX)
+                PetscInt PetscUseComplex = 1;
+            #else
+                PetscInt PetscUseComplex = 0;
+            #endif
+
+            if(infomap.at("PetscUseComplex") != PetscUseComplex)
+                SETERRQ2(PETSC_COMM_SELF,1,"Incompatible PetscUseComplex. Expected %lld. Got %lld.",
+                    PetscInt(PetscUseComplex), infomap.at("PetscUseComplex"));
+        }
+
+        /* Assign variables */
+        num_sites_in = infomap.at("NumSites");
+        num_states_in = infomap.at("NumStates");
+
+        /* TODO: Read data from quantum numbers object */
+    }
+
+    ierr = MPI_Bcast(&num_sites_in, 1, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&num_states_in, 1, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+    qn_list_in.resize(num_states_in);
+    qn_size_in.resize(num_states_in);
+
     /* Proc0: Read the qn_list_in */
     /* Proc0: Read the qn_size_in */
     /* Broadcast this data to comm world */
@@ -692,25 +748,30 @@ PetscErrorCode Block::SpinOneHalf::SaveBlockInfo()
 {
     CheckInit(__FUNCTION__);
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
-
-    PetscErrorCode ierr;
+    if(mpi_rank) return(0);
 
     std::string filename = save_dir + "BlockInfo.dat";
     std::ofstream infofile;
     infofile.open(filename.c_str());
 
     #if defined(PETSC_USE_COMPLEX)
-        int PetscUseComplex = 1;
+        PetscInt PetscUseComplex = 1;
     #else
-        int PetscUseComplex = 0;
+        PetscInt PetscUseComplex = 0;
     #endif
 
-    infofile << "NumBytesPetscInt:     " << sizeof(PetscInt) << std::endl;
-    infofile << "NumBytesPetscScalar:  " << sizeof(PetscScalar) << std::endl;
-    infofile << "PetscUseComplex:      " << PetscUseComplex << std::endl;
+    #define SaveInfo(KEY,VALUE) infofile << std::left << std::setfill(' ') \
+            << std::setw(30) << KEY << " " << VALUE << std::endl;
+
+    SaveInfo("NumBytesPetscInt",    sizeof(PetscInt));
+    SaveInfo("NumBytesPetscScalar", sizeof(PetscScalar));
+    SaveInfo("PetscUseComplex",     PetscUseComplex);
+    SaveInfo("NumSites",            num_sites);
+    SaveInfo("NumStates",           num_states);
+
+    #undef SaveInfo
 
     infofile.close();
-
     return(0);
 }
 

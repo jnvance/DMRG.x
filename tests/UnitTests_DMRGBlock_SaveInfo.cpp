@@ -14,29 +14,38 @@ PETSC_EXTERN PetscErrorCode SetSz1(const Mat& Sz);
 PETSC_EXTERN PetscErrorCode SetSp1(const Mat& Sp);
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
-PetscErrorCode SaveBlockToDisk()
+PetscErrorCode CreateAndSaveBlock(Block::SpinOneHalf& blk)
 {
     PetscErrorCode ierr;
 
-    Block::SpinOneHalf blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
     ierr = Makedir("trash_block_test_save"); CHKERRQ(ierr);
     ierr = blk.InitializeSave("trash_block_test_save"); CHKERRQ(ierr);
 
-    /*  Set the entries of Sz(0) following the correct sectors */
+    /*  Set the entries of the operators following the correct sectors */
     ierr = SetSz0(blk.Sz(0)); CHKERRQ(ierr);
     ierr = SetSp0(blk.Sp(0)); CHKERRQ(ierr);
     ierr = SetSz1(blk.Sz(1)); CHKERRQ(ierr);
     ierr = SetSp1(blk.Sp(1)); CHKERRQ(ierr);
     ierr = blk.AssembleOperators(); CHKERRQ(ierr);
     ierr = blk.EnsureSaved(); CHKERRQ(ierr);
-    ierr = blk.Destroy(); CHKERRQ(ierr);
 
     return(0);
 }
 
-PetscErrorCode RetrieveBlockFromDisk()
+PetscErrorCode RetrieveBlockFromDisk(Block::SpinOneHalf& blk)
+{
+    PetscErrorCode ierr;
+    ierr = blk.InitializeFromDisk(PETSC_COMM_WORLD,"trash_block_test_save/"); CHKERRQ(ierr);
+
+    return(0);
+}
+
+PetscErrorCode CompareBlocks(
+    Block::SpinOneHalf& blk1,
+    Block::SpinOneHalf& blk2
+    )
 {
     return(0);
 }
@@ -52,8 +61,14 @@ int main(int argc, char **argv)
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
-    ierr = SaveBlockToDisk(); CHKERRQ(ierr);
-    ierr = RetrieveBlockFromDisk(); CHKERRQ(ierr);
+    Block::SpinOneHalf blk1, blk2;
+
+    ierr = CreateAndSaveBlock(blk1); CHKERRQ(ierr);
+    ierr = RetrieveBlockFromDisk(blk2); CHKERRQ(ierr);
+    ierr = CompareBlocks(blk1, blk2); CHKERRQ(ierr);
+
+    ierr = blk1.Destroy(); CHKERRQ(ierr);
+    ierr = blk2.Destroy(); CHKERRQ(ierr);
 
     ierr = SlepcFinalize(); CHKERRQ(ierr);
     return ierr;
