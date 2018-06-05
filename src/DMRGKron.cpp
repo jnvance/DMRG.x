@@ -1349,7 +1349,7 @@ PetscErrorCode KronBlocks_t::KronSumFillMatrix(
     /*  Preallocate largest needed workspace */
     PetscInt *idx_arr;
     PetscScalar *val_arr;
-    PetscInt Nvals = (ctx.lrows > 0) ? ((ctx.MaxIdx+1)-ctx.MinIdx) : 1;
+    PetscInt Nvals = ((ctx.lrows > 0) && (ctx.MaxIdx > ctx.MinIdx)) ? ((ctx.MaxIdx+1)-ctx.MinIdx) : 1;
     if(Nvals <= 0) SETERRQ1(PETSC_COMM_SELF,1,"Incorrect value of Nvals. Must be positive. Got %lld.", LLD(Nvals));
     ierr = PetscCalloc1(Nvals, &idx_arr); CHKERRQ(ierr);
     ierr = PetscCalloc1(Nvals, &val_arr); CHKERRQ(ierr);
