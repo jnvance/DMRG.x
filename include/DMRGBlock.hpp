@@ -131,6 +131,9 @@ namespace Block {
             const MPI_Comm& comm_in
             );
 
+        /** Private function to retrieve operators without checking for save initialization. */
+        PetscErrorCode Retrieve_NoChecks();
+
         /* Number of subcommunicators to be used when performing the rotation. */
         PetscInt nsubcomm = 1;
 
@@ -198,7 +201,9 @@ namespace Block {
         /** Save some information about the block that could be used to reconstruct it later.
 
             Information to be saved:
-              -
+              - Number of sites
+              - Number of states
+              - QuantumNumbers list and sizes
          */
         PetscErrorCode SaveBlockInfo();
 

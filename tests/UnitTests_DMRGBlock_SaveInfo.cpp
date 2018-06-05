@@ -30,6 +30,7 @@ PetscErrorCode CreateAndSaveBlock(Block::SpinOneHalf& blk)
     ierr = SetSp1(blk.Sp(1)); CHKERRQ(ierr);
     ierr = blk.AssembleOperators(); CHKERRQ(ierr);
     ierr = blk.EnsureSaved(); CHKERRQ(ierr);
+    ierr = blk.EnsureRetrieved(); CHKERRQ(ierr);
 
     return(0);
 }
@@ -38,6 +39,7 @@ PetscErrorCode RetrieveBlockFromDisk(Block::SpinOneHalf& blk)
 {
     PetscErrorCode ierr;
     ierr = blk.InitializeFromDisk(PETSC_COMM_WORLD,"trash_block_test_save/"); CHKERRQ(ierr);
+    ierr = blk.AssembleOperators(); CHKERRQ(ierr);
 
     return(0);
 }
@@ -47,6 +49,41 @@ PetscErrorCode CompareBlocks(
     Block::SpinOneHalf& blk2
     )
 {
+    PetscErrorCode ierr;
+    PetscBool flg;
+
+    if(blk1.NumSites()!=blk2.NumSites()) SETERRQ3(PETSC_COMM_WORLD,1,"Unequal %s. "
+        "Block1: %lld. Block2: %lld.", "NumSites", blk1.NumSites(), blk2.NumSites());
+    if(blk1.NumStates()!=blk2.NumStates()) SETERRQ3(PETSC_COMM_WORLD,1,"Unequal %s. "
+        "Block1: %lld. Block2: %lld.", "NumStates", blk1.NumStates(), blk2.NumStates());
+    if(blk1.Magnetization.NumStates()!=blk2.Magnetization.NumStates())
+        SETERRQ3(PETSC_COMM_WORLD,1,"Unequal %s. " "Block1: %lld. Block2: %lld.",
+            "Magnetization.NumStates", blk1.Magnetization.NumStates(), blk2.Magnetization.NumStates());
+    if(blk1.Magnetization.NumSectors()!=blk2.Magnetization.NumSectors())
+        SETERRQ3(PETSC_COMM_WORLD,1,"Unequal %s. " "Block1: %lld. Block2: %lld.",
+            "Magnetization.NumSectors", blk1.Magnetization.NumSectors(), blk2.Magnetization.NumSectors());
+
+    for(PetscInt idx=0; idx<blk1.Magnetization.NumSectors(); ++idx)
+    {
+        if(blk1.Magnetization.List(idx)!=blk2.Magnetization.List(idx))
+            SETERRQ4(PETSC_COMM_WORLD,1,"Unequal %s at idx %lld. Block1: %g. Block2: %g.",
+                "Magnetization.List", idx, blk1.Magnetization.List(idx), blk2.Magnetization.List(idx));
+
+        if(blk1.Magnetization.Sizes(idx)!=blk2.Magnetization.Sizes(idx))
+            SETERRQ4(PETSC_COMM_WORLD,1,"Unequal %s at idx %lld. Block1: %lld. Block2: %lld.",
+                "Magnetization.List", idx, blk1.Magnetization.Sizes(idx), blk2.Magnetization.Sizes(idx));
+    }
+
+    /* Compare the operators with each other */
+    ierr = MatEqual(blk1.Sz(0), blk2.Sz(0), &flg); CHKERRQ(ierr);
+    if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sz0");
+    ierr = MatEqual(blk1.Sp(0), blk2.Sp(0), &flg); CHKERRQ(ierr);
+    if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sp0");
+    ierr = MatEqual(blk1.Sz(1), blk2.Sz(1), &flg); CHKERRQ(ierr);
+    if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sz1");
+    ierr = MatEqual(blk1.Sp(1), blk2.Sp(1), &flg); CHKERRQ(ierr);
+    if(!flg) SETERRQ(PETSC_COMM_WORLD,1,"Wrong retrieval of matrix Sp1");
+
     return(0);
 }
 

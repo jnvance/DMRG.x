@@ -269,9 +269,16 @@ PetscErrorCode Block::SpinOneHalf::InitializeFromDisk(
         SETERRQ(comm_in,1,"NumSectors cannot be zero.");
     }
 
-    ierr = Initialize(mpi_comm, num_sites_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
+    ierr = Initialize(comm_in, num_sites_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
 
-    /* TODO: Read-in the operators */
+    /* Read-in the operators */
+    std::string save_dir_temp = save_dir;
+    save_dir = block_path;
+    ierr = Retrieve_NoChecks(); CHKERRQ(ierr);
+    save_dir = save_dir_temp;
+
+    /* Check operator validity */
+    ierr = CheckOperatorBlocks(); CHKERRQ(ierr);
 
     return(0);
 }
@@ -489,9 +496,13 @@ PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, co
             }
         }
     }
-    else{
+    else
+    {
+        MatType type;
+        ierr = MatGetType(matin, &type);
+
         /** @throw PETSC_ERR_SUP This checking has been implemented specifically for MATMPIAIJ only */
-        SETERRQ(mpi_comm, PETSC_ERR_SUP, "Implemented only for MATMPIAIJ.");
+        SETERRQ1(mpi_comm, PETSC_ERR_SUP, "Implemented only for MATMPIAIJ. Got %s.", type);
     }
 
     ierr = PetscInfo(0, "Operator matrix check satisfied.\n"); CHKERRQ(ierr);
@@ -878,20 +889,28 @@ PetscErrorCode Block::SpinOneHalf::Retrieve()
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
     if(init) SETERRQ(mpi_comm,1,"Destroy() must be called first.");
     PetscErrorCode ierr;
-    PetscBool flg = PETSC_FALSE;
-    for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = RetrieveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
-    }
-    for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = RetrieveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
-    }
-    ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);
-    if(flg){
-        ierr = RetrieveOperator("H",0,H); CHKERRQ(ierr);
-    }
+    ierr = Retrieve_NoChecks(); CHKERRQ(ierr);
     init = PETSC_TRUE;
     saved = PETSC_FALSE;
     retrieved = PETSC_TRUE;
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::Retrieve_NoChecks()
+{
+    PetscErrorCode ierr;
+    PetscBool flg = PETSC_FALSE;
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = RetrieveOperator("Sz",isite,SzData[isite],mpi_comm); CHKERRQ(ierr);
+    }
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = RetrieveOperator("Sp",isite,SpData[isite],mpi_comm); CHKERRQ(ierr);
+    }
+    ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);
+    if(flg){
+        ierr = RetrieveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
+    }
     return(0);
 }
 
