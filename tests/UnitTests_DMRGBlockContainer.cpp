@@ -12,16 +12,15 @@ PetscErrorCode Test()
 {
     PetscErrorCode ierr = 0;
 
-    DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XYModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
+    DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
 
-    PetscInt num_sweeps = 1, mstates = 8;
-    ierr = PetscOptionsGetInt(NULL,NULL,"-mstates",&mstates,NULL); CHKERRQ(ierr);
-    ierr = PetscOptionsGetInt(NULL,NULL,"-num_sweeps",&num_sweeps,NULL); CHKERRQ(ierr);
+    ierr = PetscOptionsSetValue(NULL, "-mwarmup", "20"); CHKERRQ(ierr);
+    ierr = PetscOptionsSetValue(NULL, "-msweeps", "20,30,40"); CHKERRQ(ierr);
+    ierr = PetscOptionsSetValue(NULL, "-maxnsweeps", "3,3,3"); CHKERRQ(ierr);
 
-    ierr = DMRG.Warmup(mstates); CHKERRQ(ierr);
-    for(PetscInt isweep = 0; isweep < num_sweeps; ++isweep){
-        ierr = DMRG.Sweep(mstates); CHKERRQ(ierr);
-    }
+    ierr = DMRG.Initialize(); CHKERRQ(ierr);
+    ierr = DMRG.Warmup(); CHKERRQ(ierr);
+    ierr = DMRG.Sweeps(); CHKERRQ(ierr);
 
     return ierr;
 }

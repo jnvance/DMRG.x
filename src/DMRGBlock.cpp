@@ -2,6 +2,7 @@
 #include <numeric> // partial_sum
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 
 #include <../src/mat/impls/aij/seq/aij.h>    /* Mat_SeqAIJ */
@@ -9,8 +10,6 @@
 
 /* External functions taken from MiscTools.cpp */
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp);
-PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz);
-PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp);
 PETSC_EXTERN PetscErrorCode InitSingleSiteOperator(const MPI_Comm& comm, const PetscInt dim, Mat* mat);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled_MultipleMats(const std::vector<Mat>& matrices);
@@ -29,20 +28,20 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
     SETERRQ4(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "On row %d, index %d out of bounds [%d,%d) ",\
         (row), (col), (cstart), (cend));
 
-PetscErrorCode Block::SpinOneHalf::Initialize(
+PetscErrorCode Block::SpinBase::Initialize(
     const MPI_Comm& comm_in)
 {
     PetscErrorCode ierr;
     if(mpi_init) SETERRQ(mpi_comm,1,"This initializer should only be called once.");
     mpi_comm = comm_in;
-    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CPP_CHKERRQ(ierr);
-    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CPP_CHKERRQ(ierr);
+    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
+    ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
     mpi_init = PETSC_TRUE;
     return(0);
 }
 
 
-PetscErrorCode Block::SpinOneHalf::Initialize(
+PetscErrorCode Block::SpinBase::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
     const PetscInt& num_states_in)
@@ -62,7 +61,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     /*  Initial number of sites and number of states  */
     num_sites = num_sites_in;
     if(num_states_in == PETSC_DEFAULT){
-        num_states = ipow(loc_dim, num_sites);
+        num_states = ipow(loc_dim(), num_sites);
     } else{
         num_states = num_states_in;
     }
@@ -78,18 +77,18 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     init_once = PETSC_TRUE;
 
     /** When creating a block for one site, the single-site operators are initialized using the default
-        values and matrix operators for spin-1/2 defined in Block::SpinOneHalf::loc_dim, Block::SpinOneHalf::loc_qn_list and Block::SpinOneHalf::loc_qn_size */
+        values and matrix operators for spin-1/2 defined in Block::SpinBase::loc_dim, Block::SpinBase::loc_qn_list and Block::SpinBase::loc_qn_size */
     if (num_sites == 1)
     {
         /*  Create the spin operators for the single site  */
-        ierr = MatSpinOneHalfSzCreate(mpi_comm, SzData[0]); CHKERRQ(ierr);
-        ierr = MatSpinOneHalfSpCreate(mpi_comm, SpData[0]); CHKERRQ(ierr);
+        ierr = MatSpinSzCreate(SzData[0]); CHKERRQ(ierr);
+        ierr = MatSpinSpCreate(SpData[0]); CHKERRQ(ierr);
 
         /*  Also initialize the single-site Hamiltonian which is defaulted to zero */
         ierr = InitSingleSiteOperator(mpi_comm, num_states, &H); CHKERRQ(ierr);
         ierr = MatEnsureAssembled(H); CHKERRQ(ierr);
         /*  Initialize the magnetization sectors using the defaults for one site */
-        ierr = Magnetization.Initialize(mpi_comm, loc_qn_list, loc_qn_size); CHKERRQ(ierr);
+        ierr = Magnetization.Initialize(mpi_comm, loc_qn_list(), loc_qn_size()); CHKERRQ(ierr);
 
         /*  Check whether sector initialization was done right  */
         ierr = CheckSectors(); CHKERRQ(ierr);
@@ -129,7 +128,8 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     return ierr;
 }
 
-PetscErrorCode Block::SpinOneHalf::Initialize(
+
+PetscErrorCode Block::SpinBase::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
     const std::vector<PetscReal>& qn_list_in,
@@ -151,7 +151,8 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     return ierr;
 }
 
-PetscErrorCode Block::SpinOneHalf::Initialize(
+
+PetscErrorCode Block::SpinBase::Initialize(
     const PetscInt& num_sites_in,
     const QuantumNumbers& qn_in)
 {
@@ -164,7 +165,124 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     return ierr;
 }
 
-PetscErrorCode Block::SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
+
+PetscErrorCode Block::SpinBase::InitializeFromDisk(
+    const MPI_Comm& comm_in,
+    const std::string& block_path_in)
+{
+    PetscErrorCode ierr;
+    PetscInt num_sites_in, num_states_in, num_sectors_in;
+    std::vector<PetscReal> qn_list_in;
+    std::vector<PetscInt> qn_size_in;
+
+    PetscMPIInt mpi_rank_in;
+    ierr = MPI_Comm_rank(comm_in,&mpi_rank_in); CHKERRQ(ierr);
+
+    std::string block_path = block_path_in;
+    if(block_path.back()!='/') block_path += '/';
+
+    if(!mpi_rank_in)
+    {
+        /* Read data for Block */
+        std::ifstream infofile((block_path + "BlockInfo.dat").c_str());
+        std::map< std::string, PetscInt > infomap;
+        std::string line;
+        if (!infofile.is_open())
+            perror("error while opening file");
+        while (infofile && std::getline(infofile, line)) {
+            std::string key;
+            PetscInt val;
+            std::istringstream iss(line);
+            iss >> key >> val;
+            infomap[key] = val;
+        }
+        if (infofile.bad())
+            perror("error while reading file");
+
+        infofile.close();
+
+        /* Verify compatibility */
+        {
+            if(infomap.at("NumBytesPetscInt") != sizeof(PetscInt))
+                SETERRQ2(PETSC_COMM_SELF,1,"Incompatible NumBytesPetscInt. Expected %lld. Got %lld.",
+                    PetscInt(sizeof(PetscInt)), infomap.at("NumBytesPetscInt"));
+
+            if(infomap.at("NumBytesPetscScalar") != sizeof(PetscScalar))
+                SETERRQ2(PETSC_COMM_SELF,1,"Incompatible NumBytesPetscScalar. Expected %lld. Got %lld.",
+                    PetscInt(sizeof(PetscScalar)), infomap.at("NumBytesPetscScalar"));
+
+            #if defined(PETSC_USE_COMPLEX)
+                PetscInt PetscUseComplex = 1;
+            #else
+                PetscInt PetscUseComplex = 0;
+            #endif
+
+            if(infomap.at("PetscUseComplex") != PetscUseComplex)
+                SETERRQ2(PETSC_COMM_SELF,1,"Incompatible PetscUseComplex. Expected %lld. Got %lld.",
+                    PetscInt(PetscUseComplex), infomap.at("PetscUseComplex"));
+        }
+
+        /* Assign variables */
+        num_sites_in = infomap.at("NumSites");
+        num_states_in = infomap.at("NumStates");
+        num_sectors_in = infomap.at("NumSectors");
+    }
+
+    ierr = MPI_Bcast(&num_sites_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&num_states_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&num_sectors_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    qn_list_in.resize(num_sectors_in);
+    qn_size_in.resize(num_sectors_in);
+
+    if(num_sectors_in > 0)
+    {
+        if(!mpi_rank_in)
+        {
+            /* Read data for quantum numbers */
+            std::string filename = block_path + "QuantumNumbers.dat";
+            std::ifstream qnfile(filename.c_str());
+            std::string line;
+            if (!qnfile.is_open())
+                perror("error while opening file");
+            PetscInt ctr = 0;
+            while (qnfile && std::getline(qnfile, line)) {
+                std::istringstream iss(line);
+                iss >> qn_size_in.at(ctr) >> qn_list_in.at(ctr);
+                ++ctr;
+            }
+            if (qnfile.bad())
+                perror("error while reading file");
+            if(ctr!=num_sectors_in)
+                SETERRQ3(PETSC_COMM_SELF,1,"Incorrect number of data points in %s. "
+                    "Expected %lld. Got %lld.", filename.c_str(), num_sectors_in, ctr);
+
+            qnfile.close();
+        }
+
+        ierr = MPI_Bcast(qn_size_in.data(), num_sectors_in, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+        ierr = MPI_Bcast(qn_list_in.data(), num_sectors_in, MPIU_REAL, 0, comm_in); CHKERRQ(ierr);
+    }
+    else
+    {
+        SETERRQ(comm_in,1,"NumSectors cannot be zero.");
+    }
+
+    ierr = Initialize(comm_in, num_sites_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
+
+    /* Read-in the operators */
+    std::string save_dir_temp = save_dir;
+    save_dir = block_path;
+    ierr = Retrieve_NoChecks(); CHKERRQ(ierr);
+    save_dir = save_dir_temp;
+
+    /* Check operator validity */
+    ierr = CheckOperatorBlocks(); CHKERRQ(ierr);
+
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinBase::CheckOperatorArray(const Op_t& OpType) const
 {
     PetscErrorCode ierr = 0;
 
@@ -202,7 +320,7 @@ PetscErrorCode Block::SpinOneHalf::CheckOperatorArray(const Op_t& OpType) const
 }
 
 
-PetscErrorCode Block::SpinOneHalf::CheckOperators() const
+PetscErrorCode Block::SpinBase::CheckOperators() const
 {
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
@@ -218,7 +336,7 @@ PetscErrorCode Block::SpinOneHalf::CheckOperators() const
 }
 
 
-PetscErrorCode Block::SpinOneHalf::CheckSectors() const
+PetscErrorCode Block::SpinBase::CheckSectors() const
 {
     PetscErrorCode ierr = 0;
     CheckInitOnce(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
@@ -239,7 +357,7 @@ PetscErrorCode Block::SpinOneHalf::CheckSectors() const
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatOpGetNNZs(
+PetscErrorCode Block::SpinBase::MatOpGetNNZs(
     const Op_t& OpType,
     const PetscInt& isite,
     std::vector<PetscInt>& nnzs
@@ -266,7 +384,7 @@ PetscErrorCode Block::SpinOneHalf::MatOpGetNNZs(
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatGetNNZs(
+PetscErrorCode Block::SpinBase::MatGetNNZs(
     const Mat& matin,
     std::vector<PetscInt>& nnzs
     ) const
@@ -287,7 +405,7 @@ PetscErrorCode Block::SpinOneHalf::MatGetNNZs(
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatOpCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
+PetscErrorCode Block::SpinBase::MatOpCheckOperatorBlocks(const Op_t& OpType, const PetscInt& isite) const
 {
     PetscErrorCode ierr = 0;
 
@@ -309,7 +427,7 @@ PetscErrorCode Block::SpinOneHalf::MatOpCheckOperatorBlocks(const Op_t& OpType, 
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, const Mat& matin) const
+PetscErrorCode Block::SpinBase::MatCheckOperatorBlocks(const Op_t& OpType, const Mat& matin) const
 {
     PetscErrorCode ierr = 0;
 
@@ -376,9 +494,13 @@ PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, co
             }
         }
     }
-    else{
+    else
+    {
+        MatType type;
+        ierr = MatGetType(matin, &type);
+
         /** @throw PETSC_ERR_SUP This checking has been implemented specifically for MATMPIAIJ only */
-        SETERRQ(mpi_comm, PETSC_ERR_SUP, "Implemented only for MATMPIAIJ.");
+        SETERRQ1(mpi_comm, PETSC_ERR_SUP, "Implemented only for MATMPIAIJ. Got %s.", type);
     }
 
     ierr = PetscInfo(0, "Operator matrix check satisfied.\n"); CHKERRQ(ierr);
@@ -386,7 +508,7 @@ PetscErrorCode Block::SpinOneHalf::MatCheckOperatorBlocks(const Op_t& OpType, co
 }
 
 
-PetscErrorCode Block::SpinOneHalf::CheckOperatorBlocks() const
+PetscErrorCode Block::SpinBase::CheckOperatorBlocks() const
 {
     PetscErrorCode ierr = 0;
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
@@ -408,7 +530,7 @@ PetscErrorCode Block::SpinOneHalf::CheckOperatorBlocks() const
 }
 
 
-PetscErrorCode Block::SpinOneHalf::CreateSm()
+PetscErrorCode Block::SpinBase::CreateSm()
 {
     PetscErrorCode ierr = 0;
 
@@ -424,7 +546,7 @@ PetscErrorCode Block::SpinOneHalf::CreateSm()
 }
 
 
-PetscErrorCode Block::SpinOneHalf::DestroySm()
+PetscErrorCode Block::SpinBase::DestroySm()
 {
     PetscErrorCode ierr = 0;
     if(!init_Sm && !init) return(0);
@@ -440,7 +562,7 @@ PetscErrorCode Block::SpinOneHalf::DestroySm()
 }
 
 
-PetscErrorCode Block::SpinOneHalf::Destroy()
+PetscErrorCode Block::SpinBase::Destroy()
 {
     PetscErrorCode ierr = 0;
     if (PetscUnlikely(!init)) return 0;
@@ -462,7 +584,7 @@ PetscErrorCode Block::SpinOneHalf::Destroy()
 }
 
 /* Note: May modify save state of Source */
-PetscErrorCode Block::SpinOneHalf::RotateOperators(SpinOneHalf& Source, const Mat& RotMatT_in)
+PetscErrorCode Block::SpinBase::RotateOperators(SpinBase& Source, const Mat& RotMatT_in)
 {
     PetscErrorCode ierr = 0;
     Mat RotMatT, RotMat, *SpData_loc, *SzData_loc, H_loc;
@@ -604,7 +726,7 @@ PetscErrorCode Block::SpinOneHalf::RotateOperators(SpinOneHalf& Source, const Ma
     return(0);
 }
 
-PetscErrorCode Block::SpinOneHalf::AssembleOperators()
+PetscErrorCode Block::SpinBase::AssembleOperators()
 {
     PetscErrorCode ierr;
     ierr = MatEnsureAssembled_MultipleMats(SzData); CHKERRQ(ierr);
@@ -614,7 +736,7 @@ PetscErrorCode Block::SpinOneHalf::AssembleOperators()
 }
 
 
-PetscErrorCode Block::SpinOneHalf::InitializeSave(
+PetscErrorCode Block::SpinBase::InitializeSave(
     const std::string& save_dir_in
     )
 {
@@ -642,7 +764,7 @@ std::string OpFilename(const std::string& RootDir, const std::string& OpName, co
 }
 
 
-PetscErrorCode Block::SpinOneHalf::SaveOperator(
+PetscErrorCode Block::SpinBase::SaveOperator(
     const std::string& OpName,
     const size_t& isite,
     Mat& Op,
@@ -660,7 +782,54 @@ PetscErrorCode Block::SpinOneHalf::SaveOperator(
 }
 
 
-PetscErrorCode Block::SpinOneHalf::RetrieveOperator(
+PetscErrorCode Block::SpinBase::SaveBlockInfo()
+{
+    CheckInit(__FUNCTION__);
+    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(mpi_rank) return(0);
+
+    /* Save block information */
+    {
+        std::ofstream infofile;
+        infofile.open((save_dir + "BlockInfo.dat").c_str());
+
+        #if defined(PETSC_USE_COMPLEX)
+            PetscInt PetscUseComplex = 1;
+        #else
+            PetscInt PetscUseComplex = 0;
+        #endif
+
+        #define SaveInfo(KEY,VALUE) infofile << std::left << std::setfill(' ') \
+                << std::setw(30) << KEY << " " << VALUE << std::endl;
+        SaveInfo("NumBytesPetscInt",    sizeof(PetscInt));
+        SaveInfo("NumBytesPetscScalar", sizeof(PetscScalar));
+        SaveInfo("PetscUseComplex",     PetscUseComplex);
+        SaveInfo("NumSites",            num_sites);
+        SaveInfo("NumStates",           num_states);
+        SaveInfo("NumSectors",          Magnetization.NumSectors());
+        #undef SaveInfo
+
+        infofile.close();
+    }
+
+    /* Save quantum numbers information */
+    {
+        std::ofstream qnfile;
+        qnfile.open((save_dir + "QuantumNumbers.dat").c_str());
+        std::vector<PetscInt>  qn_size = Magnetization.Sizes();
+        std::vector<PetscReal> qn_list = Magnetization.List();
+        PetscInt num_sectors = Magnetization.NumSectors();
+        for(PetscInt idx=0; idx<num_sectors; idx++)
+            qnfile  << qn_size.at(idx) << " "
+                    << qn_list.at(idx) << std::endl;
+        qnfile.close();
+    }
+
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinBase::RetrieveOperator(
     const std::string& OpName,
     const size_t& isite,
     Mat& Op,
@@ -690,7 +859,7 @@ PetscErrorCode Block::SpinOneHalf::RetrieveOperator(
 }
 
 
-PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
+PetscErrorCode Block::SpinBase::SaveAndDestroy()
 {
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
@@ -704,6 +873,7 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
     if(H){
         ierr = SaveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
     }
+    ierr = SaveBlockInfo(); CHKERRQ(ierr);
     ierr = Destroy(); CHKERRQ(ierr);
     init = PETSC_FALSE;
     saved = PETSC_TRUE;
@@ -712,22 +882,12 @@ PetscErrorCode Block::SpinOneHalf::SaveAndDestroy()
 }
 
 
-PetscErrorCode Block::SpinOneHalf::Retrieve()
+PetscErrorCode Block::SpinBase::Retrieve()
 {
     if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
     if(init) SETERRQ(mpi_comm,1,"Destroy() must be called first.");
     PetscErrorCode ierr;
-    PetscBool flg = PETSC_FALSE;
-    for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = RetrieveOperator("Sz",isite,SzData[isite]); CHKERRQ(ierr);
-    }
-    for(PetscInt isite = 0; isite < num_sites; ++isite){
-        ierr = RetrieveOperator("Sp",isite,SpData[isite]); CHKERRQ(ierr);
-    }
-    ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);
-    if(flg){
-        ierr = RetrieveOperator("H",0,H); CHKERRQ(ierr);
-    }
+    ierr = Retrieve_NoChecks(); CHKERRQ(ierr);
     init = PETSC_TRUE;
     saved = PETSC_FALSE;
     retrieved = PETSC_TRUE;
@@ -735,7 +895,25 @@ PetscErrorCode Block::SpinOneHalf::Retrieve()
 }
 
 
-PetscErrorCode Block::SpinOneHalf::EnsureSaved()
+PetscErrorCode Block::SpinBase::Retrieve_NoChecks()
+{
+    PetscErrorCode ierr;
+    PetscBool flg = PETSC_FALSE;
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = RetrieveOperator("Sz",isite,SzData[isite],mpi_comm); CHKERRQ(ierr);
+    }
+    for(PetscInt isite = 0; isite < num_sites; ++isite){
+        ierr = RetrieveOperator("Sp",isite,SpData[isite],mpi_comm); CHKERRQ(ierr);
+    }
+    ierr = PetscTestFile(OpFilename(save_dir,"H",0).c_str(), 'r', &flg); CHKERRQ(ierr);
+    if(flg){
+        ierr = RetrieveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
+    }
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinBase::EnsureSaved()
 {
     if(!init || !init_save || saved) return(0);
     PetscErrorCode ierr = SaveAndDestroy(); CHKERRQ(ierr);
@@ -743,9 +921,147 @@ PetscErrorCode Block::SpinOneHalf::EnsureSaved()
 }
 
 
-PetscErrorCode Block::SpinOneHalf::EnsureRetrieved()
+PetscErrorCode Block::SpinBase::EnsureRetrieved()
 {
     if(init || !init_save || retrieved) return(0);
     PetscErrorCode ierr = Retrieve(); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
+{
+    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
+    PetscErrorCode  ierr;
+
+    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sz); CHKERRQ(ierr);
+
+    PetscInt locrows, Istart;
+    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
+    PetscInt Iend = Istart + locrows;
+
+    /**
+        This is represented by the matrix
+        \f{align}{
+              S^z &= \frac{1}{2}
+                \begin{pmatrix}
+                  1  &  0  \\
+                  0  & -1
+                \end{pmatrix}
+
+        \f}
+     */
+    if (Istart <= 0 && 0 < Iend){
+        ierr = MatSetValue(Sz, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
+    }
+    if (Istart <= 1 && 1 < Iend){
+        ierr = MatSetValue(Sz, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
+    }
+
+    ierr = MatAssemblyBegin(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
+{
+    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
+    PetscErrorCode  ierr;
+
+    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sp); CHKERRQ(ierr);
+
+    PetscInt locrows, Istart;
+    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
+    PetscInt Iend = Istart + locrows;
+
+    /**
+        This is represented by the matrix
+        \f{align}{
+              S^+ &=
+                \begin{pmatrix}
+                  0  &  1  \\
+                  0  &  0
+                \end{pmatrix},
+        \f}
+     */
+    if (Istart <= 0 && 0 < Iend){
+        ierr = MatSetValue(Sp, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
+    }
+
+    ierr = MatAssemblyBegin(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOne::MatSpinSzCreate(Mat& Sz)
+{
+    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
+    PetscErrorCode  ierr;
+
+    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sz); CHKERRQ(ierr);
+
+    PetscInt locrows, Istart;
+    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
+    PetscInt Iend = Istart + locrows;
+
+    /**
+        This is represented by the matrix
+        \f{align}{
+              S^z &=
+                \begin{pmatrix}
+                  1  &  0  &  0 \\
+                  0  &  0  &  0 \\
+                  0  &  0  & -1
+                \end{pmatrix}
+        \f}
+     */
+    if (Istart <= 0 && 0 < Iend){
+        ierr = MatSetValue(Sz, 0, 0, +1.0, INSERT_VALUES); CHKERRQ(ierr);
+    }
+    if (Istart <= 2 && 2 < Iend){
+        ierr = MatSetValue(Sz, 2, 2, -1.0, INSERT_VALUES); CHKERRQ(ierr);
+    }
+
+    ierr = MatAssemblyBegin(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOne::MatSpinSpCreate(Mat& Sp)
+{
+    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
+    PetscErrorCode  ierr;
+
+    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sp); CHKERRQ(ierr);
+
+    PetscInt locrows, Istart;
+    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
+    PetscInt Iend = Istart + locrows;
+
+    const PetscScalar Sqrt2 = PetscSqrtScalar(2.0);
+
+    /**
+        This is represented by the matrix
+        \f{align}{
+              S^+ &=
+                \begin{pmatrix}
+                  0  &  1  &  0  \\
+                  0  &  0  &  1  \\
+                  0  &  0  &  0
+                \end{pmatrix},
+        \f}
+     */
+    if (Istart <= 0 && 0 < Iend){
+        ierr = MatSetValue(Sp, 0, 1, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+    }
+    if (Istart <= 1 && 1 < Iend){
+        ierr = MatSetValue(Sp, 1, 2, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+    }
+
+    ierr = MatAssemblyBegin(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
     return(0);
 }
