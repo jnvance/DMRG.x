@@ -19,6 +19,14 @@ a {
     color: #23609B;
 }
 
+a.el {
+    font-weight: 600 !important; /* Semibold */
+}
+
+code > a.el {
+    font-weight: 500 !important; /* Medium */
+}
+
 .contents a:visited {
     color: #23609B;
 }
@@ -659,4 +667,14 @@ table.memname td {
 
 table.exception td.paramname {
     padding-right: 12px;
+}
+
+td.memItemLeft {
+    width: fit-content;
+    white-space:nowrap;
+    color: #555;
+}
+
+.params .paramdir {
+    font-family: "Roboto Mono", monospace !important;
 }

@@ -44,7 +44,9 @@ PetscErrorCode Block::SpinBase::Initialize(
 PetscErrorCode Block::SpinBase::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
-    const PetscInt& num_states_in)
+    const PetscInt& num_states_in,
+    const PetscBool& init_ops
+    )
 {
     PetscErrorCode ierr = 0;
 
@@ -97,10 +99,13 @@ PetscErrorCode Block::SpinBase::Initialize(
         number of states */
     else if(num_sites > 1)
     {
-        for(PetscInt isite = 0; isite < num_sites; ++isite)
+        if(init_ops)
         {
-            ierr = InitSingleSiteOperator(mpi_comm, num_states, &SzData[isite]); CHKERRQ(ierr);
-            ierr = InitSingleSiteOperator(mpi_comm, num_states, &SpData[isite]); CHKERRQ(ierr);
+            for(PetscInt isite = 0; isite < num_sites; ++isite)
+            {
+                ierr = InitSingleSiteOperator(mpi_comm, num_states, &SzData[isite]); CHKERRQ(ierr);
+                ierr = InitSingleSiteOperator(mpi_comm, num_states, &SpData[isite]); CHKERRQ(ierr);
+            }
         }
     }
     else
@@ -133,7 +138,9 @@ PetscErrorCode Block::SpinBase::Initialize(
     const MPI_Comm& comm_in,
     const PetscInt& num_sites_in,
     const std::vector<PetscReal>& qn_list_in,
-    const std::vector<PetscInt>& qn_size_in)
+    const std::vector<PetscInt>& qn_size_in,
+    const PetscBool& init_ops
+    )
 {
     PetscErrorCode ierr = 0;
 
@@ -145,7 +152,7 @@ PetscErrorCode Block::SpinBase::Initialize(
     ierr = Magnetization_temp.Initialize(comm_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
     PetscInt num_states_in = Magnetization_temp.NumStates();
 
-    ierr = Initialize(comm_in, num_sites_in, num_states_in); CHKERRQ(ierr);
+    ierr = Initialize(comm_in, num_sites_in, num_states_in, init_ops); CHKERRQ(ierr);
     Magnetization = Magnetization_temp;
 
     return ierr;
@@ -267,7 +274,8 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
         SETERRQ(comm_in,1,"NumSectors cannot be zero.");
     }
 
-    ierr = Initialize(comm_in, num_sites_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
+    /* Initialize block object but do not initialize operators */
+    ierr = Initialize(comm_in, num_sites_in, qn_list_in, qn_size_in, PETSC_FALSE); CHKERRQ(ierr);
 
     /* Read-in the operators */
     std::string save_dir_temp = save_dir;

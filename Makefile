@@ -33,6 +33,8 @@ docs-generate-files: FORCE
 flush: clean
 	${RM} ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS}
 	${RM} src/*.optrpt
+
+flush-docs:
 	${RM} -rf docs/html docs/latex docs/doc_00_overview.dox docs/default
 
 FORCE:

@@ -73,15 +73,15 @@ $( document ).ready(function() {
     //     $('div.fragment.well div.line:first').parent().removeClass('fragment well');
     // }
 
-    $('table.memberdecls').find('.memItemRight').each(function(){
-        $(this).contents().appendTo($(this).siblings('.memItemLeft'));
-        $(this).siblings('.memItemLeft').attr('align', 'left');
-    });
+    // $('table.memberdecls').find('.memItemRight').each(function(){
+    //     $(this).contents().appendTo($(this).siblings('.memItemLeft'));
+    //     $(this).siblings('.memItemLeft').attr('align', 'left');
+    // });
 
-    $('table.memberdecls').find('.memTemplItemRight').each(function(){
-        $(this).contents().appendTo($(this).siblings('.memTemplItemLeft'));
-        $(this).siblings('.memTemplItemLeft').attr('align', 'left');
-    });
+    // $('table.memberdecls').find('.memTemplItemRight').each(function(){
+    //     $(this).contents().appendTo($(this).siblings('.memTemplItemLeft'));
+    //     $(this).siblings('.memTemplItemLeft').attr('align', 'left');
+    // });
 
 	function getOriginalWidthOfImg(img_element) {
 		var t = new Image();

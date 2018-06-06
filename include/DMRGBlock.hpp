@@ -168,7 +168,9 @@ namespace Block {
         PetscErrorCode Initialize(
             const MPI_Comm& comm_in,      /**< [in] MPI communicator */
             const PetscInt& num_sites_in, /**< [in] Number of sites */
-            const PetscInt& num_states_in /**< [in] Number of states (or PETSC_DEFAULT) */
+            const PetscInt& num_states_in,/**< [in] Number of states (or PETSC_DEFAULT) */
+            const PetscBool& init_ops = PETSC_TRUE
+            /**< [in] Whether to initialize operators automatically when `num_sites_in` > 1 */
             );
 
         /** Initializes block object with input attributes and array of matrix operators.
@@ -177,27 +179,29 @@ namespace Block {
             @remarks __TODO:__ Consider interfacing this to the object constructor.
         */
         PetscErrorCode Initialize(
-            const MPI_Comm& comm_in,
-            const PetscInt& num_sites_in,
-            const std::vector<PetscReal>& qn_list_in,
-            const std::vector<PetscInt>& qn_size_in
+            const MPI_Comm& comm_in,                    /**< [in] MPI communicator */
+            const PetscInt& num_sites_in,               /**< [in] Number of sites */
+            const std::vector<PetscReal>& qn_list_in,   /**< [in] List of quantum numbers in each sector */
+            const std::vector<PetscInt>& qn_size_in,    /**< [in] List of number of states in each sector */
+            const PetscBool& init_ops = PETSC_TRUE
+            /**< [in] Whether to initialize operators automatically when `num_sites_in` > 1 */
             );
 
         /** Initializes block object with an initialized quantum numbers object */
         PetscErrorCode Initialize(
-            const PetscInt& num_sites_in,
-            const QuantumNumbers& qn_in
+            const PetscInt& num_sites_in,   /**< [in] Number of sites */
+            const QuantumNumbers& qn_in     /**< [in] QuantumNumbers object to associate with this block */
             );
 
         /** Initializes block object from data located in the directory `block_path`. */
         PetscErrorCode InitializeFromDisk(
-            const MPI_Comm& comm_in,
-            const std::string& block_path
+            const MPI_Comm& comm_in,        /**< [in] MPI communicator */
+            const std::string& block_path   /**< [in] Directory storing the block object's data */
             );
 
         /** Initializes the writing of the block matrices to file */
         PetscErrorCode InitializeSave(
-            const std::string& save_dir_in
+            const std::string& save_dir_in  /**< [in] Directory to store block object's data */
             );
 
         /** Tells whether InitializeSave() has been properly called */
