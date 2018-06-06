@@ -20,13 +20,40 @@
 #include <string>
 #include "DMRGKron.hpp"
 
-PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
+/** Creates a directory named `dir_name`. */
+PETSC_EXTERN PetscErrorCode Makedir(
+    const std::string& dir_name /**< [in] Name of the directory to be created */
+    );
 
-#define CheckInitialization(init,mpi_comm) if(!init) SETERRQ(mpi_comm,1,"DMRGBlockContainer object not initialized. Call Initialize() first.");
-#define PrintLines() printf("-----------------------------------------\n")
-#define PRINTLINES() printf("=========================================\n")
-#define PrintBlocks(LEFT,RIGHT) printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT))
+/** Returns an error if DMRGBlockContainer object is not initialized. */
+#define CheckInitialization(init,mpi_comm) \
+{\
+    if(!init) SETERRQ(mpi_comm,1,"DMRGBlockContainer object not initialized."\
+        "Call Initialize() first.");\
+}
+
+/** Print out horizontal lines of `-` characters. */
+#define PrintLines() \
+{ \
+    printf("-----------------------------------------\n"); \
+}
+
+/** Print out horizontal lines of `=` characters. */
+#define PRINTLINES() \
+{ \
+    printf("=========================================\n"); \
+}
+
+/** Printout the number of sites in each of the input blocks */
+#define PrintBlocks(LEFT,RIGHT) \
+{ \
+    printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT)); \
+}
+
+/** Convert the input operator type and index to string */
 #define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
+
+/** Get the operator matrix corresponding to the given type, size and index */
 #define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
 
 /** Storage for information on resulting eigenpairs of the reduced density matrices */

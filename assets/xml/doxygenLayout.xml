@@ -147,12 +147,12 @@
       <files visible="yes" title=""/>
       <namespaces visible="yes" title=""/>
       <classes visible="yes" title=""/>
-      <defines title=""/>
       <typedefs title=""/>
       <enums title=""/>
       <enumvalues title=""/>
       <functions title=""/>
       <variables title=""/>
+      <defines title=""/>
       <signals title=""/>
       <publicslots title=""/>
       <protectedslots title=""/>

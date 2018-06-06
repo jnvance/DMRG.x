@@ -42,7 +42,7 @@ To generate the documentation yourself, go to the root directory and execute
 
     $ make docs-default
 
-which places the documentation in `docs/html/index.html`.
+which places the documentation in `docs/default/html/index.html`.
 
 <!-- __NOTE:__
 Since the same markdown files were used in generating the Doxygen documentation, some links may be available only for the

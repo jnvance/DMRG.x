@@ -22,7 +22,6 @@ docs-default: docs-generate-files FORCE
 		"HTML_STYLESHEET=\n" \
 		"HTML_EXTRA_STYLESHEET=\n" \
 		"HTML_EXTRA_FILES=\n "\
-		"LAYOUT_FILE=\n" \
 		"OUTPUT_DIRECTORY = ./docs/default\n" \
 		"GENERATE_TREEVIEW = YES\n" | \
 	(cat Doxyfile && cat) | doxygen -

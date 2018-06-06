@@ -1,15 +1,19 @@
-body, table, table.directory, div, p, dl, div.toc, div.toc h3, div.toc li {
+body, table, table.directory, div, p, dl, div.toc, div.toc h3, div.toc li, h3, .h3 {
     font-size: 16px;
     line-height: 24px;
     font-family: 'Open Sans', sans-serif;
 }
 
 p {
-    margin-bottom: 16px;
+    margin-top:     12px;
+    margin-bottom:  12px;
 }
 
+td.fielddoc p {
+    margin-top:     0px;
+}
 
-h1, .h1, h2, .h2, h3, .h3, .title, a.navbar-brand, h2.groupheader {
+h1, .h1, h2, .h2, .title, a.navbar-brand, h2.groupheader {
     font-family: 'Merriweather', sans-serif;
     font-weight: bold;
     color: #23609B;
@@ -40,6 +44,10 @@ code > a.el {
     color: #23609B;
 }
 
+div.headertitle.page-header {
+    padding-left: 0px;
+}
+
 h1, .h1 {
     font-size: 24px;
     border-bottom: 1.0px solid #ddd;
@@ -49,7 +57,10 @@ h2, .h2, h2.groupheader {
     font-size: 20px;
 }
 
-h3, .h3 { font-size: 16px; }
+h3, .h3 {
+    font-size: 18px;
+    font-weight: 700;
+}
 
 .sm-dox a span.sub-arrow {
     position: absolute;
@@ -247,15 +258,19 @@ body {
 ----------------------------------- */
 
 
-a.qindex {
-    font-weight: bold;
+a.qindex, a.qindexHL {
+    font-weight: 600;
+    font-size: 12px;
+    padding: 3px;
+    border-radius: 2px;
+    margin: 3px;
 }
 
 a.qindexHL {
     font-weight: bold;
-    background-color: #9CAFD4;
+    background-color: #23609B;
     color: #ffffff;
-    border: 1px double #869DCA;
+    border: 0px double #869DCA;
 }
 
 .contents a.qindexHL:visited {
@@ -657,16 +672,32 @@ table.classindex {
 }
 
 /* Member documentation */
+
+div.panel-heading {
+    padding-right: 10px;
+    background-color: #F9FAFC;
+}
+
 table.memname {
+    color: #23609B;
     margin-left: 0px;
 }
 
 table.memname td {
     padding-left: 2px;
+    font-weight: 600;
+}
+
+table.memname td.memname {
+    font-weight: 700 !important;
 }
 
 table.exception td.paramname {
     padding-right: 12px;
+}
+
+div.panel-heading td.pull-right {
+    margin-top: 5px;
 }
 
 td.memItemLeft {
@@ -677,4 +708,48 @@ td.memItemLeft {
 
 .params .paramdir {
     font-family: "Roboto Mono", monospace !important;
+}
+
+.label {
+    margin: 2px;
+}
+
+div.panel.panel-default.active div.panel-body {
+    padding-top:        10px;
+    padding-bottom:     10px;
+}
+
+.paramname, td.paramname code{
+    color: #177E72;
+}
+
+
+.label-info {
+    /*background-color: #23609B;*/
+    background-color: #177E72;
+}
+
+div.memtemplate {
+    margin-left: 0px;
+    padding-left: 2px;
+}
+
+div.navtab {
+    /*padding: 10px;*/
+    text-align: left;
+    border-radius: 2px;
+    border-width: 0px;
+    margin-right: 10px;
+}
+
+.inherit_header {
+    font-weight: 600;
+}
+
+dd {
+    margin-left: 20px;
+}
+
+div.contents {
+    margin: 0px;
 }

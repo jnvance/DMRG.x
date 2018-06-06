@@ -937,6 +937,8 @@ PetscErrorCode Block::SpinBase::EnsureRetrieved()
 }
 
 
+/*--------------- SpinOneHalf Functions ---------------*/
+
 PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
 {
     if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
@@ -1003,6 +1005,8 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
 }
 
 
+/*--------------- SpinOne Functions ---------------*/
+
 PetscErrorCode Block::SpinOne::MatSpinSzCreate(Mat& Sz)
 {
     if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
@@ -1054,7 +1058,7 @@ PetscErrorCode Block::SpinOne::MatSpinSpCreate(Mat& Sp)
     /**
         This is represented by the matrix
         \f{align}{
-              S^+ &=
+              S^+ &= \sqrt{2}
                 \begin{pmatrix}
                   0  &  1  &  0  \\
                   0  &  0  &  1  \\

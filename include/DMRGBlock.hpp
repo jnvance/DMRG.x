@@ -50,7 +50,9 @@ typedef enum
 static const std::vector<Op_t> BasicOpTypes = { OpSz, OpSp };
 static const std::vector<Side_t> SideTypes = { SideLeft, SideRight };
 
-/** Contains the definitions for blocks of spin sites */
+/** Contains the definitions for blocks of spin sites.
+    Definition of spin operators were taken from this
+    [site](http://easyspin.org/documentation/spinoperators.html). */
 namespace Block {
 
     /** Base class for the implementation of a block of spin sites. */
@@ -377,13 +379,22 @@ namespace Block {
     {
     public:
         /** Returns the local dimension of a single site \f$d=3\f$. */
-        PetscInt loc_dim() const { return 3; }
+        PetscInt loc_dim() const
+        {
+            return 3;
+        }
 
-        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1/2,-1/2\}\f$ */
-        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+1, 0, -1}); }
+        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1,0,-1\}\f$ */
+        std::vector<PetscScalar> loc_qn_list() const
+        {
+            return std::vector<PetscScalar>({+1., 0., -1.});
+        }
 
-        /** Returns the number of states in each sector in a single site \f$\{1,1\}\f$. */
-        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1, 1}); }
+        /** Returns the number of states in each sector in a single site \f$\{1,1,1\}\f$. */
+        std::vector<PetscInt> loc_qn_size() const
+        {
+            return std::vector<PetscInt>({1, 1, 1});
+        }
 
         /** Creates the single-site \f$ S^z \f$ operator. */
         PetscErrorCode MatSpinSzCreate(Mat& Sz);
