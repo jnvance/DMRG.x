@@ -83,8 +83,8 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     if (num_sites == 1)
     {
         /*  Create the spin operators for the single site  */
-        ierr = MatSpinOneHalfSzCreate(mpi_comm, SzData[0]); CHKERRQ(ierr);
-        ierr = MatSpinOneHalfSpCreate(mpi_comm, SpData[0]); CHKERRQ(ierr);
+        ierr = MatSpinSzCreate(SzData[0]); CHKERRQ(ierr);
+        ierr = MatSpinSpCreate(SpData[0]); CHKERRQ(ierr);
 
         /*  Also initialize the single-site Hamiltonian which is defaulted to zero */
         ierr = InitSingleSiteOperator(mpi_comm, num_states, &H); CHKERRQ(ierr);
@@ -927,5 +927,21 @@ PetscErrorCode Block::SpinOneHalf::EnsureRetrieved()
 {
     if(init || !init_save || retrieved) return(0);
     PetscErrorCode ierr = Retrieve(); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
+{
+    if(!mpi_init) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
+    PetscErrorCode ierr = MatSpinOneHalfSzCreate(mpi_comm, Sz); CHKERRQ(ierr);
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
+{
+    if(!mpi_init) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
+    PetscErrorCode ierr = MatSpinOneHalfSpCreate(mpi_comm, Sp); CHKERRQ(ierr);
     return(0);
 }

@@ -148,6 +148,11 @@ namespace Block {
             @remarks __NOTE:__ Default for spin-1/2 */
         std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1}); }
 
+        /** Creates the single-site Sz operator. (Must be overloaded) */
+        PetscErrorCode MatSpinSzCreate(Mat& Sz);
+
+        /** Creates the single-site Sp operator. (Must be overloaded) */
+        PetscErrorCode MatSpinSpCreate(Mat& Sp);
 
         /** Initializes block object's MPI attributes */
         PetscErrorCode Initialize(
