@@ -53,9 +53,8 @@ static const std::vector<Side_t> SideTypes = { SideLeft, SideRight };
 /** Contains the definitions for blocks of spin sites */
 namespace Block {
 
-    /** Contains the matrix representations of the operators of a block of spin-1/2 sites, the associated
-        magnetization sectors and some useful information and checking functions */
-    class SpinOneHalf
+    /** Base class for the implementation of a block of spin sites. */
+    class SpinBase
     {
 
     private:
@@ -134,25 +133,28 @@ namespace Block {
         /** Method to use for performing basis transformation. TODO: Get the method from command line */
         RotMethod rot_method = mmmmult;
 
+    protected:
+
+        /** Returns PETSC_TRUE if the MPI communicator was initialized properly. */
+        PetscBool MPIInitialized() const { return mpi_init; }
+
     public:
 
-        /** Local dimension of a single site.
-            @remarks __NOTE:__ Default for spin-1/2 */
-        PetscInt loc_dim() const { return 2; }
+        /** Local dimension of a single site. */
+        virtual PetscInt loc_dim() const = 0;
 
-        /** Sz sectors of a single site.
-            @remarks __NOTE:__ Default for spin-1/2 */
-        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+0.5, -0.5}); }
+        /** Sz sectors of a single site. */
+        virtual std::vector<PetscScalar> loc_qn_list() const = 0;
 
-        /** Number of states in each sector in a single site.
-            @remarks __NOTE:__ Default for spin-1/2 */
-        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1}); }
+        /** Number of states in each sector in a single site. */
+        virtual std::vector<PetscInt> loc_qn_size() const = 0;
 
-        /** Creates the single-site Sz operator. (Must be overloaded) */
-        PetscErrorCode MatSpinSzCreate(Mat& Sz);
+        /** Creates the single-site \f$ S^z \f$ operator. */
+        virtual PetscErrorCode MatSpinSzCreate(Mat& Sz) = 0;
 
-        /** Creates the single-site Sp operator. (Must be overloaded) */
-        PetscErrorCode MatSpinSpCreate(Mat& Sp);
+        /** Creates the single-site raising operator \f$ S^+ \f$,
+            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
+        virtual PetscErrorCode MatSpinSpCreate(Mat& Sp) = 0;
 
         /** Initializes block object's MPI attributes */
         PetscErrorCode Initialize(
@@ -261,26 +263,32 @@ namespace Block {
         /** Matrix representation of the Hamiltonian operator */
         Mat     H = nullptr;
 
+        /** Returns the matrix pointer to the \f$ S^z \f$ operator at site `Isite`. */
         Mat Sz(const PetscInt& Isite) const {
             if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
             return SzData[Isite];
         }
 
+        /** Returns the matrix pointer to the \f$ S^+ \f$ operator at site `Isite`. */
         Mat Sp(const PetscInt& Isite) const {
             if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
             return SpData[Isite];
         }
 
+        /** Returns the matrix pointer to the \f$ S^- \f$ operator at site `Isite`, if available. */
         Mat Sm(const PetscInt& Isite) const {
             if(Isite >= num_sites) throw std::runtime_error("Attempted to access non-existent site.");
             if(!init_Sm) throw std::runtime_error("Sm matrices were not initialized on this block.");
             return SmData[Isite];
         }
 
+        /** Returns the list of matrix pointer to the \f$ S^z \f$ operators. */
         const std::vector<Mat>& Sz() const { return SzData; }
 
+        /** Returns the list of matrix pointer to the \f$ S^+ \f$ operators. */
         const std::vector<Mat>& Sp() const { return SpData; }
 
+        /** Returns the list of matrix pointer to the \f$ S^- \f$ operators. */
         const std::vector<Mat>& Sm() const { return SmData; }
 
         /** Checks whether all operators have been initialized and have correct dimensions */
@@ -331,12 +339,54 @@ namespace Block {
 
         /** Rotates all operators from a source block using the given transposed rotation matrix */
         PetscErrorCode RotateOperators(
-            SpinOneHalf& Source,        /**< [in] Block containing the original operators (may modify save state) */
+            SpinBase& Source,           /**< [in] Block containing the original operators (may modify save state) */
             const Mat& RotMatT          /**< [in] Transposed rotation matrix */
             );
 
         /** Ensures that all operators are assembled */
         PetscErrorCode AssembleOperators();
+    };
+
+    /** Specific implementation for a block of spin-\f$ 1/2 \f$ sites */
+    class SpinOneHalf: public SpinBase
+    {
+    public:
+        /** Returns the local dimension of a single site \f$d=2\f$. */
+        PetscInt loc_dim() const { return 2; }
+
+        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1/2,-1/2\}\f$ */
+        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+0.5, -0.5}); }
+
+        /** Returns the number of states in each sector in a single site \f$\{1,1\}\f$. */
+        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1}); }
+
+        /** Creates the single-site \f$ S^z \f$ operator. */
+        PetscErrorCode MatSpinSzCreate(Mat& Sz);
+
+        /** Creates the single-site raising operator \f$ S^+ \f$,
+            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
+        PetscErrorCode MatSpinSpCreate(Mat& Sp);
+    };
+
+    /** Specific implementation for a block of spin-\f$ 1 \f$ sites */
+    class SpinOne: public SpinBase
+    {
+    public:
+        /** Returns the local dimension of a single site \f$d=3\f$. */
+        PetscInt loc_dim() const { return 3; }
+
+        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1/2,-1/2\}\f$ */
+        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+1, 0, -1}); }
+
+        /** Returns the number of states in each sector in a single site \f$\{1,1\}\f$. */
+        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1, 1}); }
+
+        /** Creates the single-site \f$ S^z \f$ operator. */
+        PetscErrorCode MatSpinSzCreate(Mat& Sz);
+
+        /** Creates the single-site raising operator \f$ S^+ \f$,
+            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
+        PetscErrorCode MatSpinSpCreate(Mat& Sp);
     };
 
 }
