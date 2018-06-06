@@ -204,7 +204,8 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); CHKERRQ(ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); CHKERRQ(ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-dry_run",&dry_run,NULL); CHKERRQ(ierr);
-        /*  The scratch space to save temporary data*/
+
+        /*  Setup the scratch space to save temporary data*/
         char path[512];
         PetscBool opt_do_scratch_dir = PETSC_FALSE;
         ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); CHKERRQ(ierr);
@@ -221,7 +222,7 @@ public:
         do_scratch_dir = PETSC_TRUE;
         // ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); CHKERRQ(ierr);
 
-        /* The location to save basic data */
+        /* Setup the location to save basic data */
         memset(path,0,sizeof(path));
         std::string data_dir;
         PetscBool opt_data_dir = PETSC_FALSE;
