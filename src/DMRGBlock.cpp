@@ -63,7 +63,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
     /*  Initial number of sites and number of states  */
     num_sites = num_sites_in;
     if(num_states_in == PETSC_DEFAULT){
-        num_states = ipow(loc_dim, num_sites);
+        num_states = ipow(loc_dim(), num_sites);
     } else{
         num_states = num_states_in;
     }
@@ -90,7 +90,7 @@ PetscErrorCode Block::SpinOneHalf::Initialize(
         ierr = InitSingleSiteOperator(mpi_comm, num_states, &H); CHKERRQ(ierr);
         ierr = MatEnsureAssembled(H); CHKERRQ(ierr);
         /*  Initialize the magnetization sectors using the defaults for one site */
-        ierr = Magnetization.Initialize(mpi_comm, loc_qn_list, loc_qn_size); CHKERRQ(ierr);
+        ierr = Magnetization.Initialize(mpi_comm, loc_qn_list(), loc_qn_size()); CHKERRQ(ierr);
 
         /*  Check whether sector initialization was done right  */
         ierr = CheckSectors(); CHKERRQ(ierr);

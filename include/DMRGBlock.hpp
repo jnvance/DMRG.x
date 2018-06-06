@@ -69,18 +69,6 @@ namespace Block {
         /** MPI size of mpi_comm */
         PetscMPIInt     mpi_size;
 
-        /** Local dimension of a single site.
-            @remarks __NOTE:__ Default for spin-1/2 */
-        PetscInt loc_dim = 2;
-
-        /** Sz sectors of a single site.
-            @remarks __NOTE:__ Default for spin-1/2 */
-        std::vector<PetscScalar> loc_qn_list = {+0.5, -0.5};
-
-        /** Number of states in each sector in a single site.
-            @remarks __NOTE:__ Default for spin-1/2 */
-        std::vector<PetscInt> loc_qn_size = {1, 1};
-
         /** Tells whether the block was initialized */
         PetscBool init = PETSC_FALSE;
 
@@ -147,6 +135,19 @@ namespace Block {
         RotMethod rot_method = mmmmult;
 
     public:
+
+        /** Local dimension of a single site.
+            @remarks __NOTE:__ Default for spin-1/2 */
+        PetscInt loc_dim() const { return 2; }
+
+        /** Sz sectors of a single site.
+            @remarks __NOTE:__ Default for spin-1/2 */
+        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+0.5, -0.5}); }
+
+        /** Number of states in each sector in a single site.
+            @remarks __NOTE:__ Default for spin-1/2 */
+        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1}); }
+
 
         /** Initializes block object's MPI attributes */
         PetscErrorCode Initialize(
