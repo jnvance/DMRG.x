@@ -103,14 +103,30 @@ namespace Block {
         /** Whether saving the block matrices to file has been initialized correctly */
         PetscBool init_save = PETSC_FALSE;
 
+        /** Whether SetDiskStorage() has properly set the block storage locations. */
+        PetscBool disk_set = PETSC_FALSE;
+
         /** Whether the block matrices have been saved */
         PetscBool saved = PETSC_FALSE;
 
         /** Whether the block matrices have been retrieved */
         PetscBool retrieved = PETSC_FALSE;
 
-        /** Root directory to save the matrix blocks */
+        /** Root directory to read from and write the matrix blocks into */
         std::string save_dir;
+
+        /** Root directory to read the matrix blocks from during the first access */
+        std::string read_dir;
+
+        /** Root directory to write the matrix blocks into */
+        std::string write_dir;
+
+        /** Number of reads from file made for this block.
+
+            @todo Its value is incremented by a call to Retrieve_NoChecks() via
+            Retrieve() and InitializeFromDisk(), and reset to zero by SetDiskStorage().
+         */
+        PetscInt num_reads = 0;
 
         /** Saves a single operator */
         PetscErrorCode SaveOperator(
@@ -132,7 +148,8 @@ namespace Block {
         /** List of possible methods for performing basis transformation */
         enum RotMethod { mmmmult=0, matptap=1 };
 
-        /** Method to use for performing basis transformation. TODO: Get the method from command line */
+        /** Method to use for performing basis transformation.
+            @todo Get the method from command line and expand choices */
         RotMethod rot_method = mmmmult;
 
     protected:
@@ -201,10 +218,22 @@ namespace Block {
             const std::string& block_path   /**< [in] Directory storing the block object's data */
             );
 
-        /** Initializes the writing of the block matrices to file */
+        /** Initializes the writing of the block matrices to file.
+            The directory `save_dir_in` may be set only once. If this directory changes throughout
+            the lifetime of a block, or if the read directory is different from the write directory
+            consider using SetDiskStorage() instead. */
         PetscErrorCode InitializeSave(
             const std::string& save_dir_in  /**< [in] Directory to store block object's data */
             );
+
+        /** Tells where to read from and save the operators and data about the block. */
+        PetscErrorCode SetDiskStorage(
+            const std::string& read_dir_in,     /**< [in] Directory to initially read-in block object's data */
+            const std::string& write_dir_in     /**< [in] Directory to store block object's data */
+            );
+
+        /** Returns the value of save_dir where the block data will be read from/written */
+        std::string SaveDir() const { return save_dir; }
 
         /** Tells whether InitializeSave() has been properly called */
         PetscBool SaveInitialized() const { return init_save; }

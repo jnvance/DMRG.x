@@ -765,6 +765,38 @@ PetscErrorCode Block::SpinBase::InitializeSave(
 }
 
 
+PetscErrorCode Block::SpinBase::SetDiskStorage(
+    const std::string& read_dir_in,
+    const std::string& write_dir_in
+    )
+{
+    if(init_save == PETSC_TRUE)
+        SETERRQ(mpi_comm,1,"InitializeSave() and SetDiskStorage() cannot both be used "
+            "on the same block.");
+
+    read_dir  = read_dir_in;
+    if(read_dir.back()!='/') read_dir += '/';
+
+    write_dir = write_dir_in;
+    if(write_dir.back()!='/') write_dir += '/';
+
+    /** The blocks are going to be read from the `read_dir_in` directory
+        during the first retrieval and then `save_dir_in` for succeeding reads.
+        This comes in useful for the sweep stage of the
+        DMRG algorithm, when we want to read the resulting operators of the previous sweep
+        and write the files back into a different subdirectory for the current sweep.
+        The switch is done by Retrieve_NoChecks().
+     */
+    save_dir  = read_dir;
+
+    /** This function also resets the counter in the number of reads performed
+        in the PetscInt Block::SpinBase::num_reads parameter */
+    num_reads = 0;
+    disk_set = PETSC_TRUE;
+    return(0);
+}
+
+
 std::string OpFilename(const std::string& RootDir, const std::string& OpName, const size_t& isite = 0){
     std::ostringstream oss;
     oss << RootDir << OpName << "_" << std::setfill('0') << std::setw(9) << isite << ".mat";
@@ -793,7 +825,9 @@ PetscErrorCode Block::SpinBase::SaveOperator(
 PetscErrorCode Block::SpinBase::SaveBlockInfo()
 {
     CheckInit(__FUNCTION__);
-    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(!init_save && !disk_set)
+        SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() must be called first.");
+
     if(mpi_rank) return(0);
 
     /* Save block information */
@@ -870,7 +904,9 @@ PetscErrorCode Block::SpinBase::RetrieveOperator(
 PetscErrorCode Block::SpinBase::SaveAndDestroy()
 {
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
-    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(!init_save && !disk_set)
+        SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() must be called first.");
+
     PetscErrorCode ierr;
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = SaveOperator("Sz",isite,SzData[isite],mpi_comm); CHKERRQ(ierr);
@@ -892,7 +928,9 @@ PetscErrorCode Block::SpinBase::SaveAndDestroy()
 
 PetscErrorCode Block::SpinBase::Retrieve()
 {
-    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(!init_save && !disk_set)
+        SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() must be called first.");
+
     if(init) SETERRQ(mpi_comm,1,"Destroy() must be called first.");
     PetscErrorCode ierr;
     ierr = Retrieve_NoChecks(); CHKERRQ(ierr);
@@ -917,13 +955,22 @@ PetscErrorCode Block::SpinBase::Retrieve_NoChecks()
     if(flg){
         ierr = RetrieveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
     }
+
+    /** If read and write paths were set using SetDiskStorage(), then after the first read
+        the value of `save_dir` is swapped from `read_dir` to `write_dir`.
+     */
+    if(num_reads==0 && disk_set)
+    {
+        save_dir = write_dir;
+    }
+    ++num_reads;
     return(0);
 }
 
 
 PetscErrorCode Block::SpinBase::EnsureSaved()
 {
-    if(!init || !init_save || saved) return(0);
+    if(!init || !(init_save || disk_set) || saved) return(0);
     PetscErrorCode ierr = SaveAndDestroy(); CHKERRQ(ierr);
     return(0);
 }
@@ -931,7 +978,7 @@ PetscErrorCode Block::SpinBase::EnsureSaved()
 
 PetscErrorCode Block::SpinBase::EnsureRetrieved()
 {
-    if(init || !init_save || retrieved) return(0);
+    if(init || !(init_save || disk_set) || retrieved) return(0);
     PetscErrorCode ierr = Retrieve(); CHKERRQ(ierr);
     return(0);
 }
