@@ -1,5 +1,5 @@
-#ifndef __HAMILTONIANS
-#define __HAMILTONIANS
+#ifndef __HAMILTONIANS__
+#define __HAMILTONIANS__
 
 #include "petscsys.h"
 #include "DMRGBlock.hpp"
@@ -211,4 +211,4 @@ namespace Hamiltonians
 
 /** @} */
 
-#endif // __HAMILTONIANS
+#endif // __HAMILTONIANS__

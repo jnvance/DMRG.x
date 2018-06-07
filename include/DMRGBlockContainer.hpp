@@ -1,5 +1,5 @@
-#ifndef __DMRG_BLOCK_HPP__
-#define __DMRG_BLOCK_HPP__
+#ifndef __DMRG_BLOCK_CONTAINER_HPP__
+#define __DMRG_BLOCK_CONTAINER_HPP__
 
 /**
     @defgroup   DMRGBlockContainer   DMRGBlockContainer
@@ -51,10 +51,12 @@ PETSC_EXTERN PetscErrorCode Makedir(
 }
 
 /** Convert the input operator type and index to string */
-#define OpIdxToStr(OPTYPE,IDX) (OpToStr(OPTYPE)+std::to_string(IDX))
+#define OpIdxToStr(OPTYPE,IDX) \
+    (OpToStr(OPTYPE)+std::to_string(IDX))
 
 /** Get the operator matrix corresponding to the given type, size and index */
-#define GetOpMats(OPMATS,CORRSIDEOPS,OPID) (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
+#define GetOpMats(OPMATS,CORRSIDEOPS,OPID) \
+    (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
 
 /** Storage for information on resulting eigenpairs of the reduced density matrices */
 struct Eigen_t
@@ -2347,4 +2349,4 @@ private:
     @}
  */
 
-#endif // __DMRG_BLOCK_HPP__
+#endif // __DMRG_BLOCK_CONTAINER_HPP__

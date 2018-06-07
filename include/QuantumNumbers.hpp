@@ -1,5 +1,5 @@
-#ifndef __QUANTUM_NUMBERS_HPP
-#define __QUANTUM_NUMBERS_HPP
+#ifndef __QUANTUM_NUMBERS_HPP__
+#define __QUANTUM_NUMBERS_HPP__
 
 /**
     @defgroup   QuantumNumbers   QuantumNumbers
@@ -346,4 +346,4 @@ public:
     @}
  */
 
-#endif
+#endif // __QUANTUM_NUMBERS_HPP__

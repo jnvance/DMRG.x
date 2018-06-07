@@ -1,5 +1,5 @@
-#ifndef __DMRG_SITE_HPP
-#define __DMRG_SITE_HPP
+#ifndef __DMRG_BLOCK_HPP__
+#define __DMRG_BLOCK_HPP__
 
 /**
     @defgroup   DMRGBlock   DMRGBlock
@@ -410,4 +410,4 @@ namespace Block {
     @}
  */
 
-#endif // __DMRG_SITE_HPP
+#endif // __DMRG_BLOCK_HPP__
