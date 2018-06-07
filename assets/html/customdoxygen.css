@@ -671,6 +671,12 @@ table.classindex {
     width: 100%;
 }
 
+/* Member description */
+
+td.memItemRight a.el {
+    font-weight: 700 !important;
+}
+
 /* Member documentation */
 
 div.panel-heading {
