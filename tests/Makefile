@@ -1,6 +1,8 @@
 
 TARGETS = 	UnitTests_DMRGBlock.x \
 			UnitTests_DMRGBlock_SaveInfo.x \
+			UnitTests_DMRGBlock_SetDiskStorage.x \
+			UnitTests_DMRGBlock_InitializeFromDisk.x \
 			UnitTests_DMRGKron.x \
 			UnitTests_DMRGBlockContainer.x
 
@@ -23,6 +25,10 @@ UnitTests_DMRGBlock.x: UnitTests_DMRGBlock.o ${UnitTests_DMRGBlock_DEPS} chkopts
 UnitTests_DMRGBlock_SaveInfo.x: UnitTests_DMRGBlock_SaveInfo.o ${UnitTests_DMRGBlock_DEPS} chkopts
 	-${CLINKER} -o UnitTests_DMRGBlock_SaveInfo.x UnitTests_DMRGBlock_SaveInfo.o ${UnitTests_DMRGBlock_DEPS} ${SLEPC_EPS_LIB}
 	${RM} UnitTests_DMRGBlock_SaveInfo.o
+
+UnitTests_DMRGBlock_InitializeFromDisk.x: UnitTests_DMRGBlock_InitializeFromDisk.o ${UnitTests_DMRGBlock_DEPS} chkopts
+	-${CLINKER} -o UnitTests_DMRGBlock_InitializeFromDisk.x UnitTests_DMRGBlock_InitializeFromDisk.o ${UnitTests_DMRGBlock_DEPS} ${SLEPC_EPS_LIB}
+	${RM} UnitTests_DMRGBlock_InitializeFromDisk.o
 
 UnitTests_DMRGBlock_SetDiskStorage.x: UnitTests_DMRGBlock_SetDiskStorage.o ${UnitTests_DMRGBlock_DEPS} chkopts
 	-${CLINKER} -o UnitTests_DMRGBlock_SetDiskStorage.x UnitTests_DMRGBlock_SetDiskStorage.o ${UnitTests_DMRGBlock_DEPS} ${SLEPC_EPS_LIB}

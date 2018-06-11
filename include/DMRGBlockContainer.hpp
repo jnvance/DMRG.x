@@ -547,22 +547,32 @@ public:
         sys_blocks.resize(num_sys_blocks);
 
         /*  Initialize directories for saving the block operators */
-        if(do_scratch_dir){
+        if(do_scratch_dir)
+        {
             PetscBool flg;
             ierr = PetscTestDirectory(scratch_dir.c_str(), 'r', &flg); CHKERRQ(ierr);
-            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist. Please verify that -scratch_dir is specified correctly.",scratch_dir.c_str());
-            if(!mpi_rank){
-                for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
-                    std::string path = BlockDir("Sys",iblock);
+            if(!flg) SETERRQ1(mpi_comm,1,"Directory %s does not exist. "
+                "Please verify that -scratch_dir is specified correctly.",scratch_dir.c_str());
+
+            /* Create the subdirectories from root process */
+            if(!mpi_rank)
+            {
+                /* Subdirectories for the enlarged blocks */
+                ierr = Makedir(scratch_dir + BlockDir("EnlSys",0)); CHKERRQ(ierr);
+                ierr = Makedir(scratch_dir + BlockDir("EnlEnv",0)); CHKERRQ(ierr);
+
+                /* Subdirectories for the blocks of the current sweep */
+                ierr = Makedir(scratch_dir + SweepDir(LoopIdx)); CHKERRQ(ierr);
+                for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock)
+                {
+                    std::string path = scratch_dir + SweepDir(LoopIdx) + BlockDir("Sys",iblock);
                     ierr = Makedir(path); CHKERRQ(ierr);
                 }
-                ierr = Makedir(BlockDir("SysEnl",0)); CHKERRQ(ierr);
-                ierr = Makedir(BlockDir("EnvEnl",0)); CHKERRQ(ierr);
             }
             for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
-                std::string path = BlockDir("Sys",iblock);
+                std::string path = scratch_dir + SweepDir(LoopIdx) + BlockDir("Sys",iblock);
                 ierr = sys_blocks[iblock].Initialize(mpi_comm); CHKERRQ(ierr);
-                ierr = sys_blocks[iblock].InitializeSave(path); CHKERRQ(ierr);
+                ierr = sys_blocks[iblock].SetDiskStorage(path, path); CHKERRQ(ierr);
             }
         }
 
@@ -752,6 +762,28 @@ public:
         PetscInt min_block = MinBlock==PETSC_DEFAULT ? 1 : MinBlock;
         if(min_block < 1) SETERRQ1(mpi_comm,1,"MinBlock must at least be 1. Got %d.", min_block);
 
+        /*  Update the directories for saving the block operators */
+        if(do_scratch_dir)
+        {
+            /* Create the subdirectories from root process */
+            if(!mpi_rank)
+            {
+                /* Subdirectories for the blocks of the current sweep */
+                ierr = Makedir(scratch_dir + SweepDir(LoopIdx)); CHKERRQ(ierr);
+                for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock)
+                {
+                    std::string path = scratch_dir + SweepDir(LoopIdx) + BlockDir("Sys",iblock);
+                    ierr = Makedir(path); CHKERRQ(ierr);
+                }
+            }
+            for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock)
+            {
+                std::string read_path  = scratch_dir + SweepDir(LoopIdx-1) + BlockDir("Sys",iblock);
+                std::string write_path = scratch_dir + SweepDir(LoopIdx)   + BlockDir("Sys",iblock);
+                ierr = sys_blocks[iblock].SetDiskStorage(read_path, write_path); CHKERRQ(ierr);
+            }
+        }
+
         /*  Starting from the midpoint, perform a center to right sweep */
         LoopType = SweepStep;
         StepIdx = 0;
@@ -791,9 +823,17 @@ public:
                                     sys_blocks[outsys], sys_blocks[outenv], PetscBool(outsys==outenv)); CHKERRQ(ierr);
         }
         sweeps_mstates.push_back(MStates);
+
+        /** @todo Ensure that all operator data have been dumped to file efficiently.
+            This might require writing a new function that dumps operators without explicitly
+            destroying the block object. */
+        for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock)
+        {
+            ierr = sys_blocks[iblock].EnsureSaved(); CHKERRQ(ierr);
+        }
+
         ++LoopIdx;
         if(!mpi_rank) PRINTLINES();
-
         return(0);
     };
 
@@ -920,8 +960,13 @@ private:
     /** Reference to the block of site/s added during enlargement */
     Block& AddSite = SingleSite;
 
-    /** Directory in which the blocks will be saved */
+    /** Directory in which all the sweep data will be saved */
     std::string scratch_dir = ".";
+
+    /** Directory in which the data for a specific sweep will be saved.
+        This usually takes the form
+     */
+    std::string sweep_dir = "";
 
     /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
         This is automatically set when indicating -scratch_dir */
@@ -1022,11 +1067,11 @@ private:
             const std::vector< Hamiltonians::Term > TermsEnv = Ham.H(NumSitesEnvEnl);
             ierr = KronEye_Explicit(EnvBlock, AddSite, TermsEnv, EnvBlockEnl); CHKERRQ(ierr);
             ierr = EnvBlock.EnsureSaved(); CHKERRQ(ierr);
-            ierr = EnvBlockEnl.InitializeSave(BlockDir("EnvEnl",0)); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.InitializeSave(scratch_dir + BlockDir("EnlEnv",0)); CHKERRQ(ierr);
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
-        ierr = SysBlockEnl.InitializeSave(BlockDir("SysEnl",0)); CHKERRQ(ierr);
+        ierr = SysBlockEnl.InitializeSave(scratch_dir + BlockDir("EnlSys",0)); CHKERRQ(ierr);
 
         ierr = PetscTime(&tenlr); CHKERRQ(ierr);
         timings_data.tEnlr = tenlr-t0;
@@ -2128,11 +2173,40 @@ private:
         return(0);
     }
 
-    /** Returns the path to the directory for the storage of a specific system block */
-    std::string BlockDir(const std::string& BlockType, const PetscInt& iblock)
+    /** Returns the relative path to the directory for the storage of a specific system block.
+        @param[in]  BlockType   Type of the block
+        @param[in]  iblock      Index of the block
+        @return     `std::string` containing the directory
+
+        @par Example
+        Given `BlockDir("Sys",9)` the corresponding output would be `"Sys_000000009/"`.
+
+        @sa SweepDir
+     */
+    std::string BlockDir(
+        const std::string& BlockType,
+        const PetscInt& iblock
+        )
     {
         std::ostringstream oss;
-        oss << scratch_dir << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock;
+        oss << BlockType << "_" << std::setfill('0') << std::setw(9) << iblock << "/";
+        return oss.str();
+    }
+    /** Returns the relative path to the directory for the storage of a specific sweep / loop index.
+        @param[in]  isweep  Index of the sweep, usually the #LoopIdx parameter
+        @return     `std::string` containing the directory
+
+        @par Example
+        The output of `SweepDir(2)` would be `"Sweep_000000002/"`.
+
+        @sa BlockDir
+     */
+    std::string SweepDir(
+        const PetscInt& isweep
+        )
+    {
+        std::ostringstream oss;
+        oss << "Sweep_" << std::setfill('0') << std::setw(9) << isweep << "/";
         return oss.str();
     }
 

@@ -52,7 +52,7 @@ PetscErrorCode Block::SpinBase::Initialize(
 
     /*  Check whether to do verbose logging  */
     ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
-
+    ierr = PetscOptionsGetBool(NULL,NULL,"-log_io",&log_io,NULL); CHKERRQ(ierr);
     /*  Initialize attributes  */
     if(!mpi_init){
         ierr = Initialize(comm_in); CHKERRQ(ierr);
@@ -186,15 +186,22 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
     ierr = MPI_Comm_rank(comm_in,&mpi_rank_in); CHKERRQ(ierr);
 
     std::string block_path = block_path_in;
-    if(block_path.back()!='/') block_path += '/';
+    if(block_path.empty()) block_path = '/';
+    else if(block_path.back()!='/') block_path += '/';
 
     if(!mpi_rank_in)
     {
         /* Read data for Block */
-        std::ifstream infofile((block_path + "BlockInfo.dat").c_str());
+        std::string block_file = block_path + "BlockInfo.dat";
+
+        PetscBool flg;
+        ierr = PetscTestFile(block_file.c_str(), 'r', &flg); CHKERRQ(ierr);
+        if(!flg) SETERRQ1(PETSC_COMM_SELF,1,"Error in reading %s", block_file.c_str());
+
+        std::ifstream infofile(block_file.c_str());
         std::map< std::string, PetscInt > infomap;
         std::string line;
-        if (!infofile.is_open())
+        if (!infofile.is_open() || infofile.fail())
             perror("error while opening file");
         while (infofile && std::getline(infofile, line)) {
             std::string key;
@@ -246,8 +253,13 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
         if(!mpi_rank_in)
         {
             /* Read data for quantum numbers */
-            std::string filename = block_path + "QuantumNumbers.dat";
-            std::ifstream qnfile(filename.c_str());
+            std::string qn_file = block_path + "QuantumNumbers.dat";
+
+            PetscBool flg;
+            ierr = PetscTestFile(qn_file.c_str(), 'r', &flg); CHKERRQ(ierr);
+            if(!flg) SETERRQ1(PETSC_COMM_SELF,1,"Error in reading %s", qn_file.c_str());
+
+            std::ifstream qnfile(qn_file.c_str());
             std::string line;
             if (!qnfile.is_open())
                 perror("error while opening file");
@@ -261,7 +273,7 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
                 perror("error while reading file");
             if(ctr!=num_sectors_in)
                 SETERRQ3(PETSC_COMM_SELF,1,"Incorrect number of data points in %s. "
-                    "Expected %lld. Got %lld.", filename.c_str(), num_sectors_in, ctr);
+                    "Expected %lld. Got %lld.", qn_file.c_str(), num_sectors_in, ctr);
 
             qnfile.close();
         }
@@ -620,7 +632,8 @@ PetscErrorCode Block::SpinBase::RotateOperators(SpinBase& Source, const Mat& Rot
     {
         /*  Require that save_initialization must have been called first since this operation requires
             reading the matrices from disk to the subcommunicators */
-        if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first before using this feature.");
+        if(!(init_save || disk_set)) SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() "
+            "must be called first before using this feature.");
         ierr = MatCreateRedundantMatrix(RotMatT_in, nsubcomm, MPI_COMM_NULL, MAT_INITIAL_MATRIX, &RotMatT); CHKERRQ(ierr);
         ierr = PetscObjectGetComm((PetscObject)RotMatT, &subcomm); CHKERRQ(ierr);
         ierr = MPI_Comm_rank(subcomm, &sub_rank); CHKERRQ(ierr);
@@ -717,10 +730,14 @@ PetscErrorCode Block::SpinBase::RotateOperators(SpinBase& Source, const Mat& Rot
         }
         ierr = MatDestroy(&RotMatT); CHKERRQ(ierr);
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+        ierr = SaveBlockInfo(); CHKERRQ(ierr);
         ierr = Destroy(); CHKERRQ(ierr);
         init = PETSC_FALSE;
         saved = PETSC_TRUE;
         retrieved = PETSC_FALSE;
+
+        /** Saving of matrices when nsubcomm > 1 also triggers the swap in save_dir */
+        save_dir = write_dir;
     }
     else
     {
@@ -760,6 +777,7 @@ PetscErrorCode Block::SpinBase::InitializeSave(
     save_dir = save_dir_in;
     /* If the last character is not a slash then add one */
     if(save_dir.back()!='/') save_dir += '/';
+    read_dir = write_dir = save_dir;
     init_save = PETSC_TRUE;
     return(0);
 }
@@ -813,11 +831,21 @@ PetscErrorCode Block::SpinBase::SaveOperator(
     PetscErrorCode ierr;
     PetscViewer binv;
     if(!Op) SETERRQ(PETSC_COMM_SELF,1,"Input matrix is null.");
-    ierr = PetscViewerBinaryOpen(comm_in, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
+    ierr = PetscViewerBinaryOpen(comm_in, OpFilename(write_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
     ierr = MatView(Op, binv); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
     ierr = MatDestroy(&Op); CHKERRQ(ierr);
     Op = NULL;
+
+    #if defined(PETSC_USE_DEBUG)
+    PetscMPIInt subcomm_rank;
+    ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
+    if(!subcomm_rank)
+        std::cout
+            << "  IO: [" << mpi_rank << "] "
+            << "Saved:     " << OpFilename(write_dir,OpName,isite) << std::endl;
+    #endif
+
     return(0);
 }
 
@@ -833,7 +861,7 @@ PetscErrorCode Block::SpinBase::SaveBlockInfo()
     /* Save block information */
     {
         std::ofstream infofile;
-        infofile.open((save_dir + "BlockInfo.dat").c_str());
+        infofile.open((write_dir + "BlockInfo.dat").c_str());
 
         #if defined(PETSC_USE_COMPLEX)
             PetscInt PetscUseComplex = 1;
@@ -857,7 +885,7 @@ PetscErrorCode Block::SpinBase::SaveBlockInfo()
     /* Save quantum numbers information */
     {
         std::ofstream qnfile;
-        qnfile.open((save_dir + "QuantumNumbers.dat").c_str());
+        qnfile.open((write_dir + "QuantumNumbers.dat").c_str());
         std::vector<PetscInt>  qn_size = Magnetization.Sizes();
         std::vector<PetscReal> qn_list = Magnetization.List();
         PetscInt num_sectors = Magnetization.NumSectors();
@@ -897,6 +925,16 @@ PetscErrorCode Block::SpinBase::RetrieveOperator(
     }
     ierr = MatLoad(Op, binv); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
+
+    #if defined(PETSC_USE_DEBUG)
+    PetscMPIInt subcomm_rank;
+    ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
+    if(!subcomm_rank)
+        std::cout
+            << "  IO: [" << mpi_rank << "] "
+            << "Retrieved: " << OpFilename(write_dir,OpName,isite) << std::endl;
+    #endif
+
     return(0);
 }
 
@@ -922,6 +960,15 @@ PetscErrorCode Block::SpinBase::SaveAndDestroy()
     init = PETSC_FALSE;
     saved = PETSC_TRUE;
     retrieved = PETSC_FALSE;
+
+    /** If read and write paths were set using SetDiskStorage(), then all saves,
+        whether or not a read has been performed, shall be done using `write_dir` and
+        the value of `save_dir` is swapped from `read_dir` to `write_dir`.
+     */
+    if(disk_set)
+    {
+        save_dir = write_dir;
+    }
     return(0);
 }
 

@@ -82,6 +82,9 @@ namespace Block {
         /** Tells whether to printout info during certain function calls */
         PetscBool verbose = PETSC_FALSE;
 
+        /** Tells whether to printout IO functions */
+        PetscBool log_io = PETSC_FALSE;
+
         /** Number of sites in the block */
         PetscInt num_sites;
 
@@ -182,7 +185,11 @@ namespace Block {
 
         /** Initializes block object with input attributes and array of matrix operators.
             @post Arrays of operator matrices are initialized to the correct number of sites and states.
-            @remarks __TODO:__ Consider interfacing this to the object constructor.
+            @todo Consider interfacing this to the object constructor.
+
+            @par Options:
+            - `-verbose`
+            - `-log_io`
         */
         PetscErrorCode Initialize(
             const MPI_Comm& comm_in,      /**< [in] MPI communicator */

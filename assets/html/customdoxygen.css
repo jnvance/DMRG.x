@@ -1,3 +1,10 @@
+body {
+    /*min-width: 992px;*/
+    /*width: auto !important;*/
+    /*width:992px;*/
+    background-color: #F3F3F3;
+}
+
 body, table, table.directory, div, p, dl, div.toc, div.toc h3, div.toc li, h3, .h3 {
     font-size: 16px;
     line-height: 24px;
@@ -21,6 +28,10 @@ h1, .h1, h2, .h2, .title, a.navbar-brand, h2.groupheader {
 
 a {
     color: #23609B;
+}
+
+b a.el, div.panel-heading a.el {
+    font-weight: 700 !important; /* Bold */
 }
 
 a.el {
@@ -591,10 +602,6 @@ pre.fragment {
     padding-top: 7px;
 }
 
-body {
-    background-color: #F3F3F3;
-}
-
 /* Top bar */
 .navbar {
     background-color: #24292e;
@@ -746,6 +753,13 @@ div.navtab {
     border-radius: 2px;
     border-width: 0px;
     margin-right: 10px;
+}
+
+@media(max-width: 768px) {
+    div.navtab {
+        display: none;
+        width: 0px;
+    }
 }
 
 .inherit_header {

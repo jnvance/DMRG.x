@@ -302,7 +302,8 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name)
         if(ierr){
             DIR *dir = opendir(dir_name.c_str());
             if(!dir){
-                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d\n",ierr);
+                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d for dir: %s\n",
+                    ierr, dir_name.c_str());
                 CHKERRQ(ierr);
             }
             closedir(dir);
