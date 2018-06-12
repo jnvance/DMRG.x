@@ -773,3 +773,19 @@ dd {
 div.contents {
     margin: 0px;
 }
+
+/*
+    fix for table: class_block_1_1_spin_base-members.html
+    but breaks: pages.html
+ */
+
+/* table entries in page listing */
+div.directory td.entry {
+    white-space:nowrap !important;
+}
+
+/* table entries in member list */
+table.directory.table.table-striped td.entry {
+    white-space:    normal;
+    vertical-align: middle;
+}
