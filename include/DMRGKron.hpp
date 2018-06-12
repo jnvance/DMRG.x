@@ -122,8 +122,8 @@ friend class KronBlocksIterator;
 public:
 
     KronBlocks_t(
-        Block::SpinOneHalf& LeftBlock,
-        Block::SpinOneHalf& RightBlock,
+        Block::SpinBase& LeftBlock,
+        Block::SpinBase& RightBlock,
         const std::vector<PetscReal>& QNSectors, /**< [in] list of quantum number sectors for keeping selected states */
         FILE *fp_prealloc,
         const PetscInt& GlobIdx
@@ -257,16 +257,16 @@ public:
     }
 
     /** Returns a const reference to the left block object */
-    const Block::SpinOneHalf& LeftBlockRef() const { return LeftBlock; }
+    const Block::SpinBase& LeftBlockRef() const { return LeftBlock; }
 
     /** Returns a const reference to the right block object */
-    const Block::SpinOneHalf& RightBlockRef() const { return RightBlock; }
+    const Block::SpinBase& RightBlockRef() const { return RightBlock; }
 
     /** Returns a non-const reference to the left block object */
-    Block::SpinOneHalf& LeftBlockRefMod(){ return LeftBlock; }
+    Block::SpinBase& LeftBlockRefMod(){ return LeftBlock; }
 
     /** Returns a non-const reference to the right block object */
-    Block::SpinOneHalf& RightBlockRefMod(){ return RightBlock; }
+    Block::SpinBase& RightBlockRefMod(){ return RightBlock; }
 
     /** Returns the offsets for the KronBlock corresponding to a pair of left and right block indices */
     PetscInt Offsets(const PetscInt& lidx, const PetscInt& ridx) const {
@@ -365,10 +365,10 @@ private:
     PetscInt num_states = 0;
 
     /** Reference to the left block object */
-    Block::SpinOneHalf& LeftBlock;
+    Block::SpinBase& LeftBlock;
 
     /** Reference to the right block object */
-    Block::SpinOneHalf& RightBlock;
+    Block::SpinBase& RightBlock;
 
     /** File to store preallocation data for each processor */
     FILE *fp_prealloc;
@@ -482,10 +482,10 @@ private:
 
 /** Calculates a new block combining two spin-1/2 blocks */
 PetscErrorCode KronEye_Explicit(
-    Block::SpinOneHalf& LeftBlock,          /**< [in]   left block of sites */
-    Block::SpinOneHalf& RightBlock,         /**< [in]   right block of sites */
+    Block::SpinBase& LeftBlock,          /**< [in]   left block of sites */
+    Block::SpinBase& RightBlock,         /**< [in]   right block of sites */
     const std::vector< Hamiltonians::Term >& Terms, /**< [in]   Hamiltonina terms */
-    Block::SpinOneHalf& BlockOut            /**< [out]  combined block */
+    Block::SpinBase& BlockOut            /**< [out]  combined block */
     );
 
 /** Calculates the sum of the Kronecker product of operators on two blocks following the terms of a Hamiltonian.

@@ -3,7 +3,7 @@
 
 /**
     @defgroup   DMRGBlock   DMRGBlock
-    @brief      Implementation of the Block classes which contain the data and methods
+    @brief      Implementation of the SpinBase class which contain the data and methods
                 for a block of spin sites
     @addtogroup DMRGBlock
     @{ */
@@ -47,6 +47,18 @@ typedef enum
     SideRight = 1   /**< right block */
 } Side_t;
 
+/** Identifies the spin types implemented for this block */
+typedef enum
+{
+    OneHalf,       /**< Spin one-half */
+    One            /**< Spin one */
+} Spin_t;
+
+static const std::map<std::string,Spin_t> SpinTypes = {
+    {"1/2",  OneHalf},
+    {"1",    One}
+};
+
 static const std::vector<Op_t> BasicOpTypes = { OpSz, OpSp };
 static const std::vector<Side_t> SideTypes = { SideLeft, SideRight };
 
@@ -69,6 +81,21 @@ namespace Block {
 
         /** MPI size of mpi_comm */
         PetscMPIInt     mpi_size;
+
+        /** Type of spin contained in the block */
+        Spin_t          spin_type = OneHalf;
+
+        /** Type of spin contained in the block expressed as a string */
+        std::string     spin_type_str = "1/2";
+
+        /** Stores the local dimension of a single site */
+        PetscInt        _loc_dim = 2;
+
+        /** Stores the Sz sectors of a single site. */
+        std::vector<PetscScalar>    _loc_qn_list = {+0.5, -0.5};
+
+        /** Stores the number of states in each sector in a single site. */
+        std::vector<PetscInt>       _loc_qn_size = {1, 1};
 
         /** Tells whether the block was initialized */
         PetscBool init = PETSC_FALSE;
@@ -163,20 +190,29 @@ namespace Block {
     public:
 
         /** Local dimension of a single site. */
-        virtual PetscInt loc_dim() const = 0;
+        virtual PetscInt loc_dim() const
+        {
+            return _loc_dim;
+        }
 
         /** Sz sectors of a single site. */
-        virtual std::vector<PetscScalar> loc_qn_list() const = 0;
+        virtual std::vector<PetscScalar> loc_qn_list() const
+        {
+            return _loc_qn_list;
+        }
 
         /** Number of states in each sector in a single site. */
-        virtual std::vector<PetscInt> loc_qn_size() const = 0;
+        virtual std::vector<PetscInt> loc_qn_size() const
+        {
+            return _loc_qn_size;
+        }
 
         /** Creates the single-site \f$ S^z \f$ operator. */
-        virtual PetscErrorCode MatSpinSzCreate(Mat& Sz) = 0;
+        virtual PetscErrorCode MatSpinSzCreate(Mat& Sz);
 
         /** Creates the single-site raising operator \f$ S^+ \f$,
             from which we can define \f$ S^- = (S^+)^\dagger \f$. */
-        virtual PetscErrorCode MatSpinSpCreate(Mat& Sp) = 0;
+        virtual PetscErrorCode MatSpinSpCreate(Mat& Sp);
 
         /** Initializes block object's MPI attributes */
         PetscErrorCode Initialize(
@@ -387,57 +423,6 @@ namespace Block {
 
         /** Ensures that all operators are assembled */
         PetscErrorCode AssembleOperators();
-    };
-
-    /** Specific implementation for a block of spin-\f$ 1/2 \f$ sites */
-    class SpinOneHalf: public SpinBase
-    {
-    public:
-        /** Returns the local dimension of a single site \f$d=2\f$. */
-        PetscInt loc_dim() const { return 2; }
-
-        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1/2,-1/2\}\f$ */
-        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+0.5, -0.5}); }
-
-        /** Returns the number of states in each sector in a single site \f$\{1,1\}\f$. */
-        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1}); }
-
-        /** Creates the single-site \f$ S^z \f$ operator. */
-        PetscErrorCode MatSpinSzCreate(Mat& Sz);
-
-        /** Creates the single-site raising operator \f$ S^+ \f$,
-            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
-        PetscErrorCode MatSpinSpCreate(Mat& Sp);
-    };
-
-    /** Specific implementation for a block of spin-\f$ 1 \f$ sites */
-    class SpinOne: public SpinBase
-    {
-    public:
-        /** Returns the local dimension of a single site \f$d=3\f$. */
-        PetscInt loc_dim() const
-        {
-            return 3;
-        }
-
-        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1,0,-1\}\f$ */
-        std::vector<PetscScalar> loc_qn_list() const
-        {
-            return std::vector<PetscScalar>({+1., 0., -1.});
-        }
-
-        /** Returns the number of states in each sector in a single site \f$\{1,1,1\}\f$. */
-        std::vector<PetscInt> loc_qn_size() const
-        {
-            return std::vector<PetscInt>({1, 1, 1});
-        }
-
-        /** Creates the single-site \f$ S^z \f$ operator. */
-        PetscErrorCode MatSpinSzCreate(Mat& Sz);
-
-        /** Creates the single-site raising operator \f$ S^+ \f$,
-            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
-        PetscErrorCode MatSpinSpCreate(Mat& Sp);
     };
 
 }

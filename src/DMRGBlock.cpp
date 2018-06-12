@@ -59,6 +59,42 @@ PetscErrorCode Block::SpinBase::Initialize(
     } else if (comm_in!=mpi_comm) {
         SETERRQ(PETSC_COMM_SELF,1,"Mismatch in MPI communicators.");
     }
+    /*  Determine the spin-type from command line and set the attributes */
+    {
+        char spin[10];
+        PetscBool set;
+        ierr = PetscOptionsGetString(NULL,NULL,"-spin",spin,10,&set); CHKERRQ(ierr);
+        if(set)
+        {
+            spin_type_str = std::string(spin);
+            auto it = SpinTypes.find(spin_type_str);
+            if(it != SpinTypes.end())
+            {
+                spin_type = it->second;
+            }
+            else
+            {
+                SETERRQ1(mpi_comm,1,"Given -spin %s not valid/implemented.", spin);
+            }
+            switch(spin_type)
+            {
+                case OneHalf :
+                    _loc_dim =      2;
+                    _loc_qn_list =  {+0.5, -0.5};
+                    _loc_qn_size =  {1, 1};
+                    break;
+
+                case One :
+                    _loc_dim =      3;
+                    _loc_qn_list =  {+1.0, 0.0, -1.0};
+                    _loc_qn_size =  {1, 1, 1};
+                    break;
+
+                default:
+                    SETERRQ(mpi_comm,1,"Given spin_type not valid/implemented.");
+            }
+        }
+    }
 
     /*  Initial number of sites and number of states  */
     num_sites = num_sites_in;
@@ -1031,9 +1067,7 @@ PetscErrorCode Block::SpinBase::EnsureRetrieved()
 }
 
 
-/*--------------- SpinOneHalf Functions ---------------*/
-
-PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
+PetscErrorCode Block::SpinBase::MatSpinSzCreate(Mat& Sz)
 {
     if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
     PetscErrorCode  ierr;
@@ -1044,22 +1078,50 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
     ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
     PetscInt Iend = Istart + locrows;
 
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^z &= \frac{1}{2}
-                \begin{pmatrix}
-                  1  &  0  \\
-                  0  & -1
-                \end{pmatrix}
+    switch(spin_type)
+    {
+        case OneHalf :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^z &= \frac{1}{2}
+                        \begin{pmatrix}
+                          1  &  0  \\
+                          0  & -1
+                        \end{pmatrix}
 
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sz, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
-    }
-    if (Istart <= 1 && 1 < Iend){
-        ierr = MatSetValue(Sz, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sz, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            if (Istart <= 1 && 1 < Iend){
+                ierr = MatSetValue(Sz, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
+
+        case One :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^z &=
+                        \begin{pmatrix}
+                          1  &  0  &  0 \\
+                          0  &  0  &  0 \\
+                          0  &  0  & -1
+                        \end{pmatrix}
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sz, 0, 0, +1.0, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            if (Istart <= 2 && 2 < Iend){
+                ierr = MatSetValue(Sz, 2, 2, -1.0, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
+
+        default:
+            SETERRQ(mpi_comm,1,"Given spin_type not valid/implemented.");
     }
 
     ierr = MatAssemblyBegin(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
@@ -1068,7 +1130,7 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
+PetscErrorCode Block::SpinBase::MatSpinSpCreate(Mat& Sp)
 {
     if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
     PetscErrorCode  ierr;
@@ -1078,93 +1140,47 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
     PetscInt locrows, Istart;
     ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
     PetscInt Iend = Istart + locrows;
-
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^+ &=
-                \begin{pmatrix}
-                  0  &  1  \\
-                  0  &  0
-                \end{pmatrix},
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sp, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-    }
-
-    ierr = MatAssemblyBegin(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    return(0);
-}
-
-
-/*--------------- SpinOne Functions ---------------*/
-
-PetscErrorCode Block::SpinOne::MatSpinSzCreate(Mat& Sz)
-{
-    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
-    PetscErrorCode  ierr;
-
-    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sz); CHKERRQ(ierr);
-
-    PetscInt locrows, Istart;
-    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
-    PetscInt Iend = Istart + locrows;
-
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^z &=
-                \begin{pmatrix}
-                  1  &  0  &  0 \\
-                  0  &  0  &  0 \\
-                  0  &  0  & -1
-                \end{pmatrix}
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sz, 0, 0, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-    }
-    if (Istart <= 2 && 2 < Iend){
-        ierr = MatSetValue(Sz, 2, 2, -1.0, INSERT_VALUES); CHKERRQ(ierr);
-    }
-
-    ierr = MatAssemblyBegin(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    return(0);
-}
-
-
-PetscErrorCode Block::SpinOne::MatSpinSpCreate(Mat& Sp)
-{
-    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
-    PetscErrorCode  ierr;
-
-    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sp); CHKERRQ(ierr);
-
-    PetscInt locrows, Istart;
-    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
-    PetscInt Iend = Istart + locrows;
-
     const PetscScalar Sqrt2 = PetscSqrtScalar(2.0);
+    switch(spin_type)
+    {
+        case OneHalf :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^+ &=
+                        \begin{pmatrix}
+                          0  &  1  \\
+                          0  &  0
+                        \end{pmatrix},
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sp, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
 
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^+ &= \sqrt{2}
-                \begin{pmatrix}
-                  0  &  1  &  0  \\
-                  0  &  0  &  1  \\
-                  0  &  0  &  0
-                \end{pmatrix},
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sp, 0, 1, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
-    }
-    if (Istart <= 1 && 1 < Iend){
-        ierr = MatSetValue(Sp, 1, 2, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+        case One :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^+ &= \sqrt{2}
+                        \begin{pmatrix}
+                          0  &  1  &  0  \\
+                          0  &  0  &  1  \\
+                          0  &  0  &  0
+                        \end{pmatrix},
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sp, 0, 1, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            if (Istart <= 1 && 1 < Iend){
+                ierr = MatSetValue(Sp, 1, 2, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
+
+        default:
+            SETERRQ(mpi_comm,1,"Given spin_type not valid/implemented.");
     }
 
     ierr = MatAssemblyBegin(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);

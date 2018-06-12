@@ -8,7 +8,7 @@ static char help[] =
 #include "DMRGBlockContainer.hpp"
 
 /** Alias for the DMRGBlockContainer object */
-typedef DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG_t;
+typedef DMRGBlockContainer<Block::SpinBase, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG_t;
 PetscErrorCode Correlators(DMRG_t& DMRG);
 
 /** Executes the full DMRG Calculation */

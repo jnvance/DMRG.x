@@ -6,12 +6,12 @@
 
 @section compiling Compiling the executable
 
-A sample source code for a stand-alone executable can be found in src/DMRG-SpinOneHalf-J1J2XXZSquare.cpp.
+A sample source code for a stand-alone executable can be found in src/DMRG-SquareLattice.cpp.
 To compile the executable, go to the root directory and execute the command:
 
     make all
 
-The resulting program is generated in `bin/DMRG-SpinOneHalf-J1J2XXZSquare.x`.
+The resulting program is generated in `bin/DMRG-SquareLattice.x`.
 For more details see Makefile [[md](../Makefile)]  [[dox](../../Makefile)].
 
 @section preparing Preparing the directories
@@ -47,11 +47,11 @@ Then, we can create these directories using:
 
 The program may be executed on a single processor using
 
-    bin/DMRG-SpinOneHalf-J1J2XXZSquare.x <OPTIONS>
+    bin/DMRG-SquareLattice.x <OPTIONS>
 
 or in parallel with `<N>` number of processors
 
-    mpirun -np <N> bin/DMRG-SpinOneHalf-J1J2XXZSquare.x <OPTIONS>
+    mpirun -np <N> bin/DMRG-SquareLattice.x <OPTIONS>
 
 The different parameters of the simulation may be specified using `OPTIONS`.
 The minimum required `OPTIONS` to be specified are the following:
@@ -117,7 +117,7 @@ We choose the Heisenberg model with open boundary conditions on a 12x6 lattice w
 We also want to use 20 states for warmup and use SWEEP_MODE_TOLERANCE_TEST with 40, 80 and 160 states with a maximum of
 4, 2 and 2 iterations each. The corresponding command would be
 
-    mpirun -np 2 bin/DMRG-SpinOneHalf-J1J2XXZSquare.x \
+    mpirun -np 2 bin/DMRG-SquareLattice.x \
         -scratch_dir $SCRATCH_DIR -data_dir $DATA_DIR \
         -Lx 12 -Ly 6 -heisenberg 0.4 -BCOpen \
         -mwarmup 20 -msweeps 40,80,160 -maxnsweeps 4,2,2

@@ -50,10 +50,10 @@ static const PetscScalar one = 1.0;
 
 /** Constructs the Kronecker product matrices explicitly. */
 PetscErrorCode MatKronEyeConstruct(
-    Block::SpinOneHalf& LeftBlock,
-    Block::SpinOneHalf& RightBlock,
+    Block::SpinBase& LeftBlock,
+    Block::SpinBase& RightBlock,
     const KronBlocks_t& KronBlocks,
-    Block::SpinOneHalf& BlockOut
+    Block::SpinBase& BlockOut
     )
 {
     PetscErrorCode ierr = 0;
@@ -457,10 +457,10 @@ PetscErrorCode MatKronEyeConstruct(
 
 
 PetscErrorCode KronEye_Explicit(
-    Block::SpinOneHalf& LeftBlock,
-    Block::SpinOneHalf& RightBlock,
+    Block::SpinBase& LeftBlock,
+    Block::SpinBase& RightBlock,
     const std::vector< Hamiltonians::Term >& Terms,
-    Block::SpinOneHalf& BlockOut
+    Block::SpinBase& BlockOut
     )
 {
     PetscErrorCode ierr = 0;
