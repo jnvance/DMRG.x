@@ -21,7 +21,7 @@ PetscErrorCode Test()
     ierr = MPI_Comm_size(PETSC_COMM_WORLD, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(PETSC_COMM_WORLD, &rank); CHKERRQ(ierr);
 
-    Block::SpinOneHalf blk;
+    Block::SpinBase blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
     ierr = Makedir("trash_block_test_save01"); CHKERRQ(ierr);

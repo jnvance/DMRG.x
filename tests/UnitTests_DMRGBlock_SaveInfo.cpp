@@ -14,7 +14,7 @@ PETSC_EXTERN PetscErrorCode SetSz1(const Mat& Sz);
 PETSC_EXTERN PetscErrorCode SetSp1(const Mat& Sp);
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
-PetscErrorCode CreateAndSaveBlock(Block::SpinOneHalf& blk)
+PetscErrorCode CreateAndSaveBlock(Block::SpinBase& blk)
 {
     PetscErrorCode ierr;
 
@@ -35,7 +35,7 @@ PetscErrorCode CreateAndSaveBlock(Block::SpinOneHalf& blk)
     return(0);
 }
 
-PetscErrorCode RetrieveBlockFromDisk(Block::SpinOneHalf& blk)
+PetscErrorCode RetrieveBlockFromDisk(Block::SpinBase& blk)
 {
     PetscErrorCode ierr;
     ierr = blk.InitializeFromDisk(PETSC_COMM_WORLD,"trash_block_test_save/"); CHKERRQ(ierr);
@@ -45,8 +45,8 @@ PetscErrorCode RetrieveBlockFromDisk(Block::SpinOneHalf& blk)
 }
 
 PetscErrorCode CompareBlocks(
-    Block::SpinOneHalf& blk1,
-    Block::SpinOneHalf& blk2
+    Block::SpinBase& blk1,
+    Block::SpinBase& blk2
     )
 {
     PetscErrorCode ierr;
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
-    Block::SpinOneHalf blk1, blk2;
+    Block::SpinBase blk1, blk2;
 
     ierr = CreateAndSaveBlock(blk1); CHKERRQ(ierr);
     ierr = RetrieveBlockFromDisk(blk2); CHKERRQ(ierr);

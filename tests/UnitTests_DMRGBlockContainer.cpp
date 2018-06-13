@@ -12,7 +12,7 @@ PetscErrorCode Test()
 {
     PetscErrorCode ierr = 0;
 
-    DMRGBlockContainer<Block::SpinOneHalf, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
+    DMRGBlockContainer<Block::SpinBase, Hamiltonians::J1J2XXZModel_SquareLattice> DMRG(PETSC_COMM_WORLD);
 
     ierr = PetscOptionsSetValue(NULL, "-mwarmup", "20"); CHKERRQ(ierr);
     ierr = PetscOptionsSetValue(NULL, "-msweeps", "20,30,40"); CHKERRQ(ierr);

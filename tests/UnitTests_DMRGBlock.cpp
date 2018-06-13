@@ -27,7 +27,7 @@ PetscErrorCode Test_InitAndCopy()
 {
     PetscErrorCode ierr = 0;
 
-    Block::SpinOneHalf blk;
+    Block::SpinBase blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
 
@@ -54,7 +54,7 @@ PetscErrorCode Test_InitAndCopy()
     }
 
     /* Copy to blk2 */
-    Block::SpinOneHalf blk2 = blk;
+    Block::SpinBase blk2 = blk;
 
     ierr = MatPeek(blk2.Sz(0), "blk2.Sz(0)"); CHKERRQ(ierr);
     ierr = MatPeek(blk2.Sp(0), "blk2.Sp(0)"); CHKERRQ(ierr);
@@ -77,7 +77,7 @@ PetscErrorCode Test_MatOpCheckOperatorBlocks()
 {
     PetscErrorCode ierr = 0;
 
-    Block::SpinOneHalf blk;
+    Block::SpinBase blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
 
@@ -136,7 +136,7 @@ PetscErrorCode Test_SavingBlocks()
 
     ierr = Makedir("trash_block_test/"); CHKERRQ(ierr);
 
-    Block::SpinOneHalf blk;
+    Block::SpinBase blk;
     ierr = blk.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
     ierr = blk.InitializeSave("trash_block_test/"); CHKERRQ(ierr);
     ierr = blk.CheckSectors(); CHKERRQ(ierr);
@@ -170,7 +170,7 @@ PetscErrorCode Test_SavingBlocks()
     ierr = blk.Retrieve(); CHKERRQ(ierr);
     /* Ensure that retrieved matrices have the same entries */
     {
-        Block::SpinOneHalf blk2;
+        Block::SpinBase blk2;
         ierr = blk2.Initialize(PETSC_COMM_WORLD, 2, {1.5,0.5,-0.5,-1.5}, {2,3,2,1});CHKERRQ(ierr);
         ierr = blk2.InitializeSave("trash_block_test/"); CHKERRQ(ierr);
         ierr = blk2.CheckSectors(); CHKERRQ(ierr);
