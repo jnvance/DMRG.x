@@ -78,13 +78,13 @@ PetscErrorCode Block::SpinBase::Initialize(
             }
             switch(spin_type)
             {
-                case OneHalf :
+                case SpinOneHalf :
                     _loc_dim =      2;
                     _loc_qn_list =  {+0.5, -0.5};
                     _loc_qn_size =  {1, 1};
                     break;
 
-                case One :
+                case SpinOne :
                     _loc_dim =      3;
                     _loc_qn_list =  {+1.0, 0.0, -1.0};
                     _loc_qn_size =  {1, 1, 1};
@@ -217,6 +217,7 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
     PetscInt num_sites_in, num_states_in, num_sectors_in;
     std::vector<PetscReal> qn_list_in;
     std::vector<PetscInt> qn_size_in;
+    int spin_type_in;
 
     PetscMPIInt mpi_rank_in;
     ierr = MPI_Comm_rank(comm_in,&mpi_rank_in); CHKERRQ(ierr);
@@ -272,6 +273,13 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
                     PetscInt(PetscUseComplex), infomap.at("PetscUseComplex"));
         }
 
+        /* Get the spin type indicated in the file */
+        {
+            auto it = infomap.find(std::string("SpinTypeKey"));
+            if(it == infomap.end()) SETERRQ(PETSC_COMM_SELF,1,"SpinTypeKey not found.");
+            spin_type_in = int(it->second);
+        }
+
         /* Assign variables */
         num_sites_in = infomap.at("NumSites");
         num_states_in = infomap.at("NumStates");
@@ -281,6 +289,30 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
     ierr = MPI_Bcast(&num_sites_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
     ierr = MPI_Bcast(&num_states_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
     ierr = MPI_Bcast(&num_sectors_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&spin_type_in, 1, MPI_INT, 0, comm_in); CHKERRQ(ierr);
+
+    /* Get the spin type from command line */
+    Spin_t spin_type_opt;
+    char spin[10];
+    PetscBool set;
+    ierr = PetscOptionsGetString(NULL,NULL,"-spin",spin,10,&set); CHKERRQ(ierr);
+    if(set){
+        auto it = SpinTypes.find(std::string(spin));
+        if(it == SpinTypes.end()) SETERRQ1(PETSC_COMM_SELF,1,"Given -spin %s not valid/implemented.", spin);
+        spin_type_opt = it->second;
+        if(spin_type_in != int(spin_type_opt))
+            SETERRQ2(comm_in,1,"Given spin types from file (%d) "
+                "and command line (%d) do not match", spin_type_in, spin_type_opt);
+    } else {
+        /* Impose the given spin_type_in as a command line argument */
+        auto it = SpinTypesString.find(Spin_t(spin_type_in));
+        if(it!=SpinTypesString.end()){
+            ierr = PetscOptionsSetValue(NULL,"-spin",(it->second).c_str()); CHKERRQ(ierr);
+        } else {
+            SETERRQ1(PETSC_COMM_SELF,1,"Input SpinTypeKey %d not valid/implemented.", spin_type_in);
+        }
+    }
+
     qn_list_in.resize(num_sectors_in);
     qn_size_in.resize(num_sectors_in);
 
@@ -873,14 +905,14 @@ PetscErrorCode Block::SpinBase::SaveOperator(
     ierr = MatDestroy(&Op); CHKERRQ(ierr);
     Op = NULL;
 
-    #if defined(PETSC_USE_DEBUG)
-    PetscMPIInt subcomm_rank;
-    ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
-    if(!subcomm_rank)
-        std::cout
-            << "  IO: [" << mpi_rank << "] "
-            << "Saved:     " << OpFilename(write_dir,OpName,isite) << std::endl;
-    #endif
+    if(log_io){
+        PetscMPIInt subcomm_rank;
+        ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
+        if(!subcomm_rank)
+            std::cout
+                << "  IO: [" << mpi_rank << "] "
+                << "Saved:     " << OpFilename(write_dir,OpName,isite) << std::endl;
+    }
 
     return(0);
 }
@@ -910,6 +942,7 @@ PetscErrorCode Block::SpinBase::SaveBlockInfo()
         SaveInfo("NumBytesPetscInt",    sizeof(PetscInt));
         SaveInfo("NumBytesPetscScalar", sizeof(PetscScalar));
         SaveInfo("PetscUseComplex",     PetscUseComplex);
+        SaveInfo("SpinTypeKey",         spin_type);
         SaveInfo("NumSites",            num_sites);
         SaveInfo("NumStates",           num_states);
         SaveInfo("NumSectors",          Magnetization.NumSectors());
@@ -962,14 +995,14 @@ PetscErrorCode Block::SpinBase::RetrieveOperator(
     ierr = MatLoad(Op, binv); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
 
-    #if defined(PETSC_USE_DEBUG)
-    PetscMPIInt subcomm_rank;
-    ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
-    if(!subcomm_rank)
-        std::cout
-            << "  IO: [" << mpi_rank << "] "
-            << "Retrieved: " << OpFilename(write_dir,OpName,isite) << std::endl;
-    #endif
+    if(log_io){
+        PetscMPIInt subcomm_rank;
+        ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
+        if(!subcomm_rank)
+            std::cout
+                << "  IO: [" << mpi_rank << "] "
+                << "Retrieved: " << OpFilename(write_dir,OpName,isite) << std::endl;
+    }
 
     return(0);
 }
@@ -1080,7 +1113,7 @@ PetscErrorCode Block::SpinBase::MatSpinSzCreate(Mat& Sz)
 
     switch(spin_type)
     {
-        case OneHalf :
+        case SpinOneHalf :
             /**
                 This is represented by the matrix
                 \f{align}{
@@ -1100,7 +1133,7 @@ PetscErrorCode Block::SpinBase::MatSpinSzCreate(Mat& Sz)
             }
             break;
 
-        case One :
+        case SpinOne :
             /**
                 This is represented by the matrix
                 \f{align}{
@@ -1143,7 +1176,7 @@ PetscErrorCode Block::SpinBase::MatSpinSpCreate(Mat& Sp)
     const PetscScalar Sqrt2 = PetscSqrtScalar(2.0);
     switch(spin_type)
     {
-        case OneHalf :
+        case SpinOneHalf :
             /**
                 This is represented by the matrix
                 \f{align}{
@@ -1159,7 +1192,7 @@ PetscErrorCode Block::SpinBase::MatSpinSpCreate(Mat& Sp)
             }
             break;
 
-        case One :
+        case SpinOne :
             /**
                 This is represented by the matrix
                 \f{align}{

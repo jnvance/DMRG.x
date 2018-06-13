@@ -50,13 +50,21 @@ typedef enum
 /** Identifies the spin types implemented for this block */
 typedef enum
 {
-    OneHalf,       /**< Spin one-half */
-    One            /**< Spin one */
+    SpinOneHalf  = 102, /**< Spin one-half. `SpinTypeKey = 102` */
+    SpinOne      = 101, /**< Spin one. `SpinTypeKey = 101` */
+    SpinNull     = -2   /**< Null input spin */
 } Spin_t;
 
+/** Maps a string to its corresponding spin type */
 static const std::map<std::string,Spin_t> SpinTypes = {
-    {"1/2",  OneHalf},
-    {"1",    One}
+    {"1/2",         SpinOneHalf },
+    {"1",           SpinOne     }
+};
+
+/** Maps a spin type to its corresponding string */
+static const std::map<Spin_t,std::string> SpinTypesString = {
+    {SpinOneHalf,   "1/2"       },
+    {SpinOne,       "1"         }
 };
 
 static const std::vector<Op_t> BasicOpTypes = { OpSz, OpSp };
@@ -83,7 +91,7 @@ namespace Block {
         PetscMPIInt     mpi_size;
 
         /** Type of spin contained in the block */
-        Spin_t          spin_type = OneHalf;
+        Spin_t          spin_type = SpinOneHalf;
 
         /** Type of spin contained in the block expressed as a string */
         std::string     spin_type_str = "1/2";

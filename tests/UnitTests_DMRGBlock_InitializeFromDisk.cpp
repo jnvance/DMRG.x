@@ -10,7 +10,7 @@ static char help[] =
 PETSC_EXTERN PetscErrorCode SetRow(const Mat& A, const PetscInt& row, const std::vector<PetscInt>& idxn);
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name);
 
-PetscErrorCode RetrieveBlockFromDisk(Block::SpinOneHalf& blk)
+PetscErrorCode RetrieveBlockFromDisk(Block::SpinBase& blk)
 {
     PetscErrorCode ierr;
     char           file[PETSC_MAX_PATH_LEN];
@@ -27,18 +27,11 @@ PetscErrorCode RetrieveBlockFromDisk(Block::SpinOneHalf& blk)
 int main(int argc, char **argv)
 {
     PetscErrorCode  ierr = 0;
-    PetscMPIInt     nprocs, rank;
-    MPI_Comm&       comm = PETSC_COMM_WORLD;
-
-    /*  Initialize MPI  */
     ierr = SlepcInitialize(&argc, &argv, (char*)0, help); CHKERRQ(ierr);
-    ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
-    ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
+    ierr = PetscOptionsSetValue(NULL,"-log_io","yes"); CHKERRQ(ierr);
 
-    Block::SpinOneHalf blk1;
-
+    Block::SpinBase blk1;
     ierr = RetrieveBlockFromDisk(blk1); CHKERRQ(ierr);
-
     ierr = blk1.Destroy(); CHKERRQ(ierr);
 
     ierr = SlepcFinalize(); CHKERRQ(ierr);
