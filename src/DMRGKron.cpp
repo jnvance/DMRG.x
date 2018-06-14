@@ -33,7 +33,7 @@
     #endif
 #endif
 
-PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
+// PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart);
 PETSC_EXTERN PetscErrorCode MatEnsureAssembled(const Mat& matin);
 PETSC_EXTERN PetscErrorCode MatSetOption_MultipleMats(
     const std::vector<Mat>& matrices,

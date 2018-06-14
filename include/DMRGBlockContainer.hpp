@@ -16,9 +16,11 @@
 #include <set>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 #include <string>
 #include "DMRGKron.hpp"
+#include "MiscTools.hpp"
 
 /** Creates a directory named `dir_name`. */
 PETSC_EXTERN PetscErrorCode Makedir(
@@ -206,16 +208,51 @@ public:
          - `-mwarmup <int>`
          - `-nsweeps <int>`
          - `-msweeps <int>`
+         - `-restart <string>` path to restart directory
 
      */
     PetscErrorCode Initialize()
     {
         if(init) SETERRQ(mpi_comm,1,"DMRG object has already been initialized.");
         PetscErrorCode ierr = 0;
+        char path[PETSC_MAX_PATH_LEN];
 
         /*  Get MPI attributes */
         ierr = MPI_Comm_size(mpi_comm, &mpi_size); CHKERRQ(ierr);
         ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
+
+        /*  Whether to do a checkpoint restart.
+            The path to be provided should point to the directory of the
+            previous run. */
+        ierr = PetscOptionsGetString(NULL,NULL,"-restart",path,PETSC_MAX_PATH_LEN,&restart); CHKERRQ(ierr);
+        if(restart)
+        {
+            restart_dir = std::string(path);
+            if(restart_dir.back()!='/') restart_dir += "/";
+
+            /* Verify the existence of restart_sweep_file */
+            PetscInt ridx = -2; /* Index of the sweep containing the restart */
+            if(!mpi_rank) {
+                PetscBool flg;
+                std::string file;
+                do
+                {
+                    ++ridx;
+                    file = restart_dir + SweepDir(ridx+1) + "Sweep.dat";
+                    ierr = PetscTestFile(file.c_str(), 'r', &flg); CHKERRQ(ierr);
+                } while (flg);
+
+                if(ridx<0) SETERRQ2(PETSC_COMM_SELF,1,"Could not find %sSweep_*/"
+                    "Sweep.dat file up to index %lld.", restart_dir.c_str(), ridx+1);
+            }
+            ierr = MPI_Bcast(&ridx, 1, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
+
+            /* Append the correct sweep directory to restart dir */
+            restart_dir = restart_dir + SweepDir(ridx);
+
+            /* Restart the Hamiltonian */
+            ierr = SetOptionsFromFile(mpi_comm, restart_dir + "Hamiltonian.dat"); CHKERRQ(ierr);
+        }
 
         /*  Initialize Hamiltonian object */
         ierr = Ham.SetFromOptions(); CHKERRQ(ierr);
@@ -235,9 +272,8 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-dry_run",&dry_run,NULL); CHKERRQ(ierr);
 
         /*  Setup the scratch space to save temporary data*/
-        char path[512];
         PetscBool opt_do_scratch_dir = PETSC_FALSE;
-        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,512,&opt_do_scratch_dir); CHKERRQ(ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-scratch_dir",path,PETSC_MAX_PATH_LEN,&opt_do_scratch_dir); CHKERRQ(ierr);
         if(opt_do_scratch_dir){
             scratch_dir = std::string(path);
             if(scratch_dir.back()!='/') scratch_dir += '/';
@@ -252,10 +288,9 @@ public:
         // ierr = PetscOptionsGetBool(NULL,NULL,"-do_scratch_dir",&do_scratch_dir,NULL); CHKERRQ(ierr);
 
         /* Setup the location to save basic data */
-        memset(path,0,sizeof(path));
         std::string data_dir;
         PetscBool opt_data_dir = PETSC_FALSE;
-        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,512,&opt_data_dir); CHKERRQ(ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-data_dir",path,PETSC_MAX_PATH_LEN,&opt_data_dir); CHKERRQ(ierr);
         if(opt_data_dir){
             data_dir = std::string(path);
             if(data_dir.back()!='/') data_dir += '/';
@@ -303,6 +338,8 @@ public:
             if(do_scratch_dir) printf(
                     "  Scratch: %s\n", scratch_dir.c_str());
             printf( "  Data:    %s\n", data_dir.c_str());
+            if(restart) printf(
+                    "  Restart: %s\n", restart_dir.c_str());
             printf( "=========================================\n");
         }
 
@@ -530,7 +567,7 @@ public:
         return(0);
     }
 
-    /** Performs the warmup stage of DMRG.
+    /** Performs the warmup stage of DMRG or loads blocks for the restart stage.
         The system and environment blocks are grown until both reach the maximum number which is half the total number
         of sites. All created system blocks are stored and will be represented by at most `MStates` number of basis states */
     PetscErrorCode Warmup()
@@ -539,6 +576,22 @@ public:
         if(dry_run) return(0);
 
         PetscErrorCode ierr = 0;
+
+        /** This stage is skipped when performing a restart. Instead, the
+            blocks are loaded from file. */
+        if(restart)
+        {
+            /* Read Sweep.dat */
+            std::string filename = restart_dir + "Sweep.dat";
+            std::map<std::string, PetscInt> data;
+            ierr = RetrieveInfoFile<PetscInt>(mpi_comm,filename,data); CHKERRQ(ierr);
+
+            /** TODO: Implement restart feature */
+            SETERRQ(mpi_comm,1,"Restart feature not yet fully implemented.");
+
+            warmed_up = PETSC_TRUE;
+            return(0);
+        }
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
         if(!mpi_rank) printf("WARMUP\n");
 
@@ -667,6 +720,7 @@ public:
                 "  Initialized system blocks: %lld\n"
                 "  Target number of sites:    %lld\n\n", LLD(sys_ninit), LLD(num_sites));
         }
+        ierr = SaveSweepsData(); CHKERRQ(ierr);
         if(!mpi_rank) PRINTLINES();
         ++LoopIdx;
         return(0);
@@ -831,7 +885,7 @@ public:
         {
             ierr = sys_blocks[iblock].EnsureSaved(); CHKERRQ(ierr);
         }
-
+        ierr = SaveSweepsData(); CHKERRQ(ierr);
         ++LoopIdx;
         if(!mpi_rank) PRINTLINES();
         return(0);
@@ -895,6 +949,13 @@ private:
 
     /** Tells whether to printout info during certain function calls */
     PetscBool   verbose = PETSC_FALSE;
+
+    /** Tells whether the container initialized from a checkpoint restart */
+    PetscBool   restart = PETSC_FALSE;
+
+    /** Path to sweep directory for performing restart.
+        Requires @p restart=PETSC_TRUE to be useable. */
+    std::string restart_dir;
 
     /** Tells whether to skip the warmup and sweep stages even when called */
     PetscBool dry_run = PETSC_FALSE;
@@ -962,11 +1023,6 @@ private:
 
     /** Directory in which all the sweep data will be saved */
     std::string scratch_dir = ".";
-
-    /** Directory in which the data for a specific sweep will be saved.
-        This usually takes the form
-     */
-    std::string sweep_dir = "";
 
     /** Tells whether to save and retrieve blocks to reduce memory usage at runtime.
         This is automatically set when indicating -scratch_dir */
@@ -2394,6 +2450,7 @@ private:
         return(0);
     }
 
+    /** Save data regarding warmup/sweeps into the data directory */
     PetscErrorCode SaveLoopsData()
     {
         if(mpi_rank) return(0);
@@ -2414,6 +2471,80 @@ private:
         return(0);
     }
 
+    /** Dumps significant keys and values to file to be retrieved for restart */
+    PetscErrorCode SaveAsOptions(const std::string& filename)
+    {
+        if(mpi_rank) return(0);
+        PetscErrorCode ierr;
+        char val[4096];
+        PetscBool set;
+        std::vector< std::string > keys = {
+            // "-no_symm",
+            // "-do_shell",
+            // "-dry_run",
+            // "-do_save_prealloc",
+            "-spin",
+            "-mstates",
+            "-mwarmup",
+            "-nsweeps",
+            "-msweeps",
+            "-maxnsweeps"
+        };
+
+        std::ostringstream oss;
+        for(std::string& key: keys) {
+            ierr = PetscOptionsGetString(NULL,NULL,key.c_str(),val,4096,&set); CHKERRQ(ierr);
+            if(set) {
+                std::string val_str(val);
+                if(val_str.empty()) val_str = "yes";
+                oss << key << " " << val_str << std::endl;
+            }
+        }
+
+        FILE *fp;
+        ierr = PetscFOpen(PETSC_COMM_SELF,filename.c_str(),"w", &fp); CHKERRQ(ierr);
+        ierr = PetscFPrintf(PETSC_COMM_SELF,fp,"%s",oss.str().c_str()); CHKERRQ(ierr);
+        ierr = PetscFClose(PETSC_COMM_SELF,fp); CHKERRQ(ierr);
+        return(0);
+    }
+
+    /** Save data at the end of a completed sweep into the sweep directory in the scratch.
+        The data will be used in restarting the simulation from the end of this sweep */
+    PetscErrorCode SaveSweepsData()
+    {
+        /* do stuff only on root process */
+        if(mpi_rank) return(0);
+        PetscErrorCode ierr;
+
+        /* Save Hamiltonian.dat */
+        std::string ham_data_fn = scratch_dir + SweepDir(LoopIdx) + "Hamiltonian.dat";
+        ierr = Ham.SaveAsOptions(ham_data_fn); CHKERRQ(ierr);
+
+        /* Save DMRGInfo.dat */
+        std::string dmrg_data_fn = scratch_dir + SweepDir(LoopIdx) + "PetscOptions.dat";
+        ierr = SaveAsOptions(dmrg_data_fn); CHKERRQ(ierr);
+
+        /* Save Sweep.dat */
+        std::string sweep_data_fn = scratch_dir + SweepDir(LoopIdx) + "Sweep.dat";
+        std::ofstream sweep_data_file(sweep_data_fn);
+
+        #define SWEEP_DUMP(VAR) \
+            sweep_data_file << std::setw(20) << (#VAR) << "  " << (VAR) << "\n";
+
+        /*        >********************< 20 char */
+        SWEEP_DUMP(GlobIdx             );
+        SWEEP_DUMP(LoopIdx             );
+        SWEEP_DUMP(num_sites           );
+        SWEEP_DUMP(num_sys_blocks      );
+        SWEEP_DUMP(num_env_blocks      );
+        SWEEP_DUMP(sys_ninit           );
+        SWEEP_DUMP(env_ninit           );
+        SWEEP_DUMP(env_ninit           );
+
+        #undef SWEEP_DUMP
+        sweep_data_file.close();
+        return(0);
+    }
 };
 
 #undef OpIdxToStr
