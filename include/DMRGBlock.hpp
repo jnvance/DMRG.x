@@ -1,9 +1,9 @@
-#ifndef __DMRG_SITE_HPP
-#define __DMRG_SITE_HPP
+#ifndef __DMRG_BLOCK_HPP__
+#define __DMRG_BLOCK_HPP__
 
 /**
     @defgroup   DMRGBlock   DMRGBlock
-    @brief      Implementation of the Block classes which contain the data and methods
+    @brief      Implementation of the SpinBase class which contain the data and methods
                 for a block of spin sites
     @addtogroup DMRGBlock
     @{ */
@@ -47,6 +47,26 @@ typedef enum
     SideRight = 1   /**< right block */
 } Side_t;
 
+/** Identifies the spin types implemented for this block */
+typedef enum
+{
+    SpinOneHalf  = 102, /**< Spin one-half. `SpinTypeKey = 102` */
+    SpinOne      = 101, /**< Spin one. `SpinTypeKey = 101` */
+    SpinNull     = -2   /**< Null input spin */
+} Spin_t;
+
+/** Maps a string to its corresponding spin type */
+static const std::map<std::string,Spin_t> SpinTypes = {
+    {"1/2",         SpinOneHalf },
+    {"1",           SpinOne     }
+};
+
+/** Maps a spin type to its corresponding string */
+static const std::map<Spin_t,std::string> SpinTypesString = {
+    {SpinOneHalf,   "1/2"       },
+    {SpinOne,       "1"         }
+};
+
 static const std::vector<Op_t> BasicOpTypes = { OpSz, OpSp };
 static const std::vector<Side_t> SideTypes = { SideLeft, SideRight };
 
@@ -70,6 +90,21 @@ namespace Block {
         /** MPI size of mpi_comm */
         PetscMPIInt     mpi_size;
 
+        /** Type of spin contained in the block */
+        Spin_t          spin_type = SpinOneHalf;
+
+        /** Type of spin contained in the block expressed as a string */
+        std::string     spin_type_str = "1/2";
+
+        /** Stores the local dimension of a single site */
+        PetscInt        _loc_dim = 2;
+
+        /** Stores the Sz sectors of a single site. */
+        std::vector<PetscScalar>    _loc_qn_list = {+0.5, -0.5};
+
+        /** Stores the number of states in each sector in a single site. */
+        std::vector<PetscInt>       _loc_qn_size = {1, 1};
+
         /** Tells whether the block was initialized */
         PetscBool init = PETSC_FALSE;
 
@@ -81,6 +116,9 @@ namespace Block {
 
         /** Tells whether to printout info during certain function calls */
         PetscBool verbose = PETSC_FALSE;
+
+        /** Tells whether to printout IO functions */
+        PetscBool log_io = PETSC_FALSE;
 
         /** Number of sites in the block */
         PetscInt num_sites;
@@ -103,14 +141,30 @@ namespace Block {
         /** Whether saving the block matrices to file has been initialized correctly */
         PetscBool init_save = PETSC_FALSE;
 
+        /** Whether SetDiskStorage() has properly set the block storage locations. */
+        PetscBool disk_set = PETSC_FALSE;
+
         /** Whether the block matrices have been saved */
         PetscBool saved = PETSC_FALSE;
 
         /** Whether the block matrices have been retrieved */
         PetscBool retrieved = PETSC_FALSE;
 
-        /** Root directory to save the matrix blocks */
+        /** Root directory to read from and write the matrix blocks into */
         std::string save_dir;
+
+        /** Root directory to read the matrix blocks from during the first access */
+        std::string read_dir;
+
+        /** Root directory to write the matrix blocks into */
+        std::string write_dir;
+
+        /** Number of reads from file made for this block.
+
+            @todo Its value is incremented by a call to Retrieve_NoChecks() via
+            Retrieve() and InitializeFromDisk(), and reset to zero by SetDiskStorage().
+         */
+        PetscInt num_reads = 0;
 
         /** Saves a single operator */
         PetscErrorCode SaveOperator(
@@ -132,7 +186,8 @@ namespace Block {
         /** List of possible methods for performing basis transformation */
         enum RotMethod { mmmmult=0, matptap=1 };
 
-        /** Method to use for performing basis transformation. TODO: Get the method from command line */
+        /** Method to use for performing basis transformation.
+            @todo Get the method from command line and expand choices */
         RotMethod rot_method = mmmmult;
 
     protected:
@@ -143,20 +198,29 @@ namespace Block {
     public:
 
         /** Local dimension of a single site. */
-        virtual PetscInt loc_dim() const = 0;
+        virtual PetscInt loc_dim() const
+        {
+            return _loc_dim;
+        }
 
         /** Sz sectors of a single site. */
-        virtual std::vector<PetscScalar> loc_qn_list() const = 0;
+        virtual std::vector<PetscScalar> loc_qn_list() const
+        {
+            return _loc_qn_list;
+        }
 
         /** Number of states in each sector in a single site. */
-        virtual std::vector<PetscInt> loc_qn_size() const = 0;
+        virtual std::vector<PetscInt> loc_qn_size() const
+        {
+            return _loc_qn_size;
+        }
 
         /** Creates the single-site \f$ S^z \f$ operator. */
-        virtual PetscErrorCode MatSpinSzCreate(Mat& Sz) = 0;
+        virtual PetscErrorCode MatSpinSzCreate(Mat& Sz);
 
         /** Creates the single-site raising operator \f$ S^+ \f$,
             from which we can define \f$ S^- = (S^+)^\dagger \f$. */
-        virtual PetscErrorCode MatSpinSpCreate(Mat& Sp) = 0;
+        virtual PetscErrorCode MatSpinSpCreate(Mat& Sp);
 
         /** Initializes block object's MPI attributes */
         PetscErrorCode Initialize(
@@ -165,7 +229,11 @@ namespace Block {
 
         /** Initializes block object with input attributes and array of matrix operators.
             @post Arrays of operator matrices are initialized to the correct number of sites and states.
-            @remarks __TODO:__ Consider interfacing this to the object constructor.
+            @todo Consider interfacing this to the object constructor.
+
+            @par Options:
+            - `-verbose`
+            - `-log_io`
         */
         PetscErrorCode Initialize(
             const MPI_Comm& comm_in,      /**< [in] MPI communicator */
@@ -201,10 +269,22 @@ namespace Block {
             const std::string& block_path   /**< [in] Directory storing the block object's data */
             );
 
-        /** Initializes the writing of the block matrices to file */
+        /** Initializes the writing of the block matrices to file.
+            The directory `save_dir_in` may be set only once. If this directory changes throughout
+            the lifetime of a block, or if the read directory is different from the write directory
+            consider using SetDiskStorage() instead. */
         PetscErrorCode InitializeSave(
             const std::string& save_dir_in  /**< [in] Directory to store block object's data */
             );
+
+        /** Tells where to read from and save the operators and data about the block. */
+        PetscErrorCode SetDiskStorage(
+            const std::string& read_dir_in,     /**< [in] Directory to initially read-in block object's data */
+            const std::string& write_dir_in     /**< [in] Directory to store block object's data */
+            );
+
+        /** Returns the value of save_dir where the block data will be read from/written */
+        std::string SaveDir() const { return save_dir; }
 
         /** Tells whether InitializeSave() has been properly called */
         PetscBool SaveInitialized() const { return init_save; }
@@ -353,61 +433,10 @@ namespace Block {
         PetscErrorCode AssembleOperators();
     };
 
-    /** Specific implementation for a block of spin-\f$ 1/2 \f$ sites */
-    class SpinOneHalf: public SpinBase
-    {
-    public:
-        /** Returns the local dimension of a single site \f$d=2\f$. */
-        PetscInt loc_dim() const { return 2; }
-
-        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1/2,-1/2\}\f$ */
-        std::vector<PetscScalar> loc_qn_list() const { return std::vector<PetscScalar>({+0.5, -0.5}); }
-
-        /** Returns the number of states in each sector in a single site \f$\{1,1\}\f$. */
-        std::vector<PetscInt> loc_qn_size() const { return std::vector<PetscInt>({1, 1}); }
-
-        /** Creates the single-site \f$ S^z \f$ operator. */
-        PetscErrorCode MatSpinSzCreate(Mat& Sz);
-
-        /** Creates the single-site raising operator \f$ S^+ \f$,
-            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
-        PetscErrorCode MatSpinSpCreate(Mat& Sp);
-    };
-
-    /** Specific implementation for a block of spin-\f$ 1 \f$ sites */
-    class SpinOne: public SpinBase
-    {
-    public:
-        /** Returns the local dimension of a single site \f$d=3\f$. */
-        PetscInt loc_dim() const
-        {
-            return 3;
-        }
-
-        /** Returns the \f$ S^z \f$ sectors of a single site \f$\{+1,0,-1\}\f$ */
-        std::vector<PetscScalar> loc_qn_list() const
-        {
-            return std::vector<PetscScalar>({+1., 0., -1.});
-        }
-
-        /** Returns the number of states in each sector in a single site \f$\{1,1,1\}\f$. */
-        std::vector<PetscInt> loc_qn_size() const
-        {
-            return std::vector<PetscInt>({1, 1, 1});
-        }
-
-        /** Creates the single-site \f$ S^z \f$ operator. */
-        PetscErrorCode MatSpinSzCreate(Mat& Sz);
-
-        /** Creates the single-site raising operator \f$ S^+ \f$,
-            from which we can define \f$ S^- = (S^+)^\dagger \f$. */
-        PetscErrorCode MatSpinSpCreate(Mat& Sp);
-    };
-
 }
 
 /**
     @}
  */
 
-#endif // __DMRG_SITE_HPP
+#endif // __DMRG_BLOCK_HPP__

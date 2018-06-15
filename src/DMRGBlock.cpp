@@ -52,12 +52,48 @@ PetscErrorCode Block::SpinBase::Initialize(
 
     /*  Check whether to do verbose logging  */
     ierr = PetscOptionsGetBool(NULL,NULL,"-verbose",&verbose,NULL); CHKERRQ(ierr);
-
+    ierr = PetscOptionsGetBool(NULL,NULL,"-log_io",&log_io,NULL); CHKERRQ(ierr);
     /*  Initialize attributes  */
     if(!mpi_init){
         ierr = Initialize(comm_in); CHKERRQ(ierr);
     } else if (comm_in!=mpi_comm) {
         SETERRQ(PETSC_COMM_SELF,1,"Mismatch in MPI communicators.");
+    }
+    /*  Determine the spin-type from command line and set the attributes */
+    {
+        char spin[10];
+        PetscBool set;
+        ierr = PetscOptionsGetString(NULL,NULL,"-spin",spin,10,&set); CHKERRQ(ierr);
+        if(set)
+        {
+            spin_type_str = std::string(spin);
+            auto it = SpinTypes.find(spin_type_str);
+            if(it != SpinTypes.end())
+            {
+                spin_type = it->second;
+            }
+            else
+            {
+                SETERRQ1(mpi_comm,1,"Given -spin %s not valid/implemented.", spin);
+            }
+            switch(spin_type)
+            {
+                case SpinOneHalf :
+                    _loc_dim =      2;
+                    _loc_qn_list =  {+0.5, -0.5};
+                    _loc_qn_size =  {1, 1};
+                    break;
+
+                case SpinOne :
+                    _loc_dim =      3;
+                    _loc_qn_list =  {+1.0, 0.0, -1.0};
+                    _loc_qn_size =  {1, 1, 1};
+                    break;
+
+                default:
+                    SETERRQ(mpi_comm,1,"Given spin_type not valid/implemented.");
+            }
+        }
     }
 
     /*  Initial number of sites and number of states  */
@@ -181,20 +217,28 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
     PetscInt num_sites_in, num_states_in, num_sectors_in;
     std::vector<PetscReal> qn_list_in;
     std::vector<PetscInt> qn_size_in;
+    int spin_type_in;
 
     PetscMPIInt mpi_rank_in;
     ierr = MPI_Comm_rank(comm_in,&mpi_rank_in); CHKERRQ(ierr);
 
     std::string block_path = block_path_in;
-    if(block_path.back()!='/') block_path += '/';
+    if(block_path.empty()) block_path = '/';
+    else if(block_path.back()!='/') block_path += '/';
 
     if(!mpi_rank_in)
     {
         /* Read data for Block */
-        std::ifstream infofile((block_path + "BlockInfo.dat").c_str());
+        std::string block_file = block_path + "BlockInfo.dat";
+
+        PetscBool flg;
+        ierr = PetscTestFile(block_file.c_str(), 'r', &flg); CHKERRQ(ierr);
+        if(!flg) SETERRQ1(PETSC_COMM_SELF,1,"Error in reading %s", block_file.c_str());
+
+        std::ifstream infofile(block_file.c_str());
         std::map< std::string, PetscInt > infomap;
         std::string line;
-        if (!infofile.is_open())
+        if (!infofile.is_open() || infofile.fail())
             perror("error while opening file");
         while (infofile && std::getline(infofile, line)) {
             std::string key;
@@ -229,6 +273,13 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
                     PetscInt(PetscUseComplex), infomap.at("PetscUseComplex"));
         }
 
+        /* Get the spin type indicated in the file */
+        {
+            auto it = infomap.find(std::string("SpinTypeKey"));
+            if(it == infomap.end()) SETERRQ(PETSC_COMM_SELF,1,"SpinTypeKey not found.");
+            spin_type_in = int(it->second);
+        }
+
         /* Assign variables */
         num_sites_in = infomap.at("NumSites");
         num_states_in = infomap.at("NumStates");
@@ -238,6 +289,30 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
     ierr = MPI_Bcast(&num_sites_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
     ierr = MPI_Bcast(&num_states_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
     ierr = MPI_Bcast(&num_sectors_in, 1, MPIU_INT, 0, comm_in); CHKERRQ(ierr);
+    ierr = MPI_Bcast(&spin_type_in, 1, MPI_INT, 0, comm_in); CHKERRQ(ierr);
+
+    /* Get the spin type from command line */
+    Spin_t spin_type_opt;
+    char spin[10];
+    PetscBool set;
+    ierr = PetscOptionsGetString(NULL,NULL,"-spin",spin,10,&set); CHKERRQ(ierr);
+    if(set){
+        auto it = SpinTypes.find(std::string(spin));
+        if(it == SpinTypes.end()) SETERRQ1(PETSC_COMM_SELF,1,"Given -spin %s not valid/implemented.", spin);
+        spin_type_opt = it->second;
+        if(spin_type_in != int(spin_type_opt))
+            SETERRQ2(comm_in,1,"Given spin types from file (%d) "
+                "and command line (%d) do not match", spin_type_in, spin_type_opt);
+    } else {
+        /* Impose the given spin_type_in as a command line argument */
+        auto it = SpinTypesString.find(Spin_t(spin_type_in));
+        if(it!=SpinTypesString.end()){
+            ierr = PetscOptionsSetValue(NULL,"-spin",(it->second).c_str()); CHKERRQ(ierr);
+        } else {
+            SETERRQ1(PETSC_COMM_SELF,1,"Input SpinTypeKey %d not valid/implemented.", spin_type_in);
+        }
+    }
+
     qn_list_in.resize(num_sectors_in);
     qn_size_in.resize(num_sectors_in);
 
@@ -246,8 +321,13 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
         if(!mpi_rank_in)
         {
             /* Read data for quantum numbers */
-            std::string filename = block_path + "QuantumNumbers.dat";
-            std::ifstream qnfile(filename.c_str());
+            std::string qn_file = block_path + "QuantumNumbers.dat";
+
+            PetscBool flg;
+            ierr = PetscTestFile(qn_file.c_str(), 'r', &flg); CHKERRQ(ierr);
+            if(!flg) SETERRQ1(PETSC_COMM_SELF,1,"Error in reading %s", qn_file.c_str());
+
+            std::ifstream qnfile(qn_file.c_str());
             std::string line;
             if (!qnfile.is_open())
                 perror("error while opening file");
@@ -261,7 +341,7 @@ PetscErrorCode Block::SpinBase::InitializeFromDisk(
                 perror("error while reading file");
             if(ctr!=num_sectors_in)
                 SETERRQ3(PETSC_COMM_SELF,1,"Incorrect number of data points in %s. "
-                    "Expected %lld. Got %lld.", filename.c_str(), num_sectors_in, ctr);
+                    "Expected %lld. Got %lld.", qn_file.c_str(), num_sectors_in, ctr);
 
             qnfile.close();
         }
@@ -620,7 +700,8 @@ PetscErrorCode Block::SpinBase::RotateOperators(SpinBase& Source, const Mat& Rot
     {
         /*  Require that save_initialization must have been called first since this operation requires
             reading the matrices from disk to the subcommunicators */
-        if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first before using this feature.");
+        if(!(init_save || disk_set)) SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() "
+            "must be called first before using this feature.");
         ierr = MatCreateRedundantMatrix(RotMatT_in, nsubcomm, MPI_COMM_NULL, MAT_INITIAL_MATRIX, &RotMatT); CHKERRQ(ierr);
         ierr = PetscObjectGetComm((PetscObject)RotMatT, &subcomm); CHKERRQ(ierr);
         ierr = MPI_Comm_rank(subcomm, &sub_rank); CHKERRQ(ierr);
@@ -717,10 +798,14 @@ PetscErrorCode Block::SpinBase::RotateOperators(SpinBase& Source, const Mat& Rot
         }
         ierr = MatDestroy(&RotMatT); CHKERRQ(ierr);
         ierr = MatDestroy(&H); CHKERRQ(ierr);
+        ierr = SaveBlockInfo(); CHKERRQ(ierr);
         ierr = Destroy(); CHKERRQ(ierr);
         init = PETSC_FALSE;
         saved = PETSC_TRUE;
         retrieved = PETSC_FALSE;
+
+        /** Saving of matrices when nsubcomm > 1 also triggers the swap in save_dir */
+        save_dir = write_dir;
     }
     else
     {
@@ -760,7 +845,40 @@ PetscErrorCode Block::SpinBase::InitializeSave(
     save_dir = save_dir_in;
     /* If the last character is not a slash then add one */
     if(save_dir.back()!='/') save_dir += '/';
+    read_dir = write_dir = save_dir;
     init_save = PETSC_TRUE;
+    return(0);
+}
+
+
+PetscErrorCode Block::SpinBase::SetDiskStorage(
+    const std::string& read_dir_in,
+    const std::string& write_dir_in
+    )
+{
+    if(init_save == PETSC_TRUE)
+        SETERRQ(mpi_comm,1,"InitializeSave() and SetDiskStorage() cannot both be used "
+            "on the same block.");
+
+    read_dir  = read_dir_in;
+    if(read_dir.back()!='/') read_dir += '/';
+
+    write_dir = write_dir_in;
+    if(write_dir.back()!='/') write_dir += '/';
+
+    /** The blocks are going to be read from the `read_dir_in` directory
+        during the first retrieval and then `save_dir_in` for succeeding reads.
+        This comes in useful for the sweep stage of the
+        DMRG algorithm, when we want to read the resulting operators of the previous sweep
+        and write the files back into a different subdirectory for the current sweep.
+        The switch is done by Retrieve_NoChecks().
+     */
+    save_dir  = read_dir;
+
+    /** This function also resets the counter in the number of reads performed
+        in the PetscInt Block::SpinBase::num_reads parameter */
+    num_reads = 0;
+    disk_set = PETSC_TRUE;
     return(0);
 }
 
@@ -781,11 +899,21 @@ PetscErrorCode Block::SpinBase::SaveOperator(
     PetscErrorCode ierr;
     PetscViewer binv;
     if(!Op) SETERRQ(PETSC_COMM_SELF,1,"Input matrix is null.");
-    ierr = PetscViewerBinaryOpen(comm_in, OpFilename(save_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
+    ierr = PetscViewerBinaryOpen(comm_in, OpFilename(write_dir,OpName,isite).c_str(), FILE_MODE_WRITE, &binv); CHKERRQ(ierr);
     ierr = MatView(Op, binv); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
     ierr = MatDestroy(&Op); CHKERRQ(ierr);
     Op = NULL;
+
+    if(log_io){
+        PetscMPIInt subcomm_rank;
+        ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
+        if(!subcomm_rank)
+            std::cout
+                << "  IO: [" << mpi_rank << "] "
+                << "Saved:     " << OpFilename(write_dir,OpName,isite) << std::endl;
+    }
+
     return(0);
 }
 
@@ -793,13 +921,15 @@ PetscErrorCode Block::SpinBase::SaveOperator(
 PetscErrorCode Block::SpinBase::SaveBlockInfo()
 {
     CheckInit(__FUNCTION__);
-    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(!init_save && !disk_set)
+        SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() must be called first.");
+
     if(mpi_rank) return(0);
 
     /* Save block information */
     {
         std::ofstream infofile;
-        infofile.open((save_dir + "BlockInfo.dat").c_str());
+        infofile.open((write_dir + "BlockInfo.dat").c_str());
 
         #if defined(PETSC_USE_COMPLEX)
             PetscInt PetscUseComplex = 1;
@@ -812,6 +942,7 @@ PetscErrorCode Block::SpinBase::SaveBlockInfo()
         SaveInfo("NumBytesPetscInt",    sizeof(PetscInt));
         SaveInfo("NumBytesPetscScalar", sizeof(PetscScalar));
         SaveInfo("PetscUseComplex",     PetscUseComplex);
+        SaveInfo("SpinTypeKey",         spin_type);
         SaveInfo("NumSites",            num_sites);
         SaveInfo("NumStates",           num_states);
         SaveInfo("NumSectors",          Magnetization.NumSectors());
@@ -823,7 +954,7 @@ PetscErrorCode Block::SpinBase::SaveBlockInfo()
     /* Save quantum numbers information */
     {
         std::ofstream qnfile;
-        qnfile.open((save_dir + "QuantumNumbers.dat").c_str());
+        qnfile.open((write_dir + "QuantumNumbers.dat").c_str());
         std::vector<PetscInt>  qn_size = Magnetization.Sizes();
         std::vector<PetscReal> qn_list = Magnetization.List();
         PetscInt num_sectors = Magnetization.NumSectors();
@@ -863,6 +994,16 @@ PetscErrorCode Block::SpinBase::RetrieveOperator(
     }
     ierr = MatLoad(Op, binv); CHKERRQ(ierr);
     ierr = PetscViewerDestroy(&binv); CHKERRQ(ierr);
+
+    if(log_io){
+        PetscMPIInt subcomm_rank;
+        ierr = MPI_Comm_rank(comm_in, &subcomm_rank); CHKERRQ(ierr);
+        if(!subcomm_rank)
+            std::cout
+                << "  IO: [" << mpi_rank << "] "
+                << "Retrieved: " << OpFilename(write_dir,OpName,isite) << std::endl;
+    }
+
     return(0);
 }
 
@@ -870,7 +1011,9 @@ PetscErrorCode Block::SpinBase::RetrieveOperator(
 PetscErrorCode Block::SpinBase::SaveAndDestroy()
 {
     CheckInit(__FUNCTION__); /** @throw PETSC_ERR_ARG_CORRUPT Block not yet initialized */
-    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(!init_save && !disk_set)
+        SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() must be called first.");
+
     PetscErrorCode ierr;
     for(PetscInt isite = 0; isite < num_sites; ++isite){
         ierr = SaveOperator("Sz",isite,SzData[isite],mpi_comm); CHKERRQ(ierr);
@@ -886,13 +1029,24 @@ PetscErrorCode Block::SpinBase::SaveAndDestroy()
     init = PETSC_FALSE;
     saved = PETSC_TRUE;
     retrieved = PETSC_FALSE;
+
+    /** If read and write paths were set using SetDiskStorage(), then all saves,
+        whether or not a read has been performed, shall be done using `write_dir` and
+        the value of `save_dir` is swapped from `read_dir` to `write_dir`.
+     */
+    if(disk_set)
+    {
+        save_dir = write_dir;
+    }
     return(0);
 }
 
 
 PetscErrorCode Block::SpinBase::Retrieve()
 {
-    if(!init_save) SETERRQ(mpi_comm,1,"InitializeSave() must be called first.");
+    if(!init_save && !disk_set)
+        SETERRQ(mpi_comm,1,"InitializeSave() or SetDiskStorage() must be called first.");
+
     if(init) SETERRQ(mpi_comm,1,"Destroy() must be called first.");
     PetscErrorCode ierr;
     ierr = Retrieve_NoChecks(); CHKERRQ(ierr);
@@ -917,13 +1071,22 @@ PetscErrorCode Block::SpinBase::Retrieve_NoChecks()
     if(flg){
         ierr = RetrieveOperator("H",0,H,mpi_comm); CHKERRQ(ierr);
     }
+
+    /** If read and write paths were set using SetDiskStorage(), then after the first read
+        the value of `save_dir` is swapped from `read_dir` to `write_dir`.
+     */
+    if(num_reads==0 && disk_set)
+    {
+        save_dir = write_dir;
+    }
+    ++num_reads;
     return(0);
 }
 
 
 PetscErrorCode Block::SpinBase::EnsureSaved()
 {
-    if(!init || !init_save || saved) return(0);
+    if(!init || !(init_save || disk_set) || saved) return(0);
     PetscErrorCode ierr = SaveAndDestroy(); CHKERRQ(ierr);
     return(0);
 }
@@ -931,15 +1094,13 @@ PetscErrorCode Block::SpinBase::EnsureSaved()
 
 PetscErrorCode Block::SpinBase::EnsureRetrieved()
 {
-    if(init || !init_save || retrieved) return(0);
+    if(init || !(init_save || disk_set) || retrieved) return(0);
     PetscErrorCode ierr = Retrieve(); CHKERRQ(ierr);
     return(0);
 }
 
 
-/*--------------- SpinOneHalf Functions ---------------*/
-
-PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
+PetscErrorCode Block::SpinBase::MatSpinSzCreate(Mat& Sz)
 {
     if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
     PetscErrorCode  ierr;
@@ -950,22 +1111,50 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
     ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
     PetscInt Iend = Istart + locrows;
 
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^z &= \frac{1}{2}
-                \begin{pmatrix}
-                  1  &  0  \\
-                  0  & -1
-                \end{pmatrix}
+    switch(spin_type)
+    {
+        case SpinOneHalf :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^z &= \frac{1}{2}
+                        \begin{pmatrix}
+                          1  &  0  \\
+                          0  & -1
+                        \end{pmatrix}
 
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sz, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
-    }
-    if (Istart <= 1 && 1 < Iend){
-        ierr = MatSetValue(Sz, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sz, 0, 0, +0.5, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            if (Istart <= 1 && 1 < Iend){
+                ierr = MatSetValue(Sz, 1, 1, -0.5, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
+
+        case SpinOne :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^z &=
+                        \begin{pmatrix}
+                          1  &  0  &  0 \\
+                          0  &  0  &  0 \\
+                          0  &  0  & -1
+                        \end{pmatrix}
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sz, 0, 0, +1.0, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            if (Istart <= 2 && 2 < Iend){
+                ierr = MatSetValue(Sz, 2, 2, -1.0, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
+
+        default:
+            SETERRQ(mpi_comm,1,"Given spin_type not valid/implemented.");
     }
 
     ierr = MatAssemblyBegin(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
@@ -974,7 +1163,7 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSzCreate(Mat& Sz)
 }
 
 
-PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
+PetscErrorCode Block::SpinBase::MatSpinSpCreate(Mat& Sp)
 {
     if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
     PetscErrorCode  ierr;
@@ -984,93 +1173,47 @@ PetscErrorCode Block::SpinOneHalf::MatSpinSpCreate(Mat& Sp)
     PetscInt locrows, Istart;
     ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
     PetscInt Iend = Istart + locrows;
-
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^+ &=
-                \begin{pmatrix}
-                  0  &  1  \\
-                  0  &  0
-                \end{pmatrix},
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sp, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-    }
-
-    ierr = MatAssemblyBegin(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    return(0);
-}
-
-
-/*--------------- SpinOne Functions ---------------*/
-
-PetscErrorCode Block::SpinOne::MatSpinSzCreate(Mat& Sz)
-{
-    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
-    PetscErrorCode  ierr;
-
-    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sz); CHKERRQ(ierr);
-
-    PetscInt locrows, Istart;
-    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
-    PetscInt Iend = Istart + locrows;
-
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^z &=
-                \begin{pmatrix}
-                  1  &  0  &  0 \\
-                  0  &  0  &  0 \\
-                  0  &  0  & -1
-                \end{pmatrix}
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sz, 0, 0, +1.0, INSERT_VALUES); CHKERRQ(ierr);
-    }
-    if (Istart <= 2 && 2 < Iend){
-        ierr = MatSetValue(Sz, 2, 2, -1.0, INSERT_VALUES); CHKERRQ(ierr);
-    }
-
-    ierr = MatAssemblyBegin(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(Sz, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);
-    return(0);
-}
-
-
-PetscErrorCode Block::SpinOne::MatSpinSpCreate(Mat& Sp)
-{
-    if(!MPIInitialized()) SETERRQ(PETSC_COMM_SELF,1,"Block's MPI communicator not initialized.");
-    PetscErrorCode  ierr;
-
-    ierr = InitSingleSiteOperator(MPIComm(), loc_dim(), &Sp); CHKERRQ(ierr);
-
-    PetscInt locrows, Istart;
-    ierr = PreSplitOwnership(MPIComm(), loc_dim(), locrows, Istart); CHKERRQ(ierr);
-    PetscInt Iend = Istart + locrows;
-
     const PetscScalar Sqrt2 = PetscSqrtScalar(2.0);
+    switch(spin_type)
+    {
+        case SpinOneHalf :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^+ &=
+                        \begin{pmatrix}
+                          0  &  1  \\
+                          0  &  0
+                        \end{pmatrix},
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sp, 0, 1, +1.0, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
 
-    /**
-        This is represented by the matrix
-        \f{align}{
-              S^+ &= \sqrt{2}
-                \begin{pmatrix}
-                  0  &  1  &  0  \\
-                  0  &  0  &  1  \\
-                  0  &  0  &  0
-                \end{pmatrix},
-        \f}
-     */
-    if (Istart <= 0 && 0 < Iend){
-        ierr = MatSetValue(Sp, 0, 1, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
-    }
-    if (Istart <= 1 && 1 < Iend){
-        ierr = MatSetValue(Sp, 1, 2, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+        case SpinOne :
+            /**
+                This is represented by the matrix
+                \f{align}{
+                      S^+ &= \sqrt{2}
+                        \begin{pmatrix}
+                          0  &  1  &  0  \\
+                          0  &  0  &  1  \\
+                          0  &  0  &  0
+                        \end{pmatrix},
+                \f}
+             */
+            if (Istart <= 0 && 0 < Iend){
+                ierr = MatSetValue(Sp, 0, 1, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            if (Istart <= 1 && 1 < Iend){
+                ierr = MatSetValue(Sp, 1, 2, Sqrt2, INSERT_VALUES); CHKERRQ(ierr);
+            }
+            break;
+
+        default:
+            SETERRQ(mpi_comm,1,"Given spin_type not valid/implemented.");
     }
 
     ierr = MatAssemblyBegin(Sp, MAT_FINAL_ASSEMBLY); CHKERRQ(ierr);

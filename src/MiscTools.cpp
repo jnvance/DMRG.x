@@ -1,10 +1,18 @@
 #include <petscsys.h>
 #include <slepceps.h>
+
 #include <vector>
 #include <string>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <map>
+
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include "MiscTools.hpp"
+
 
 /* Obtained from: https://gist.github.com/orlp/3551590 */
 PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp) {
@@ -84,7 +92,7 @@ PETSC_EXTERN int64_t ipow(int64_t base, uint8_t exp) {
 }
 
 
-PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart)
+PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscInt N, PetscInt& locrows, PetscInt& Istart)
 {
     PetscErrorCode ierr = 0;
 
@@ -110,7 +118,7 @@ PETSC_EXTERN PetscErrorCode PreSplitOwnership(const MPI_Comm comm, const PetscIn
 }
 
 
-PETSC_EXTERN PetscErrorCode SplitOwnership(
+PetscErrorCode SplitOwnership(
     const PetscMPIInt& rank,
     const PetscMPIInt& nprocs ,
     const PetscInt N,
@@ -292,6 +300,8 @@ PETSC_EXTERN PetscErrorCode MatEyeCreate(const MPI_Comm& comm, const PetscInt& d
 }
 
 
+/*----- Utlities -----*/
+
 PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name)
 {
     PetscErrorCode ierr;
@@ -302,13 +312,39 @@ PETSC_EXTERN PetscErrorCode Makedir(const std::string& dir_name)
         if(ierr){
             DIR *dir = opendir(dir_name.c_str());
             if(!dir){
-                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d\n",ierr);
+                if(ierr) PetscPrintf(PETSC_COMM_SELF,"mkdir error code: %d for dir: %s\n",
+                    ierr, dir_name.c_str());
                 CHKERRQ(ierr);
             }
             closedir(dir);
         }
     } else {
         closedir(dir);
+    }
+    return(0);
+}
+
+
+PetscErrorCode SetOptionsFromFile(
+    MPI_Comm& mpi_comm,
+    const std::string& filename
+    )
+{
+    PetscErrorCode ierr;
+    PetscMPIInt mpi_rank;
+    ierr = MPI_Comm_rank(mpi_comm, &mpi_rank); CHKERRQ(ierr);
+    std::map< std::string, std::string > infomap;
+    ierr = RetrieveInfoFile<std::string>(mpi_comm,filename,infomap); CHKERRQ(ierr);
+    for(auto it: infomap) {
+        ierr = PetscOptionsSetValue(NULL,(it.first).c_str(),(it.second).c_str()); CHKERRQ(ierr);
+    }
+    if(!mpi_rank) {
+        std::cout << "========================================="  << std::endl;
+        std::cout << "WARNING:\n"
+        "The following directives from " << filename << "\n" <<
+        "will override command-line arguments:" << std::endl;
+        for(auto it: infomap)
+            std::cout << "  " << it.first << "  " << it.second << std::endl;
     }
     return(0);
 }

@@ -258,12 +258,13 @@ $( document ).ready(function() {
 	$("div.ah").removeClass('ah');
 	$("div.header").removeClass("header");
 
-	$('.mdescLeft').each(function(){
-		if($(this).html()=="&nbsp;") {
-			$(this).siblings('.mdescRight').attr('colspan', 2);
-			$(this).remove();
-		}
-	});
+	// $('.mdescLeft').each(function(){
+	// 	if($(this).html()=="&nbsp;") {
+	// 		$(this).siblings('.mdescRight').attr('colspan', 2);
+	// 		$(this).remove();
+	// 	}
+	// });
+
   $('td.memItemLeft').each(function(){
     if($(this).siblings('.memItemRight').html()=="") {
       $(this).attr('colspan', 2);

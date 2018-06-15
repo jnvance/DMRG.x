@@ -1,5 +1,5 @@
-TARGET     = bin/DMRG-SpinOneHalf-J1J2XXZSquare.x
-TARGET_OBJ = src/DMRG-SpinOneHalf-J1J2XXZSquare.o
+TARGET     = bin/DMRG-SquareLattice.x
+TARGET_OBJ = src/DMRG-SquareLattice.o
 
 override CXXFLAGS += -O3 -std=c++11 -Wall -I include/ -I old/
 

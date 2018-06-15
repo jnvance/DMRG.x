@@ -129,12 +129,14 @@ class Data:
         self._color = self._p[-1].get_color()
         plt.xlabel('DMRG Steps')
 
-    def PlotLoopBars(self,**kwargs):
+    def PlotLoopBars(self,my_color=None,**kwargs):
         self._LoadSteps()
         LoopIdx = [row[self._idxLoopidx] for row in self._steps]
         dm = np.where([LoopIdx[i] - LoopIdx[i-1] for i in range(1,len(LoopIdx))])[0]
         for d in dm:
-            if self._color is None:
+            if my_color is not None:
+                plt.axvline(x=d,color=my_color,linewidth=1,**kwargs)
+            elif self._color is None:
                 plt.axvline(x=d,linewidth=1,**kwargs)
             else:
                 plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)

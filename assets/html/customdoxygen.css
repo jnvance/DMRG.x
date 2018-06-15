@@ -1,3 +1,10 @@
+body {
+    /*min-width: 992px;*/
+    /*width: auto !important;*/
+    /*width:992px;*/
+    background-color: #F3F3F3;
+}
+
 body, table, table.directory, div, p, dl, div.toc, div.toc h3, div.toc li, h3, .h3 {
     font-size: 16px;
     line-height: 24px;
@@ -21,6 +28,10 @@ h1, .h1, h2, .h2, .title, a.navbar-brand, h2.groupheader {
 
 a {
     color: #23609B;
+}
+
+b, dt, b a.el, div.panel-heading a.el, .params .paramname, .retval .paramname {
+    font-weight: 600 !important;
 }
 
 a.el {
@@ -503,12 +514,13 @@ td.desc {
 /* todo lists */
 .todoname,
 .todoname a {
-  font-weight: bold;
+  font-weight: 600;
 }
 
 /* Class title */
 .summary {
   margin-top: 25px;
+  margin-top: 0px;
 }
 .page-header {
   margin: 20px 0px !important;
@@ -591,10 +603,6 @@ pre.fragment {
     padding-top: 7px;
 }
 
-body {
-    background-color: #F3F3F3;
-}
-
 /* Top bar */
 .navbar {
     background-color: #24292e;
@@ -671,6 +679,13 @@ table.classindex {
     width: 100%;
 }
 
+/* Member description */
+
+td.memItemRight a.el {
+    /*font-weight: 700 !important;*/
+    font-weight: 600 !important;
+}
+
 /* Member documentation */
 
 div.panel-heading {
@@ -689,7 +704,7 @@ table.memname td {
 }
 
 table.memname td.memname {
-    font-weight: 700 !important;
+    font-weight: 600 !important;
 }
 
 table.exception td.paramname {
@@ -702,8 +717,12 @@ div.panel-heading td.pull-right {
 
 td.memItemLeft {
     width: fit-content;
-    white-space:nowrap;
+    white-space: normal;
     color: #555;
+}
+
+td.memItemLeft a.el {
+
 }
 
 .params .paramdir {
@@ -742,6 +761,13 @@ div.navtab {
     margin-right: 10px;
 }
 
+@media(max-width: 768px) {
+    div.navtab {
+        display: none;
+        width: 0px;
+    }
+}
+
 .inherit_header {
     font-weight: 600;
 }
@@ -752,4 +778,24 @@ dd {
 
 div.contents {
     margin: 0px;
+}
+
+/*
+    fix for table: class_block_1_1_spin_base-members.html
+    but breaks: pages.html
+ */
+
+/* table entries in page listing */
+div.directory td.entry {
+    white-space:nowrap !important;
+}
+
+/* table entries in member list */
+table.directory.table.table-striped td.entry {
+    white-space:    normal;
+    vertical-align: middle;
+}
+
+table.tparams {
+    width:  100%;
 }

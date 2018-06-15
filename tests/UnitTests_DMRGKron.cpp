@@ -44,7 +44,7 @@ PetscErrorCode TestKron01()
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
-    Block::SpinOneHalf RightBlock, LeftBlock, BlockOut;
+    Block::SpinBase RightBlock, LeftBlock, BlockOut;
 
     ierr = LeftBlock.Initialize(PETSC_COMM_WORLD, 3, {+0.5,-0.5}, {2,1}); CHKERRQ(ierr);
 
@@ -261,7 +261,7 @@ PetscErrorCode TestKron02()
     ierr = MPI_Comm_size(comm, &nprocs); CHKERRQ(ierr);
     ierr = MPI_Comm_rank(comm, &rank); CHKERRQ(ierr);
 
-    Block::SpinOneHalf RightBlock, LeftBlock, BlockOut;
+    Block::SpinBase RightBlock, LeftBlock, BlockOut;
 
     ierr = LeftBlock.Initialize(PETSC_COMM_WORLD, 1, PETSC_DEFAULT); CHKERRQ(ierr);
     ierr = RightBlock.Initialize(PETSC_COMM_WORLD, 1, PETSC_DEFAULT); CHKERRQ(ierr);

@@ -1,9 +1,10 @@
-#ifndef __HAMILTONIANS
-#define __HAMILTONIANS
+#ifndef __HAMILTONIANS__
+#define __HAMILTONIANS__
 
 #include "petscsys.h"
 #include "DMRGBlock.hpp"
 #include <vector>
+#include <iostream>
 
 /** @defgroup   Hamiltonians   Hamiltonians
     @brief      Implementation of the Hamiltonians and geometries for spin lattices
@@ -72,6 +73,44 @@ namespace Hamiltonians
             ierr = PetscOptionsGetBool(NULL,NULL,"-BCperiodic",&BCperiodic,NULL); CHKERRQ(ierr);
             if(BCperiodic) { _BCx=PeriodicBC; _BCy=PeriodicBC; }
             set_from_options = PETSC_TRUE;
+            return(0);
+        }
+
+        /** Dumps options keys and values to file.
+            @note Not collective, must be called only on one process. */
+        PetscErrorCode SaveAsOptions(const std::string& filename)
+        {
+            PetscErrorCode ierr;
+            char val[4096];
+            PetscBool set;
+            std::vector< std::string > keys = {
+                "-J1",
+                "-J2",
+                "-Jz1",
+                "-Jz2",
+                "-Lx",
+                "-Ly",
+                "-verbose",
+                "-heisenberg",
+                "-BCopen",
+                "-BCperiodic"
+            };
+
+            std::ostringstream oss;
+            for(std::string& key: keys) {
+                ierr = PetscOptionsGetString(NULL,NULL,key.c_str(),val,4096,&set); CHKERRQ(ierr);
+                if(set) {
+                    std::string val_str(val);
+                    if(val_str.empty()) val_str = "yes";
+                    oss << key << " " << val_str << std::endl;
+                }
+            }
+
+            FILE *fp;
+            ierr = PetscFOpen(PETSC_COMM_SELF,filename.c_str(),"w", &fp); CHKERRQ(ierr);
+            ierr = PetscFPrintf(PETSC_COMM_SELF,fp,"%s",oss.str().c_str()); CHKERRQ(ierr);
+            ierr = PetscFClose(PETSC_COMM_SELF,fp); CHKERRQ(ierr);
+
             return(0);
         }
 
@@ -211,4 +250,4 @@ namespace Hamiltonians
 
 /** @} */
 
-#endif // __HAMILTONIANS
+#endif // __HAMILTONIANS__
