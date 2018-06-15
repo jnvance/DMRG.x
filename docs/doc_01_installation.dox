@@ -89,7 +89,7 @@ Assuming that the required libraries have been installed correctly, (on systems 
 BLAS/LAPACK are installed), the configure utility whill automatically locate these so that
 only the following minimal commands need to be used:
 
-    $ ./configure
+    $ ./configure --with-debugging=0 COPTFLAGS="-g -O3" CXXOPTFLAGS="-g -O3" FOPTFLAGS="-g -O3" --with-64-bit-indices=1
     $ make all test
 
 For more detailed information on configuration, see [[installation info]](
