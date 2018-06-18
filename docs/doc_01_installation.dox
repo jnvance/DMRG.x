@@ -7,10 +7,10 @@
 @section installationOverview Overview
 
 The current version of DMRG.x requires a Linux/Mac machine installed with the following libraries:
- -  [PETSc 3.8.4](https://www.mcs.anl.gov/petsc/)
+ -  [petsc-3.8.4](https://www.mcs.anl.gov/petsc/)
     [[download]](http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz)
     [[installation info]](https://www.mcs.anl.gov/petsc/documentation/installation.html)
- -  [SLEPc 3.8.3](http://slepc.upv.es/)
+ -  [slepc-3.8.3](http://slepc.upv.es/)
     [[download]](http://slepc.upv.es/download/distrib/slepc-3.8.3.tar.gz)
     [[installation info]](http://slepc.upv.es/documentation/instal.htm)
 
@@ -31,30 +31,35 @@ To properly use the Makefiles for generating executables, the following environm
 
 @section installationSlepc Installing PETSc and SLEPc
 
-In this section, we give a step-by-step approach to install the PETSc and SLEPc libraries
+In this section, we give a step-by-step approach for installing the PETSc and SLEPc libraries
 on our local machine. The steps may vary depending on the specifications and pre-existing
 libraries for each computer, so we will try to give the most generic steps possible.
 
-@subsection installationSetup Setting up source codes and environment variables
+@subsection installationGetting Getting the source codes
 
-First, create a subdirectory in your home folder where you will place the slepc
-and petsc installation
+In this example we will install PETSc and SLEPc in a subdirectory called `slepc` of
+your `$HOME` folder.
+You can also choose any directory to install the libraries as long as they are accessible to
+you without root permissions.
+
+First, create the subdirectory in your home folder where you will place the libraries:
 
     $ mkdir -p $HOME/slepc
     $ cd $HOME/slepc
 
-Then, download and extract the source codes from the download links above to a folder in your
-home directory.
+Then, download and extract the source codes from the download links above using the `wget` utility:
 
     $ wget http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-3.8.4.tar.gz
     $ wget http://slepc.upv.es/download/distrib/slepc-3.8.3.tar.gz
     $ tar xzf petsc-3.8.4.tar.gz
     $ tar xzf slepc-3.8.3.tar.gz
 
-We should now have two directories: `petsc-3.8.4` and `slepc-3.8.3`
+We should now have two directories: `petsc-3.8.4` and `slepc-3.8.3`:
 
     $ ls
     > petsc-3.8.4  petsc-3.8.4.tar.gz  slepc-3.8.3  slepc-3.8.3.tar.gz
+
+@subsection installationSetup Setting the environment variables
 
 Edit your rc file (e.g. `~/.bashrc` if you are using `bash`) with any text editor and add the
 following lines:
