@@ -21,7 +21,7 @@ __Note:__
 
  -  If your computer does not have any MPI library installed, consider installing it through
     your package manager (`apt`, `yum`, `brew`, etc.)
- -  On a computing cluster, the correct libraries may be obtained using the `module` utility
+ -  On a computing cluster (Argo, Marconi, etc), the correct libraries may be obtained using the `module` utility
 
 To properly use the Makefiles for generating executables, the following environment variables must also be defined with the correct values:
  - `PETSC_DIR`
@@ -90,16 +90,19 @@ If you wish to see all arguments to the configure command,
 
     $ ./configure --help
 
+For more information on particular configurations and options, see the [installation info](https://www.mcs.anl.gov/petsc/documentation/installation.html) and the [PETSc Users Manual](http://www.mcs.anl.gov/petsc/petsc-3.8.4/docs/manual.pdf).
+
 Assuming that the required libraries have been installed correctly, (on systems where MPI and
 BLAS/LAPACK are installed), the configure utility whill automatically locate these so that
-only the following minimal commands need to be used:
+only the following \b minimum set of commands need to be used:
 
     $ ./configure --with-debugging=0 COPTFLAGS="-g -O3" CXXOPTFLAGS="-g -O3" FOPTFLAGS="-g -O3" --with-64-bit-indices=1
-    $ make all test
+    $ make all check
 
-For more detailed information on configuration, see [[installation info]](
-https://www.mcs.anl.gov/petsc/documentation/installation.html)
-in the links above.
+The `--with-debugging=0` flag allows us to build the libraries for production and timing.
+The optimization flags `-g -O3` give us the maximum compiler optimization and debigging symbols.
+And `--with-64-bit-indices=1` ensures that the `PetscInt` integer type is `long long` or has a length of 64 bits,
+ensuring indices with larger capacity.
 
 Once PETSc has been configured and installed, we can now do the same on SLEPc.
 This step is now simpler since the `configure` utility will obtain
