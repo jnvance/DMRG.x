@@ -21,7 +21,10 @@ __Note:__
 
  -  If your computer does not have any MPI library installed, consider installing it through
     your package manager (`apt`, `yum`, `brew`, etc.)
- -  On a computing cluster (Argo, Marconi, etc), the correct libraries may be obtained using the `module` utility
+ -  On a computing cluster (Argo, Marconi, etc), the correct libraries may be obtained using the `module` utility,
+    e.g. on Marconi:
+
+        module load autoload mkl intelmpi
 
 To properly use the Makefiles for generating executables, the following environment variables must also be defined with the correct values:
  - `PETSC_DIR`
@@ -32,7 +35,7 @@ To properly use the Makefiles for generating executables, the following environm
 @section installationSlepc Installing PETSc and SLEPc
 
 In this section, we give a step-by-step approach for installing the PETSc and SLEPc libraries
-on our local machine. The steps may vary depending on the specifications and pre-existing
+on our local machine and/or a cluster. The steps may vary depending on the specifications and pre-existing
 libraries for each computer, so we will try to give the most generic steps possible.
 
 @subsection installationGetting Getting the source codes
@@ -97,14 +100,29 @@ BLAS/LAPACK are installed), the configure utility whill automatically locate the
 only the following \b minimum set of commands need to be used:
 
     $ ./configure --with-debugging=0 COPTFLAGS="-g -O3" CXXOPTFLAGS="-g -O3" FOPTFLAGS="-g -O3" --with-64-bit-indices=1
-    $ make all check
 
 The `--with-debugging=0` flag allows us to build the libraries for production and timing.
 The optimization flags `-g -O3` give us the maximum compiler optimization and debigging symbols.
 And `--with-64-bit-indices=1` ensures that the `PetscInt` integer type is `long long` or has a length of 64 bits,
-ensuring indices with larger capacity.
+so that indices have larger capacity.
 
-Once PETSc has been configured and installed, we can now do the same on SLEPc.
+__Note:__
+On computing clusters (Marconi), the following additional flags may also need to be set to work with the batch scheduler
+and find the correct BLAS/LAPACK provided by Intel MKL:
+
+    --with-batch=1 --known-mpi-shared-libraries=0 --with-blas-lapack-dir=$MKLROOT --known-64-bit-blas-indices=0
+
+<!-- --with-batch=1 --known-mpi-shared-libraries=0 --with-blas-lapack-dir=$MKLROOT --known-64-bit-blas-indices=0 -->
+
+Additional flags should be provided if you are using different compilers and targetting for processors with specific extensions.
+Also, additional steps such as submission of a script to the scheduler have to be followed in order to
+complete the configuration.
+
+When configuration is completed, follow the instruction on-screen, or execute:
+
+    $ make all test
+
+Once PETSc has been configured and installed, we can now do the same for SLEPc.
 This step is now simpler since the `configure` utility will obtain
 the corresponding settings from PETSc:
 
