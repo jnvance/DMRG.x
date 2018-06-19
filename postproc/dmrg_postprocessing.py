@@ -1,6 +1,15 @@
-"""
+"""@package dmrg_postprocessing
+@brief Python module for post-processing data files produced by a DMRG.x application.
+See @ref Postprocessing module for more info.
+
 @defgroup   Postprocessing
 @brief      Python module for post-processing data files produced by a DMRG.x application.
+
+Usage:
+    >>> import sys
+    >>> sys.path.append("/path/to/DMRG.x/postproc")
+    >>> import dmrg_postprocessing as dmrg
+
 """
 
 ##  @addtogroup Postprocessing
@@ -14,11 +23,25 @@ import dmrg_json_utils as ju
 
 class Data:
     """
-    Post-processing of a single DMRG run
+    Post-processing of a single DMRG run.
     """
 
-    def __init__(self, base_dir, jobs_dir='', label=None, load_warmup=True, load_sweeps=True):
-        """ Initializes the object.
+    def __init__(self, base_dir, jobs_dir='', label=None):
+        """Initializes the Data object.
+
+        This initializer simply fills in the base directory and prepares the private
+        variables which will store the corresponding data. The variables are first
+        set to None. Whenever some data is requested, these variables will then be filled.
+
+        Args:
+            base_dir:       directory containing the data files
+
+        Kwargs:
+            jobs_dir:       path to be prepended to base_dir
+            label:          label for plots with this data object
+
+        Example:
+            >>> data = dmrg.Data("data_dir",jobs_dir="/tmp/data/",label="Data1")
         """
         self._base_dir = os.path.join(jobs_dir,base_dir)
         self._label = label
@@ -32,28 +55,59 @@ class Data:
         self._corrLookup = None
         self._color = None
 
+    def PathToFile(self,filename=""):
+        """Returns the path to a filename prepended with the base directory
+
+        Args:
+            filename:       filename to append to the base directory
+        Returns:
+            A string combining the path and filename
+        """
+        return os.path.join(self._base_dir,filename)
+
     def Label(self):
+        """
+        Returns the label of the Data object
+        """
         return self._label
 
-    #
-    #   Run data
-    #
+    ##
+    #   @defgroup   DMRGRun DMRGRun
+    #   @ingroup    Postprocessing
+    #   @brief      Postprocessing the DMRGRun.json data file
+    #   @addtogroup DMRGRun
+    #   @{
+
     def _LoadRun(self):
+        """
+        Loads the DMRGRun.json data file, if not loaded, and returns its contents
+        """
         if self._run is None:
-                self._run = ju.LoadJSONDict(os.path.join(self._base_dir,'DMRGRun.json'))
+            self._run = ju.LoadJSONDict(self.PathToFile('DMRGRun.json'))
         return self._run
 
     def RunData(self):
+        """
+        Returns the contents of the DMRGRun.json data file
+        """
         return self._LoadRun()
 
-    #
-    #   Steps data
-    #
+    ##
+    #   @}
+
+    ##
+    #   @defgroup   DMRGSteps DMRGSteps
+    #   @ingroup    Postprocessing
+    #   @brief      Postprocessing the DMRGSteps.json data file
+    #   @addtogroup DMRGSteps
+    #   @{
+
     def _LoadSteps(self):
-        """ Loads data from DMRGSteps.json and extracts
+        """Loads data from DMRGSteps.json, if not loaded, and extracts the indices
+        for required data columns.
         """
         if self._steps is None:
-            steps = ju.LoadJSONTable(os.path.join(self._base_dir,'DMRGSteps.json'))
+            steps = ju.LoadJSONTable(self.PathToFile('DMRGSteps.json'))
             self._stepsHeaders = steps['headers']
             self._idxEnergy = self._stepsHeaders.index('GSEnergy')
             self._idxNSysEnl = self._stepsHeaders.index('NSites_SysEnl')
@@ -63,6 +117,12 @@ class Data:
             self._steps = steps['table']
 
     def Steps(self,header=None):
+        """Returns a specific column of data of DMRGSteps.json according to the
+        header string or returns a deepcopy of the entire data table
+
+        Kwargs:
+            header:     string corresponding to the 'header' of DMRGSteps.json
+        """
         self._LoadSteps()
         if header is None:
             return copy.deepcopy(self._steps)
@@ -71,10 +131,25 @@ class Data:
             return np.array([row[idx] for row in self._steps])
 
     def StepsHeaders(self):
+        """Returns the headers of the table in DMRGSteps.json
+        """
         self._LoadSteps()
         return self._stepsHeaders
 
     def SweepIdx(self,show_all=False):
+        """Returns the step indices corresponding to the end of a sweep.
+
+        By default this function looks for the maximum LoopIdx in a range.
+
+        Args:
+            show_all: If set to `True`, all step indices will be given.
+                If `False`, return only those that correspond to where the
+                number of sites in the system is equal to the number of sites in
+                the environment.
+
+        Returns:
+            List of indices corresponding to `GlobIdx`
+        """
         NSites_Sys = self.Steps("NSites_Sys")
         NSites_Env = self.Steps("NSites_Env")
 
@@ -91,10 +166,25 @@ class Data:
             return [ j for j in self._sweepIdx if NSites_Sys[j]==NSites_Env[j]]
 
     def EnergyPerSite(self):
+        """Calculates the energy per site of the superblock Hamiltonian for all steps
+
+        Returns:
+            Numpy array containing the energy per site at each step
+        """
         self._LoadSteps()
         return np.array([row[self._idxEnergy]/(row[self._idxNSysEnl]+row[self._idxNEnvEnl]) for row in self._steps])
 
     def NumStatesSuperblock(self,n=None):
+        """Determines the number of states in the superblock Hamiltonian.
+
+        If `n` is `None`, the number of sates for all steps will be returned.
+
+        Args:
+            n: Index of the step.
+
+        Returns:
+            Single integer or array representing the number/s of states
+        """
         self._LoadSteps()
         if n is None:
             self._NStatesH = np.array([row[self._idxNStatesH] for row in self._steps])
@@ -103,6 +193,14 @@ class Data:
             return self._steps[n][self._idxNStatesH]
 
     def PlotEnergyPerSite(self,**kwargs):
+        """Plots the energy per site of the superblock Hamiltonian as a function of DMRG steps.
+        The given label and all kwargs will be passed to the plt.plot function.
+
+        Example:
+            >>> data = dmrg.Data("data_dir",jobs_dir="/tmp/data/",label="Data1")
+            >>> data.PlotEnergyPerSite(marker='.',color='r')
+            >>> plt.show()
+        """
         self._LoadSteps()
         energy_iter = np.array(self.EnergyPerSite())
         self._p = plt.plot(energy_iter,label=self._label,**kwargs)
@@ -111,6 +209,22 @@ class Data:
         plt.ylabel(r'$E_0/N$')
 
     def PlotErrorEnergyPerSite(self,which='abs',compare_with='min',**kwargs):
+        """Plots the error in the energy per site of the superblock Hamiltonian as a function of DMRG steps.
+        Kwargs will be passed to the plt.plot function.
+
+        Example:
+            >>> data = dmrg.Data("data_dir",jobs_dir="/tmp/data/",label="Data1")
+            >>> data.PlotErrorEnergyPerSite(marker='.',which='rel',color='r')
+            >>> plt.show()
+
+        Args:
+            which:          Show either the absolute `'abs'` or relative `'rel'` error
+            compare_with:   Compare against the minimum `'min'` or `'last'` obtained value
+            **kwargs:       keyword arguments to be passed to plt.semilogy
+
+        Raises:
+            ValueError:     When options are not matched
+        """
         self._LoadSteps()
         if compare_with=='min':
             best = lambda energy_iter: np.min(energy_iter)
@@ -134,6 +248,12 @@ class Data:
         plt.xlabel('DMRG Steps')
 
     def PlotLoopBars(self,my_color=None,**kwargs):
+        """Plot vertical lines corresponding to the end of each sweep
+
+        Args:
+            my_color:   Override default colors
+            **kwargs:   keyword arguments to be passed to plt.axvline
+        """
         self._LoadSteps()
         LoopIdx = [row[self._idxLoopidx] for row in self._steps]
         dm = np.where([LoopIdx[i] - LoopIdx[i-1] for i in range(1,len(LoopIdx))])[0]
@@ -145,12 +265,15 @@ class Data:
             else:
                 plt.axvline(x=d,color=self._color,linewidth=1,**kwargs)
 
+    ##
+    #   @}
+
     #
     #   Timings data
     #
     def _LoadTimings(self):
         if self._timings is None:
-            timings = ju.LoadJSONTable(os.path.join(self._base_dir,'Timings.json'))
+            timings = ju.LoadJSONTable(self.PathToFile('Timings.json'))
             self._timingsHeaders = timings['headers']
             self._idxTimeTot = self._timingsHeaders.index('Total')
             self._timings = timings['table']
@@ -200,7 +323,7 @@ class Data:
     #
     def PreallocData(self,n=None,key=None):
         if self._hamPrealloc is None:
-            self._hamPrealloc = ju.LoadJSONArray(os.path.join(self._base_dir,'HamiltonianPrealloc.json'))
+            self._hamPrealloc = ju.LoadJSONArray(self.PathToFile('HamiltonianPrealloc.json'))
         if n is None:
             return self._hamPrealloc
         else:
@@ -226,7 +349,7 @@ class Data:
     #
     def _LoadSpectra(self):
         if self._entSpectra is None:
-            spectra = ju.LoadJSONArray(os.path.join(self._base_dir,'EntanglementSpectra.json'))
+            spectra = ju.LoadJSONArray(self.PathToFile('EntanglementSpectra.json'))
             # determine which global indices are the ends of a sweep
 
             self._entSpectra = spectra
@@ -247,7 +370,7 @@ class Data:
     #
     def _LoadCorrelations(self):
         if self._corr is None:
-            self._corr = ju.LoadJSONTable(os.path.join(self._base_dir,'Correlations.json'))
+            self._corr = ju.LoadJSONTable(self.PathToFile('Correlations.json'))
 
     def _LoadCorrelationsLookup(self):
         self._LoadCorrelations()

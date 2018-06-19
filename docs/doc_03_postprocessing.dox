@@ -1,16 +1,21 @@
 /** @page postproc Postprocessing
 
-@brief      Guide to using the python dmrg_postprocessing module
+@brief      Guide to using the python postprocessing module.
 
 @tableofcontents
+
+The DMRG.x application comes with the python-based @ref Postprocessing module in
+postproc/dmrg_postprocessing.py. In this tutorial, we look at some of the
+basic data processing and visualization that can be done with the output files
+provided by the application.
 
 @section output Output Files
 
 The output files stored in the path provided to `-data_dir` are written in
-the JavaScript Object Notation - [JSON](https://www.json.org/) format for
+the JavaScript Object Notation ([json](https://www.json.org/)) format for
 portability and human readability.
 
-These files typically consist of the following
+The data files typically consist of the following:
 
   - `DMRGSteps.json` - data on the number of sites and states of each block,
         truncation error, and ground state energy for each DMRG iteration
@@ -32,11 +37,50 @@ These files typically consist of the following
         (@f$ H_\text{SB} @f$), diagonalizing @f$ H_\text{SB} @f$,
         calculating the spectrum of the reduced density matrices, and
         rotating the block operators.
-
-The structure of the json files can be classified into
-
-@section postproc_single Postprocessing Single
-
 -->
+
+The structure of the json files can be classified into a Dictionary, Table or Array.
+Tables are specific dictionary types where the main entries are "headers" and "table".
+These types of data files are read-in using their respective functions in @ref JSONUtilities.
+
+
+@section postproc_single Postprocessing Single DMRG Runs
+
+First, we load the module by adding the postproc directory to the python system path.
+We can also load other useful modules (numpy and pyplot)
+
+```
+import sys
+sys.path.append("/path/to/DMRG.x/postproc")
+import dmrg_postprocessing as dmrg
+import numpy as np
+import matplotlib.pyplot as plt
+```
+
+The dmrg_postprocessing.Data class can be used for postprocessing the output files
+for single DMRG runs.
+
+```
+jobs_dir = "/path/to/all/data_dirs"
+data = dmrg.Data("data_dir",jobs_dir,label="Data1")
+```
+
+Using the visualization functions, one can for example plot the convergence
+of the energy as a function of DMRG steps:
+
+```
+data.PlotErrorEnergyPerSite(which='rel',marker='.')
+plt.title("Convergence of the Energy")
+plt.legend(loc=0)
+plt.show()
+```
+
+See the above sample code and its output in the following
+<a href="doc_postproc_01.html" id="example1">ipython notebook</a>.
+
+----
+
+@see
+Postprocessing, JSONUtilities, dmrg_postprocessing
 
  */

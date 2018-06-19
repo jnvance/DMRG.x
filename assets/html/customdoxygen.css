@@ -302,13 +302,6 @@ dl.el {
     margin-left: -1cm;
 }
 
-div.fragment {
-    padding: 4px 6px;
-    margin: 4px 8px 4px 2px;
-    border: 1px solid #C4CFE5;
-    border-radius: 2px; /* To get the same look as in code.less */
-}
-
 div.line {
     font-family: "Roboto Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace;
     font-size: 100%;
@@ -567,7 +560,6 @@ code {
     font-size: 90%;
     /*border: 1px solid #C4CFE5;*/
     /*background-color: #F4F8FB;*/
-    padding: -4px -6px;
     /*margin: 4px 8px 4px 2px;*/
     overflow: auto;
     word-wrap: break-word;
@@ -577,7 +569,7 @@ code {
 
 div.line {
     font-size: 90%;
-    line-height: 1.2;
+    line-height: 1.5;
 }
 
 pre.fragment {
@@ -798,4 +790,16 @@ table.directory.table.table-striped td.entry {
 
 table.tparams {
     width:  100%;
+}
+
+div.fragment, pre.fragment, code {
+    padding: 4px 6px;
+    margin: 4px 8px 4px 2px;
+    border: 1px solid #C4CFE5;
+    border-radius: 2px; /* To get the same look as in code.less */
+    background-color: #FBFCFD;
+}
+
+code {
+    padding: 1px;
 }

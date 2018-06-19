@@ -15,6 +15,7 @@ ${TARGET}: ${TARGET_OBJ} ${TARGET_DEPS} chkopts
 docs: docs-generate-files FORCE
 	doxygen Doxyfile
 	cp assets/html/dynsections.js.in docs/html/dynsections.js
+	cp assets/html/doc_postproc_01.html docs/html/doc_postproc_01.html
 
 docs-default: docs-generate-files FORCE
 	echo "HTML_HEADER=\n" \
@@ -25,6 +26,7 @@ docs-default: docs-generate-files FORCE
 		"OUTPUT_DIRECTORY = ./docs/default\n" \
 		"GENERATE_TREEVIEW = YES\n" | \
 	(cat Doxyfile && cat) | doxygen -
+	cp assets/html/doc_postproc_01.html docs/default/html/doc_postproc_01.html
 
 docs-generate-files: FORCE
 	./docs/docs_generate_files.sh

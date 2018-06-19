@@ -240,7 +240,9 @@ $( document ).ready(function() {
         + "<div class=\"panel-body\">" + $(todoelements[i+1]).html() + "</div>"
       + '</div>');
   }
-  $('.contents > .textblock > dl').remove();
+
+  /* Commented out because it was removing the see also section */
+  // $('.contents > .textblock > dl').remove();
 
 
 	$(".memitem").removeClass('memitem');
