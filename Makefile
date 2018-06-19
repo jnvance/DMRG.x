@@ -12,6 +12,7 @@ ${TARGET}: ${TARGET_OBJ} ${TARGET_DEPS} chkopts
 	-${CLINKER} -o ${TARGET} ${TARGET_OBJ} ${TARGET_DEPS} ${SLEPC_EPS_LIB}
 	${RM} ${TARGET_OBJ}
 
+# Note: These commands should match the subprocess.call in docs/sphinx/conf.py
 docs: docs-generate-files FORCE
 	doxygen Doxyfile
 	cp assets/html/dynsections.js.in docs/html/dynsections.js

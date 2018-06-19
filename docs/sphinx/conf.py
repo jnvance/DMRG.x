@@ -73,7 +73,8 @@ subprocess.call(
     'cd ../../ ;'
     './docs/docs_generate_files.sh;'
     'doxygen Doxyfile;'
-    'cp assets/html/dynsections.js.in docs/html/dynsections.js;', shell=True)
+    'cp assets/html/dynsections.js.in docs/html/dynsections.js;'
+    'cp assets/html/doc_postproc_01.html docs/html/doc_postproc_01.html;', shell=True)
 
 
 # -- Options for HTML output -------------------------------------------------
