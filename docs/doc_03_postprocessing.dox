@@ -1,0 +1,42 @@
+/** @page postproc Postprocessing
+
+@brief      Guide to using the python dmrg_postprocessing module
+
+@tableofcontents
+
+@section output Output Files
+
+The output files stored in the path provided to `-data_dir` are written in
+the JavaScript Object Notation - [JSON](https://www.json.org/) format for
+portability and human readability.
+
+These files typically consist of the following
+
+  - `DMRGSteps.json` - data on the number of sites and states of each block,
+        truncation error, and ground state energy for each DMRG iteration
+
+  - `DMRGRun.json` - parameters of the Hamiltonian and the number of kept states
+        during the warmup and sweep stages
+
+  - `EntanglementSpectra.json` - the eigenvalues of the reduced density matrices
+        for the enlarged system and environement blocks for each iteration,
+        grouped according to their magnetization sectors
+
+  - `Correlations.json` - labels and values of the correlators calculated at the
+        end of the warmup and after each sweep.
+
+  - `Timings.json` - time spent at every major step of each DMRG iteration
+
+<!--
+        enlarging the blocks, setting up the superblock Hamiltonian
+        (@f$ H_\text{SB} @f$), diagonalizing @f$ H_\text{SB} @f$,
+        calculating the spectrum of the reduced density matrices, and
+        rotating the block operators.
+
+The structure of the json files can be classified into
+
+@section postproc_single Postprocessing Single
+
+-->
+
+ */

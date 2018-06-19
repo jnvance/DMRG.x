@@ -296,7 +296,7 @@ class DataSeries:
     Post-processing for multiple DMRG runs
     """
 
-    def __init__(self, base_dir_list, *args, label_list=None, **kwargs):
+    def __init__(self, base_dir_list, label_list=None,  *args, **kwargs):
         if base_dir_list:
             # if non-empty check whether the first entry is a tuple
             if len(base_dir_list[0]) == 2:
