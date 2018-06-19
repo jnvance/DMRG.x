@@ -1,6 +1,10 @@
 """
-Python module for reading JSON data files produced by a DMRG.x application.
+@defgroup   JSONUtilities JSON Utilities
+@brief      Python module for reading JSON data files produced by a DMRG.x application.
 """
+
+##  @addtogroup JSONUtilities
+#   @{
 
 import json
 from shutil import copyfile
@@ -46,3 +50,6 @@ def LoadJSONArray(file):
     unfinished runs by appending "]".
     """
     return LoadJSONFile(file,"]","LoadJSONArray")
+
+##
+#   @}

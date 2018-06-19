@@ -1,6 +1,10 @@
 """
-Python module for post-processing data files produced by a DMRG.x application.
+@defgroup   Postprocessing
+@brief      Python module for post-processing data files produced by a DMRG.x application.
 """
+
+##  @addtogroup Postprocessing
+#   @{
 
 import os
 import numpy as np
@@ -327,3 +331,6 @@ class DataSeries:
             for obj in self.DataList: obj.PlotLoopBars(**kwargs)
         else:
             self.DataList[n].PlotLoopBars(**kwargs)
+
+##
+#   @}
