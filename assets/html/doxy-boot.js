@@ -241,8 +241,9 @@ $( document ).ready(function() {
       + '</div>');
   }
 
-  /* Commented out because it was removing the see also section */
+  /* Edited because it was removing the see also section */
   // $('.contents > .textblock > dl').remove();
+  $('.contents > .textblock > dl.reflist').remove();
 
 
 	$(".memitem").removeClass('memitem');

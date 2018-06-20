@@ -290,7 +290,7 @@ class Data:
         self._LoadTimings()
         return np.array([row[self._idxTimeTot] for row in self._timings])
 
-    def PlotTotalTime(self,which='plot',cumulative=False,units='s',**kwargs):
+    def PlotTotalTime(self,which='plot',cumulative=False,units='sec',**kwargs):
         totTime = self.TotalTime()
         ylabel = "Time Elapsed per Step"
 
@@ -298,14 +298,14 @@ class Data:
             totTime = np.cumsum(totTime)
             ylabel = "Cumulative Time Elapsed"
 
-        if units=='m':
+        if units=='min':
             totTime /= 60.
-        elif units=='h':
+        elif units=='hrs':
             totTime /= 3600.
-        elif units=='s':
+        elif units=='sec':
             pass
         else:
-            raise ValueError("units='{}' unsupported. Choose among ['s','m','h']".format(units))
+            raise ValueError("units='{}' unsupported. Choose among ['sec','min','hrs']".format(units))
 
         if which=='plot':
             self._p = plt.plot(totTime,label=self._label,**kwargs)
@@ -364,6 +364,14 @@ class Data:
         a = self.EntanglementSpectra()
         l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
         return [-np.sum( [np.log(lii)*lii  for lii in li if lii > 0] ) for li in l]
+
+    def PlotEntanglementEntropy(self):
+        ''' Plots the entanglement entropy using eigenvalues from all sectors '''
+        ent = np.array(self.EntanglementEntropy())
+        plt.plot(ent,'-o')
+        plt.xticks(np.arange(ent.shape[0]))
+        plt.xlabel("Sweeps")
+        plt.ylabel(r"Von Neumann Entropy (S)")
 
     #
     #   Correlations

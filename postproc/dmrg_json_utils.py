@@ -26,7 +26,12 @@ def LoadJSONFile(path,appendStr,count=0):
         dict object representing the loaded data
 
     Raises:
-        ValueError: Unable to correctly load the file with the appended string.
+        Exception: Unable to correctly load the file with the appended string.
+
+    Note:
+        For portability, this function detects a ValueError instead of a
+        JSONDecodeError which inherits from it.
+
     """
     filemod = path[:-5]+"-mod"+".json"
     try:
@@ -35,10 +40,10 @@ def LoadJSONFile(path,appendStr,count=0):
         elif count == 1:
             data = json.load(open(filemod))
         else:
-            raise ValueError('LoadJSONFile was not able to correct the file "{}" with an appended "{}". '
+            raise Exception('LoadJSONFile was not able to correct the file "{}" with an appended "{}". '
                 'Check the file manually.'.format(path,appendStr))
         return data
-    except json.JSONDecodeError:
+    except ValueError:
         copyfile(path,filemod)
         fh = open(filemod, "a")
         fh.write(appendStr)

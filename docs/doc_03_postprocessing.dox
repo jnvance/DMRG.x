@@ -75,8 +75,50 @@ plt.legend(loc=0)
 plt.show()
 ```
 
-See the above sample code and its output in the following
-<a href="doc_postproc_01.html" id="example1">ipython notebook</a>.
+Or the total time for each iteration:
+
+```
+data.PlotTotalTime()
+plt.title("Runtime")
+plt.legend(loc=0)
+plt.grid()
+plt.show()
+```
+
+And also the Von Neumann entropy calculated at the end of each sweep:
+
+```
+data.PlotEntanglementEntropy()
+plt.grid(axis='y')
+plt.show()
+```
+
+The data can also be printed directly onscreen:
+
+```
+print(data.EntanglementEntropy())
+```
+
+Or you can also write your own functions to post-process the output data:
+
+```
+def EnergyConvergence(data):
+    '''Energy difference between succesive sweeps'''
+    E = np.array(data.EnergyPerSite())[data.SweepIdx()]
+    diff = np.abs(E[1:] - E[:-1])
+    return diff
+
+d = EnergyConvergence(data)
+plt.semilogy(d,'-o')
+plt.xlabel(r'Sweeps ($n$)')
+plt.ylabel(r'$E_{n+1}-E_n$')
+plt.grid()
+plt.show()
+```
+
+@note
+See the output of the above sample code in the following
+<a href="doc_postproc_01.html" id="example1"><b>ipython notebook</b></a>.
 
 ----
 
