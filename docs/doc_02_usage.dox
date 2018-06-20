@@ -51,7 +51,7 @@ The program may be executed on a single processor using
 
 or in parallel with `<N>` number of processors
 
-    mpirun -np <N> bin/DMRG-SquareLattice.x <OPTIONS>
+    mpiexec -np <N> bin/DMRG-SquareLattice.x <OPTIONS>
 
 The different parameters of the simulation may be specified using `OPTIONS`.
 The minimum required `OPTIONS` to be specified are the following:
@@ -110,17 +110,26 @@ The default boundary condition is cylindrical (open along Lx and periodic along 
 For a full list of these command line arguments, see the documentation for
 Hamiltonians::J1J2XXZModel_SquareLattice::SetFromOptions() in Hamiltonians.hpp [[md]](../include/Hamiltonians.hpp)
 
-@subsection Example
+@subsection Examples
 
 In this example, we want to run a simulation on our local machine with 2 processors.
 We choose the Heisenberg model with open boundary conditions on a 12x6 lattice with anisotropy Jz1 = 0.4.
 We also want to use 20 states for warmup and use SWEEP_MODE_TOLERANCE_TEST with 40, 80 and 160 states with a maximum of
 4, 2 and 2 iterations each. The corresponding command would be
 
-    mpirun -np 2 bin/DMRG-SquareLattice.x \
+    mpiexec -np 2 bin/DMRG-SquareLattice.x \
         -scratch_dir $SCRATCH_DIR -data_dir $DATA_DIR \
         -Lx 12 -Ly 6 -heisenberg 0.4 -BCOpen \
         -mwarmup 20 -msweeps 40,80,160 -maxnsweeps 4,2,2
+
+If instead we  want to run the J1-J2 XY model where J2 = 0.5 for
+cylindrical BC on the same lattice size but with 1 sweep each of the same number
+of states, the command would be
+
+    mpiexec -np 2 bin/DMRG-SquareLattice.x \
+        -scratch_dir $SCRATCH_DIR -data_dir $DATA_DIR \
+        -J2 0.5 -Lx 12 -Ly 6 \
+        -mwarmup 20 -msweeps 40,80,160
 
 --------------------
 
