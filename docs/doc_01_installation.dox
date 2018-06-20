@@ -110,7 +110,7 @@ __Note:__
 On computing clusters (Marconi), the following additional flags may also need to be set to work with the batch scheduler
 and find the correct BLAS/LAPACK provided by Intel MKL:
 
-    --with-batch=1 --known-mpi-shared-libraries=0 --with-blas-lapack-dir=$MKLROOT --known-64-bit-blas-indices=0
+    --with-batch=1 --known-mpi-shared-libraries=0 --with-blas-lapack-dir=$MKLROOT
 
 <!-- --with-batch=1 --known-mpi-shared-libraries=0 --with-blas-lapack-dir=$MKLROOT --known-64-bit-blas-indices=0 -->
 
