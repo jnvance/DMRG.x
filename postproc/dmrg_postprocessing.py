@@ -349,19 +349,37 @@ class Data:
     #
     def _LoadSpectra(self):
         if self._entSpectra is None:
+            ##
+            #   @todo
+            #   Change the output of DMRG.x from EntanglementSpectra.json
+            #   to RDMEigenvalues.json
+            #
             spectra = ju.LoadJSONArray(self.PathToFile('EntanglementSpectra.json'))
             # determine which global indices are the ends of a sweep
 
             self._entSpectra = spectra
 
-    def EntanglementSpectra(self):
-        ''' Loads the entanglement spectrum at the end of each sweep '''
+    def RDMEigenvalues(self,idx=None):
+        ''' Loads the reduced density matrix eigenvalues at the end of each sweep or for
+            a particular sweep
+
+        Args:
+            idx:    The index of the sweep requested.
+                    If None, the data for all indices are returned.
+        Returns:
+            An array of values when idx is None, or a single value otherwise.
+        '''
         self._LoadSpectra()
-        return [self._entSpectra[row]['Sys'] for row in self.SweepIdx()]
+        if idx is None:
+            vals = [self._entSpectra[row]['Sys'] for row in self.SweepIdx()]
+        else:
+            row = self.SweepIdx()[idx]
+            vals = self._entSpectra[row]['Sys']
+        return vals
 
     def EntanglementEntropy(self):
         ''' Calculates the entanglement entropy using eigenvalues from all sectors '''
-        a = self.EntanglementSpectra()
+        a = self.RDMEigenvalues()
         l = [np.concatenate([a[i][j]['vals'] for j in range(len(a[i]))]) for i in range(len(a))]
         return [-np.sum( [np.log(lii)*lii  for lii in li if lii > 0] ) for li in l]
 
