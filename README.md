@@ -10,6 +10,8 @@ __Source code__: [https://github.com/jnvance/DMRG.x](https://github.com/jnvance/
 
 __Documentation__: [https://dmrgx.readthedocs.io](https://dmrgx.readthedocs.io)
 
+__Tutorial Resources__: [https://github.com/jnvance/DMRGTutorial](https://github.com/jnvance/DMRGTutorial)
+
 [![Documentation Status](https://readthedocs.org/projects/dmrgx/badge/?version=master)](https://dmrgx.readthedocs.io/en/master/?badge=master)
 
 ## Abstract
