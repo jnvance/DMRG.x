@@ -225,6 +225,7 @@ public:
             The path to be provided should point to the directory of the
             previous run. */
         ierr = PetscOptionsGetString(NULL,NULL,"-restart",path,PETSC_MAX_PATH_LEN,&restart); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-restart_sweeps",&restart_sweeps,NULL); CHKERRQ(ierr);
         if(restart)
         {
             restart_dir = std::string(path);
@@ -252,6 +253,14 @@ public:
 
             /* Restart the Hamiltonian */
             ierr = SetOptionsFromFile(mpi_comm, restart_dir + "Hamiltonian.dat"); CHKERRQ(ierr);
+
+            /* Read Sweep.dat */
+            std::string filename = restart_dir + "Sweep.dat";
+            ierr = RetrieveInfoFile<PetscInt>(mpi_comm,filename,restart_sweep_dict); CHKERRQ(ierr);
+
+            /* Read data from PetscOptions.dat */
+            filename = restart_dir + "PetscOptions.dat";
+            ierr = RetrieveInfoFile<std::string>(mpi_comm,filename,restart_options_dict); CHKERRQ(ierr);
         }
 
         /*  Initialize Hamiltonian object */
@@ -344,7 +353,7 @@ public:
         }
 
         /*  Setup the modes for performing the warmup and sweeps */
-        {
+        if((!restart) || (!restart_sweeps)){
             PetscBool   opt_mstates = PETSC_FALSE,
                         opt_mwarmup = PETSC_FALSE,
                         opt_nsweeps = PETSC_FALSE,
@@ -432,39 +441,54 @@ public:
                 SETERRQ(mpi_comm,1,"Invalid parameters specified for choosing sweep mode.");
             }
 
-            /* printout some info */
+            /* printout some info on warmup */
             if(!mpi_rank){
                 std::cout
                     << "WARMUP\n"
-                    << "  NumStates to keep:           " << mwarmup << "\n"
-                    << "SWEEP\n"
-                    << "  Sweep mode:                  " << SweepModeToString.at(sweep_mode)
-                    << std::endl;
-
-                if(sweep_mode==SWEEP_MODE_NSWEEPS)
-                {
-                    std::cout << "  Number of sweeps:            " << nsweeps << std::endl;
-                }
-                else if(sweep_mode==SWEEP_MODE_MSWEEPS)
-                {
-                    std::cout << "  NumStates to keep:          ";
-                    for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
-                    std::cout << std::endl;
-                }
-                else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
-                {
-                    std::cout << "  NumStates to keep, maxiter: ";
-                    for(size_t i = 0; i < msweeps.size(); ++i)
-                        std::cout << " (" << msweeps.at(i) << "," << maxnsweeps.at(i) << ")";
-                    std::cout << std::endl;
-                }
-                else if(sweep_mode==SWEEP_MODE_NULL)
-                {
-
-                }
-
-                PRINTLINES();
+                    << "  NumStates to keep:           " << mwarmup << "\n";
             }
+
+        } else { /* ((restart) && (restart_sweeps)) */
+
+            if(!mpi_rank){
+                std::cout << "PetscOptions.dat:" << std::endl;
+                for(const auto m: restart_options_dict)
+                    std::cout   << " " << std::setw(20) << m.first
+                                << " " << m.second << std::endl;
+            }
+
+        }
+
+        /* print some info on sweeps */
+        if(!mpi_rank){
+            std::cout
+                << "SWEEP\n"
+                << "  Sweep mode:                  " << SweepModeToString.at(sweep_mode)
+                << std::endl;
+
+            if(sweep_mode==SWEEP_MODE_NSWEEPS)
+            {
+                std::cout << "  Number of sweeps:            " << nsweeps << std::endl;
+            }
+            else if(sweep_mode==SWEEP_MODE_MSWEEPS)
+            {
+                std::cout << "  NumStates to keep:          ";
+                for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
+                std::cout << std::endl;
+            }
+            else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
+            {
+                std::cout << "  NumStates to keep, maxiter: ";
+                for(size_t i = 0; i < msweeps.size(); ++i)
+                    std::cout << " (" << msweeps.at(i) << "," << maxnsweeps.at(i) << ")";
+                std::cout << std::endl;
+            }
+            else if(sweep_mode==SWEEP_MODE_NULL)
+            {
+
+            }
+
+            PRINTLINES();
         }
 
         LoopType = WarmupStep; /*??????*/
@@ -577,14 +601,16 @@ public:
 
         PetscErrorCode ierr = 0;
 
-        /** This stage is skipped when performing a restart. Instead, the
+        /** The warmup stage is skipped when performing a restart. Instead, the
             blocks are loaded from file. */
         if(restart)
         {
-            /* Read Sweep.dat */
-            std::string filename = restart_dir + "Sweep.dat";
-            std::map<std::string, PetscInt> data;
-            ierr = RetrieveInfoFile<PetscInt>(mpi_comm,filename,data); CHKERRQ(ierr);
+            if(!mpi_rank){
+                std::cout << "Sweep.dat:" << std::endl;
+                for(const auto m: restart_sweep_dict)
+                    std::cout   << " " << std::setw(20) << m.first
+                                << " " << m.second << std::endl;
+            }
 
             /** TODO: Implement restart feature */
             SETERRQ(mpi_comm,1,"Restart feature not yet fully implemented.");
@@ -953,9 +979,20 @@ private:
     /** Tells whether the container initialized from a checkpoint restart */
     PetscBool   restart = PETSC_FALSE;
 
+    /** If True, the sweep stage will be continued from where the previous
+        file left off; otherwise a new set of sweeps based on the command line
+        arguments is performed. */
+    PetscBool   restart_sweeps = PETSC_FALSE;
+
     /** Path to sweep directory for performing restart.
         Requires @p restart=PETSC_TRUE to be useable. */
     std::string restart_dir;
+
+    /** Contents of the Sweep.dat file which will be read when restarting */
+    std::map<std::string, PetscInt> restart_sweep_dict;
+
+    /** Contents of the PetscOptions.dat file which will be read when restarting */
+    std::map<std::string, std::string> restart_options_dict;
 
     /** Tells whether to skip the warmup and sweep stages even when called */
     PetscBool dry_run = PETSC_FALSE;
