@@ -210,7 +210,7 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSzCreate(const MPI_Comm& comm, Mat& Sz
     PetscInt loc_dim = 2;
     ierr = InitSingleSiteOperator(comm, loc_dim, &Sz); CHKERRQ(ierr);
 
-    PetscInt locrows, Istart;
+    PetscInt locrows = 0, Istart = 0;
     ierr = PreSplitOwnership(comm, loc_dim, locrows, Istart); CHKERRQ(ierr);
     PetscInt Iend = Istart + locrows;
 
@@ -234,7 +234,7 @@ PETSC_EXTERN PetscErrorCode MatSpinOneHalfSpCreate(const MPI_Comm& comm, Mat& Sp
     PetscInt loc_dim = 2;
     ierr = InitSingleSiteOperator(comm, loc_dim, &Sp); CHKERRQ(ierr);
 
-    PetscInt locrows, Istart;
+    PetscInt locrows = 0, Istart = 0;
     ierr = PreSplitOwnership(comm, loc_dim, locrows, Istart); CHKERRQ(ierr);
     PetscInt Iend = Istart + locrows;
 
