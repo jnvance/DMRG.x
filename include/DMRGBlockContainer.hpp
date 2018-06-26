@@ -52,6 +52,21 @@ PETSC_EXTERN PetscErrorCode Makedir(
     printf(" [%lld]-* *-[%lld]\n", LLD(LEFT), LLD(RIGHT)); \
 }
 
+/** Assign a value into key-variable and throw a proper PETSc error when lookup fails */
+#define ASSIGN_VAR(MAP,VAR) \
+{ \
+    const auto it = MAP.find(#VAR); \
+    if(it!=MAP.end()) { \
+        VAR = it->second; \
+    } \
+    else \
+        SETERRQ2(PETSC_COMM_SELF,1,"Key %s not found in %s",#VAR,#MAP); \
+}
+
+/** Print the value of a given variable name */
+#define PRINT_VAR(VAR) \
+    std::cout << "  " << std::setw(20) << #VAR << " = " << VAR << std::endl;
+
 /** Convert the input operator type and index to string */
 #define OpIdxToStr(OPTYPE,IDX) \
     (OpToStr(OPTYPE)+std::to_string(IDX))
@@ -59,6 +74,9 @@ PETSC_EXTERN PetscErrorCode Makedir(
 /** Get the operator matrix corresponding to the given type, size and index */
 #define GetOpMats(OPMATS,CORRSIDEOPS,OPID) \
     (OPMATS.at(OpIdxToStr(CORRSIDEOPS.at(OPID).OpType,CORRSIDEOPS.at(OPID).idx)))
+
+/** Hardcoded maximum number of sweeps to be searched */
+#define MAX_SWEEP_IDX 10000
 
 /** Storage for information on resulting eigenpairs of the reduced density matrices */
 struct Eigen_t
@@ -87,7 +105,29 @@ struct Op {
     }
 };
 
-/** Contains and manipulates the system and environment blocks used in a single DMRG run */
+/** Contains and manipulates the system and environment blocks used in a single DMRG run
+
+    @par Options Database
+    Command-line arguments:
+     - `-verbose <bool>`
+     - `-dry_run <bool>`
+     - `-do_save_prealloc <bool>`
+     - `-no_symm <bool>` (obsolete)
+     - `-do_shell <bool>`
+     - `-scratch_dir <string>`
+     - `-do_scratch_dir <bool>`
+     - `-data_dir <string>`
+     - `-mstates <int>`
+     - `-mwarmup <int>`
+     - `-nsweeps <int>`
+     - `-msweeps <int>`
+     - `-restart_dir <string>` path to restart directory
+     - `-restart_options <bool>`
+
+    @todo: Generalize documentation for all command line arguments
+     - `-rot_nsubcomm <int>`
+
+ */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {
 
@@ -193,23 +233,6 @@ public:
     }
 
     /** Initializes the container object with blocks of one site on each of the system and environment.
-
-        @par Options Database
-        Command-line arguments:
-         - `-verbose <bool>`
-         - `-dry_run <bool>`
-         - `-no_symm <bool>`
-         - `-do_shell <bool>`
-         - `-scratch_dir <string>`
-         - `-do_scratch_dir <bool>`
-         - `-data_dir <string>`
-         - `-do_save_prealloc <bool>`
-         - `-mstates <int>`
-         - `-mwarmup <int>`
-         - `-nsweeps <int>`
-         - `-msweeps <int>`
-         - `-restart <string>` path to restart directory
-
      */
     PetscErrorCode Initialize()
     {
@@ -224,27 +247,41 @@ public:
         /*  Whether to do a checkpoint restart.
             The path to be provided should point to the directory of the
             previous run. */
-        ierr = PetscOptionsGetString(NULL,NULL,"-restart",path,PETSC_MAX_PATH_LEN,&restart); CHKERRQ(ierr);
-        ierr = PetscOptionsGetBool(NULL,NULL,"-restart_sweeps",&restart_sweeps,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetString(NULL,NULL,"-restart_dir",path,PETSC_MAX_PATH_LEN,&restart); CHKERRQ(ierr);
+        ierr = PetscOptionsGetBool(NULL,NULL,"-restart_options",&restart_options,NULL); CHKERRQ(ierr);
         if(restart)
         {
             restart_dir = std::string(path);
             if(restart_dir.back()!='/') restart_dir += "/";
 
             /* Verify the existence of restart_sweep_file */
-            PetscInt ridx = -2; /* Index of the sweep containing the restart */
+            PetscInt ridx; /* Index of the sweep containing the restart */
             if(!mpi_rank) {
                 PetscBool flg;
                 std::string file;
-                do
-                {
-                    ++ridx;
+
+                /* Find the first Sweep folder */
+                ridx = 0;
+                flg = PETSC_TRUE;
+                while(true && ridx < MAX_SWEEP_IDX) {
+                    file = restart_dir + SweepDir(ridx);
+                    ierr = PetscTestDirectory(file.c_str(), 'r', &flg); CHKERRQ(ierr);
+                    if(flg) break;
+                    else ridx++;
+                    if(ridx == MAX_SWEEP_IDX) break;
+                }
+
+                if(ridx==MAX_SWEEP_IDX)
+                    SETERRQ1(PETSC_COMM_SELF,1,"No Sweep directory was found in %s",
+                        restart_dir.c_str());
+
+                /* Find the last Sweep folder with a valid Sweep.dat file */
+                while(true && ridx < MAX_SWEEP_IDX) {
                     file = restart_dir + SweepDir(ridx+1) + "Sweep.dat";
                     ierr = PetscTestFile(file.c_str(), 'r', &flg); CHKERRQ(ierr);
-                } while (flg);
-
-                if(ridx<0) SETERRQ2(PETSC_COMM_SELF,1,"Could not find %sSweep_*/"
-                    "Sweep.dat file up to index %lld.", restart_dir.c_str(), ridx+1);
+                    if(flg) ridx++;
+                    else break;
+                }
             }
             ierr = MPI_Bcast(&ridx, 1, MPIU_INT, 0, mpi_comm); CHKERRQ(ierr);
 
@@ -258,9 +295,34 @@ public:
             std::string filename = restart_dir + "Sweep.dat";
             ierr = RetrieveInfoFile<PetscInt>(mpi_comm,filename,restart_sweep_dict); CHKERRQ(ierr);
 
-            /* Read data from PetscOptions.dat */
-            filename = restart_dir + "PetscOptions.dat";
-            ierr = RetrieveInfoFile<std::string>(mpi_comm,filename,restart_options_dict); CHKERRQ(ierr);
+            /* Assign the contents of Sweep.dat */
+            ASSIGN_VAR(restart_sweep_dict, GlobIdx             ); /* 1 */
+            ASSIGN_VAR(restart_sweep_dict, LoopIdx             ); /* 2 */
+            ASSIGN_VAR(restart_sweep_dict, num_sys_blocks      ); /* 3 */
+            ASSIGN_VAR(restart_sweep_dict, num_env_blocks      ); /* 4 */
+            ASSIGN_VAR(restart_sweep_dict, sys_ninit           ); /* 5 */
+            ASSIGN_VAR(restart_sweep_dict, env_ninit           ); /* 6 */
+
+            /* Since the value was saved before getting incremented: */
+            ++LoopIdx;
+
+            if(!mpi_rank){
+                PrintLines();
+                std::cout << "WARNING:\nThe following variables have been"
+                    << " forcefully set:" << std::endl;
+                PRINT_VAR(GlobIdx             ); /* 1 */
+                PRINT_VAR(LoopIdx             ); /* 2 */
+                PRINT_VAR(num_sys_blocks      ); /* 3 */
+                PRINT_VAR(num_env_blocks      ); /* 4 */
+                PRINT_VAR(sys_ninit           ); /* 5 */
+                PRINT_VAR(env_ninit           ); /* 6 */
+            }
+        }
+
+        if(restart && restart_options) {
+            ierr = SetOptionsFromFile(mpi_comm, restart_dir + "PetscOptions.dat"); CHKERRQ(ierr);
+            if(!mpi_rank) std::cout << "since the -restart_options flag was enabled." << std::endl;
+
         }
 
         /*  Initialize Hamiltonian object */
@@ -353,7 +415,7 @@ public:
         }
 
         /*  Setup the modes for performing the warmup and sweeps */
-        if((!restart) || (!restart_sweeps)){
+        {
             PetscBool   opt_mstates = PETSC_FALSE,
                         opt_mwarmup = PETSC_FALSE,
                         opt_nsweeps = PETSC_FALSE,
@@ -378,8 +440,8 @@ public:
                 This function also enforces some restrictions on command line inputs:
                 - either `-mstates` or `-mwarmup` has to be specified
                 @endparblock */
-            if(!opt_mstates && !opt_mwarmup)
-                SETERRQ(mpi_comm,1,"Either -mstates or -mwarmup has to be specified.");
+            // if(!opt_mstates && !opt_mwarmup)
+            //     SETERRQ(mpi_comm,1,"Either -mstates or -mwarmup has to be specified.");
 
             /** @parblock
                 - `-mstates` and `-mwarmup` are redundant and the value of the latter takes precedence over the other
@@ -448,47 +510,37 @@ public:
                     << "  NumStates to keep:           " << mwarmup << "\n";
             }
 
-        } else { /* ((restart) && (restart_sweeps)) */
-
-            if(!mpi_rank){
-                std::cout << "PetscOptions.dat:" << std::endl;
-                for(const auto m: restart_options_dict)
-                    std::cout   << " " << std::setw(20) << m.first
-                                << " " << m.second << std::endl;
-            }
-
-        }
-
-        /* print some info on sweeps */
-        if(!mpi_rank){
-            std::cout
-                << "SWEEP\n"
-                << "  Sweep mode:                  " << SweepModeToString.at(sweep_mode)
-                << std::endl;
-
-            if(sweep_mode==SWEEP_MODE_NSWEEPS)
+            /* print some info on sweeps */
+            if(!mpi_rank)
             {
-                std::cout << "  Number of sweeps:            " << nsweeps << std::endl;
-            }
-            else if(sweep_mode==SWEEP_MODE_MSWEEPS)
-            {
-                std::cout << "  NumStates to keep:          ";
-                for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
-                std::cout << std::endl;
-            }
-            else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
-            {
-                std::cout << "  NumStates to keep, maxiter: ";
-                for(size_t i = 0; i < msweeps.size(); ++i)
-                    std::cout << " (" << msweeps.at(i) << "," << maxnsweeps.at(i) << ")";
-                std::cout << std::endl;
-            }
-            else if(sweep_mode==SWEEP_MODE_NULL)
-            {
+                std::cout
+                    << "SWEEP\n"
+                    << "  Sweep mode:                  " << SweepModeToString.at(sweep_mode)
+                    << std::endl;
 
-            }
+                if(sweep_mode==SWEEP_MODE_NSWEEPS)
+                {
+                    std::cout << "  Number of sweeps:            " << nsweeps << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_MSWEEPS)
+                {
+                    std::cout << "  NumStates to keep:          ";
+                    for(const PetscInt& mstates: msweeps) std::cout << " " << mstates;
+                    std::cout << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
+                {
+                    std::cout << "  NumStates to keep, maxiter: ";
+                    for(size_t i = 0; i < msweeps.size(); ++i)
+                        std::cout << " (" << msweeps.at(i) << "," << maxnsweeps.at(i) << ")";
+                    std::cout << std::endl;
+                }
+                else if(sweep_mode==SWEEP_MODE_NULL)
+                {
 
-            PRINTLINES();
+                }
+                PRINTLINES();
+            }
         }
 
         LoopType = WarmupStep; /*??????*/
@@ -599,25 +651,17 @@ public:
         CheckInitialization(init,mpi_comm);
         if(dry_run) return(0);
 
-        PetscErrorCode ierr = 0;
-
-        /** The warmup stage is skipped when performing a restart. Instead, the
-            blocks are loaded from file. */
-        if(restart)
-        {
-            if(!mpi_rank){
-                std::cout << "Sweep.dat:" << std::endl;
-                for(const auto m: restart_sweep_dict)
-                    std::cout   << " " << std::setw(20) << m.first
-                                << " " << m.second << std::endl;
-            }
-
-            /** TODO: Implement restart feature */
-            SETERRQ(mpi_comm,1,"Restart feature not yet fully implemented.");
-
-            warmed_up = PETSC_TRUE;
+        if(mwarmup==0 && !restart) {
+            if(!mpi_rank) std::cout
+                << "WARNING: Nothing left to do since mwarmup is zero." << std::endl;
             return(0);
         }
+
+        PetscErrorCode ierr = 0;
+
+        /*  Initialize timings */
+        ierr = PetscTime(&t0abs); CHKERRQ(ierr);
+
         if(warmed_up) SETERRQ(mpi_comm,1,"Warmup has already been called, and it can only be called once.");
         if(!mpi_rank) printf("WARMUP\n");
 
@@ -637,8 +681,8 @@ public:
             if(!mpi_rank)
             {
                 /* Subdirectories for the enlarged blocks */
-                ierr = Makedir(scratch_dir + BlockDir("EnlSys",0)); CHKERRQ(ierr);
-                ierr = Makedir(scratch_dir + BlockDir("EnlEnv",0)); CHKERRQ(ierr);
+                ierr = Makedir(scratch_dir + "EnlSys/"); CHKERRQ(ierr);
+                ierr = Makedir(scratch_dir + "EnlEnv/"); CHKERRQ(ierr);
 
                 /* Subdirectories for the blocks of the current sweep */
                 ierr = Makedir(scratch_dir + SweepDir(LoopIdx)); CHKERRQ(ierr);
@@ -648,15 +692,41 @@ public:
                     ierr = Makedir(path); CHKERRQ(ierr);
                 }
             }
+        }
+
+        /** The warmup stage is skipped when performing a restart. This stage is instead called
+            to load the blocks from file. */
+        if(restart)
+        {
+            if(!mpi_rank) std::cout << "Loading blocks from file..." << std::endl;
+            for(PetscInt iblock = 0; iblock < sys_ninit; ++iblock){
+                std::string path_read = restart_dir + BlockDir("Sys",iblock);
+                std::string path_write = scratch_dir + SweepDir(LoopIdx) + BlockDir("Sys",iblock);
+                if(!mpi_rank)
+                    std::cout << "  Reading Block " << iblock << " from: "
+                        << path_read << std::endl;
+                ierr = sys_blocks[iblock].InitializeFromDisk(mpi_comm, path_read); CHKERRQ(ierr);
+                ierr = sys_blocks[iblock].SetDiskStorage(path_read, path_write); CHKERRQ(ierr);
+            }
+            for(PetscInt iblock = sys_ninit; iblock < num_sys_blocks; ++iblock){
+                std::string path = scratch_dir + SweepDir(LoopIdx) + BlockDir("Sys",iblock);
+                ierr = sys_blocks[iblock].Initialize(mpi_comm); CHKERRQ(ierr);
+                ierr = sys_blocks[iblock].SetDiskStorage(path, path); CHKERRQ(ierr);
+            }
+            if(!mpi_rank) PRINTLINES();
+            warmed_up = PETSC_TRUE;
+            return(0);
+        }
+
+        /*  Assign the directories for saving the blocks */
+        if(do_scratch_dir)
+        {
             for(PetscInt iblock = 0; iblock < num_sys_blocks; ++iblock){
                 std::string path = scratch_dir + SweepDir(LoopIdx) + BlockDir("Sys",iblock);
                 ierr = sys_blocks[iblock].Initialize(mpi_comm); CHKERRQ(ierr);
                 ierr = sys_blocks[iblock].SetDiskStorage(path, path); CHKERRQ(ierr);
             }
         }
-
-        /*  Initialize timings */
-        ierr = PetscTime(&t0abs); CHKERRQ(ierr);
 
         /*  Initialize the 0th system block with one site  */
         ierr = sys_blocks[sys_ninit++].Initialize(mpi_comm, 1, PETSC_DEFAULT); CHKERRQ(ierr);
@@ -755,28 +825,77 @@ public:
     /** Performs the sweep stage of DMRG. */
     PetscErrorCode Sweeps()
     {
-        if(dry_run) return(0);
+        if(dry_run || (mwarmup==0 && !restart)) return(0);
         PetscErrorCode ierr;
+        /*  Restart: The iteration variable msweep_idx is a class member so that
+            it can be recorded at the end of each sweep.
+            The starting value is zero by default but may be obtained from
+            file if both restart and restart_options are enabled. */
+        PetscInt start_idx = 0;
+
+        if(restart && restart_options)
+        {
+            /* TODO: Set the value of start_idx from recorded msweep_idx */
+            /* OR: Do it from inside the if statements??? */
+            const auto it = restart_sweep_dict.find("msweep_idx");
+            if(it!=restart_sweep_dict.end())
+                start_idx = it->second;
+            else
+                SETERRQ(PETSC_COMM_SELF,1,"msweep_idx not found.");
+
+            /* Determine whether to increment start_idx */
+            if(sweep_mode==SWEEP_MODE_NSWEEPS || sweep_mode==SWEEP_MODE_MSWEEPS) {
+                /* Always increment start_idx with these two modes */
+                ++start_idx;
+            }
+            else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST) {
+                /*  Increment the start_idx only if the previous SWEEP
+                    ended in a break */
+                const auto it = restart_sweep_dict.find("cont");
+                PetscBool cont_prev;
+                if(it!=restart_sweep_dict.end())
+                    cont_prev = PetscBool(it->second);
+                else if(start_idx==-1)
+                    /*  If the previous step was a WARMUP step then cont==FALSE so that
+                        start_idx is incremented to zero */
+                    cont_prev = PETSC_FALSE;
+                else
+                    SETERRQ(PETSC_COMM_SELF,1,"cont not found.");
+                if(!cont_prev) start_idx++;
+            }
+            if(!mpi_rank) {
+                std::cout << "WARNING: Sweeps will start at idx = "
+                    << start_idx << std::endl;
+                if(((sweep_mode==SWEEP_MODE_NSWEEPS &&
+                        start_idx>=nsweeps) ||
+                    (sweep_mode==SWEEP_MODE_MSWEEPS &&
+                        start_idx>=PetscInt(msweeps.size())) ||
+                    (sweep_mode==SWEEP_MODE_TOLERANCE_TEST &&
+                        start_idx>=PetscInt(msweeps.size())) ))
+                    std::cout << "WARNING: Nothing left to do with restart." << std::endl;
+            }
+        }
+
         if(sweep_mode==SWEEP_MODE_NSWEEPS)
         {
-            for(PetscInt isweep = 0; isweep < nsweeps; ++isweep)
+            for(msweep_idx=start_idx; msweep_idx < nsweeps; ++msweep_idx)
             {
                 ierr = SingleSweep(mwarmup); CHKERRQ(ierr);
             }
         }
         else if(sweep_mode==SWEEP_MODE_MSWEEPS)
         {
-            for(const PetscInt& mstates: msweeps)
+            for(msweep_idx=start_idx; msweep_idx < PetscInt(msweeps.size()); ++msweep_idx)
             {
-                ierr = SingleSweep(mstates); CHKERRQ(ierr);
+                ierr = SingleSweep(msweeps.at(msweep_idx)); CHKERRQ(ierr);
             }
         }
         else if(sweep_mode==SWEEP_MODE_TOLERANCE_TEST)
         {
-            for(size_t imstates = 0; imstates < msweeps.size(); ++imstates)
+            for(msweep_idx=start_idx; msweep_idx < PetscInt(msweeps.size()); ++msweep_idx)
             {
-                PetscInt mstates  = msweeps.at(imstates);
-                PetscInt max_iter = maxnsweeps.at(imstates);
+                PetscInt mstates  = msweeps.at(msweep_idx);
+                PetscInt max_iter = maxnsweeps.at(msweep_idx);
                 PetscInt iter = 0;
                 if(max_iter==0) continue;
 
@@ -799,12 +918,25 @@ public:
                     {
                         std::cout
                             << "SWEEP_MODE_TOLERANCE_TEST\n"
-                            << "  Iterations / Max Iterations:       " << iter << "/" << max_iter << "\n"
-                            << "  Difference in ground state energy: " << diff_gse << "\n"
-                            << "  Largest truncation error:          " << max_trn << "\n"
+                            << "  Iterations / Max Iterations:       "
+                            << iter << "/" << max_iter << "\n"
+                            << "  Difference in ground state energy: "
+                            << diff_gse << "\n"
+                            << "  Largest truncation error:          "
+                            << max_trn << "\n"
                             << "  " << (cont?"CONTINUE":"BREAK")
                             << std::endl;
                         PRINTLINES();
+                    }
+
+                    /* Also append the result to Sweep.dat. The file is at LoopIdx-1 since
+                       we have already incremented LoopIdx at the end of SingleSweep() */
+                    if(!mpi_rank)
+                    {
+                        std::string sweep_data_fn = scratch_dir + SweepDir(LoopIdx-1) + "Sweep.dat";
+                        std::ofstream sweep_data_file(sweep_data_fn, std::ios_base::app);
+                        sweep_data_file << std::setw(20) << "cont" << "  " << int(cont) << "\n";
+                        sweep_data_file.close();
                     }
                 }
                 while(cont);
@@ -979,10 +1111,12 @@ private:
     /** Tells whether the container initialized from a checkpoint restart */
     PetscBool   restart = PETSC_FALSE;
 
-    /** If True, the sweep stage will be continued from where the previous
+    /** If True, the PetscOptions.dat file will override the current command line arguments
+        and the sweep stage will be continued from where the previous
         file left off; otherwise a new set of sweeps based on the command line
-        arguments is performed. */
-    PetscBool   restart_sweeps = PETSC_FALSE;
+        arguments is performed, and the keys listed in SaveAsOptions() will be read
+        from command line only. */
+    PetscBool   restart_options = PETSC_FALSE;
 
     /** Path to sweep directory for performing restart.
         Requires @p restart=PETSC_TRUE to be useable. */
@@ -990,9 +1124,6 @@ private:
 
     /** Contents of the Sweep.dat file which will be read when restarting */
     std::map<std::string, PetscInt> restart_sweep_dict;
-
-    /** Contents of the PetscOptions.dat file which will be read when restarting */
-    std::map<std::string, std::string> restart_options_dict;
 
     /** Tells whether to skip the warmup and sweep stages even when called */
     PetscBool dry_run = PETSC_FALSE;
@@ -1021,6 +1152,11 @@ private:
     /** Records the number of states requested for each sweep, where each entry is a single
         call to Sweep() */
     std::vector<PetscInt> sweeps_mstates;
+
+    /** Index of the last full sweep completed.
+        To be incremented in the Sweeps() function. The default value indicates
+        that only the warmup step has been completed. */
+    PetscInt    msweep_idx = -1;
 
     /** Total number of sites */
     PetscInt    num_sites;
@@ -1160,11 +1296,11 @@ private:
             const std::vector< Hamiltonians::Term > TermsEnv = Ham.H(NumSitesEnvEnl);
             ierr = KronEye_Explicit(EnvBlock, AddSite, TermsEnv, EnvBlockEnl); CHKERRQ(ierr);
             ierr = EnvBlock.EnsureSaved(); CHKERRQ(ierr);
-            ierr = EnvBlockEnl.InitializeSave(scratch_dir + BlockDir("EnlEnv",0)); CHKERRQ(ierr);
+            ierr = EnvBlockEnl.InitializeSave(scratch_dir + "EnlEnv/"); CHKERRQ(ierr);
         } else {
             EnvBlockEnl = SysBlockEnl;
         }
-        ierr = SysBlockEnl.InitializeSave(scratch_dir + BlockDir("EnlSys",0)); CHKERRQ(ierr);
+        ierr = SysBlockEnl.InitializeSave(scratch_dir + "EnlSys/"); CHKERRQ(ierr);
 
         ierr = PetscTime(&tenlr); CHKERRQ(ierr);
         timings_data.tEnlr = tenlr-t0;
@@ -2569,14 +2705,17 @@ private:
             sweep_data_file << std::setw(20) << (#VAR) << "  " << (VAR) << "\n";
 
         /*        >********************< 20 char */
-        SWEEP_DUMP(GlobIdx             );
-        SWEEP_DUMP(LoopIdx             );
-        SWEEP_DUMP(num_sites           );
-        SWEEP_DUMP(num_sys_blocks      );
-        SWEEP_DUMP(num_env_blocks      );
-        SWEEP_DUMP(sys_ninit           );
-        SWEEP_DUMP(env_ninit           );
-        SWEEP_DUMP(env_ninit           );
+        SWEEP_DUMP(GlobIdx             ); /* 1 */
+        SWEEP_DUMP(LoopIdx             ); /* 2 */
+        SWEEP_DUMP(num_sys_blocks      ); /* 3 */
+        SWEEP_DUMP(num_env_blocks      ); /* 4 */
+        SWEEP_DUMP(sys_ninit           ); /* 5 */
+        SWEEP_DUMP(env_ninit           ); /* 6 */
+        /*  To be read-in and compared with the generated value */
+        SWEEP_DUMP(num_sites           ); /* 7 */
+        /*  To be read-in only with -restart_options enabled: */
+        SWEEP_DUMP(sweep_mode          ); /* 8 */
+        SWEEP_DUMP(msweep_idx          ); /* 9 */
 
         #undef SWEEP_DUMP
         sweep_data_file.close();
@@ -2586,6 +2725,9 @@ private:
 
 #undef OpIdxToStr
 #undef GetOpMats
+#undef ASSIGN_VAR
+#undef PRINT_VAR
+#undef MAX_SWEEP_IDX
 
 /**
     @}
