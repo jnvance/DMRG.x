@@ -7,6 +7,7 @@
 #include <sstream>
 #include <fstream>
 #include <map>
+#include <iomanip>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -339,12 +340,12 @@ PetscErrorCode SetOptionsFromFile(
         ierr = PetscOptionsSetValue(NULL,(it.first).c_str(),(it.second).c_str()); CHKERRQ(ierr);
     }
     if(!mpi_rank) {
-        std::cout << "========================================="  << std::endl;
+        std::cout << "-----------------------------------------"  << std::endl;
         std::cout << "WARNING:\n"
         "The following directives from " << filename << "\n" <<
         "will override command-line arguments:" << std::endl;
         for(auto it: infomap)
-            std::cout << "  " << it.first << "  " << it.second << std::endl;
+            std::cout << "  " << std::setw(20) << it.first << "  " << it.second << std::endl;
     }
     return(0);
 }

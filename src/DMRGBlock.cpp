@@ -180,9 +180,10 @@ PetscErrorCode Block::SpinBase::Initialize(
 {
     PetscErrorCode ierr = 0;
 
-    if(PetscUnlikely(num_sites_in == 1))
-        SETERRQ(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE,
-            "Invalid input num_sites_in cannot be equal to 1. Call a different Initialize() function.");
+    /* This is most likely useless */
+    // if(PetscUnlikely(num_sites_in == 1))
+    //     SETERRQ(mpi_comm, PETSC_ERR_ARG_OUTOFRANGE,
+    //         "Invalid input num_sites_in cannot be equal to 1. Call a different Initialize() function.");
 
     QuantumNumbers Magnetization_temp;
     ierr = Magnetization_temp.Initialize(comm_in, qn_list_in, qn_size_in); CHKERRQ(ierr);
@@ -810,6 +811,7 @@ PetscErrorCode Block::SpinBase::RotateOperators(SpinBase& Source, const Mat& Rot
     else
     {
         ierr = CheckOperatorBlocks(); CHKERRQ(ierr);
+        ierr = SaveAndDestroy(); CHKERRQ(ierr);
     }
 
     ierr = PetscFree(SpData_loc); CHKERRQ(ierr);
@@ -1001,7 +1003,7 @@ PetscErrorCode Block::SpinBase::RetrieveOperator(
         if(!subcomm_rank)
             std::cout
                 << "  IO: [" << mpi_rank << "] "
-                << "Retrieved: " << OpFilename(write_dir,OpName,isite) << std::endl;
+                << "Retrieved: " << OpFilename(save_dir,OpName,isite) << std::endl;
     }
 
     return(0);

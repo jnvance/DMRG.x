@@ -90,7 +90,6 @@ namespace Hamiltonians
                 "-Jz2",
                 "-Lx",
                 "-Ly",
-                "-verbose",
                 "-heisenberg",
                 "-BCopen",
                 "-BCperiodic"
