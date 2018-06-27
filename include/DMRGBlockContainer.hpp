@@ -341,6 +341,7 @@ public:
         ierr = PetscOptionsGetBool(NULL,NULL,"-no_symm",&no_symm,NULL); CHKERRQ(ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-do_shell",&do_shell,NULL); CHKERRQ(ierr);
         ierr = PetscOptionsGetBool(NULL,NULL,"-dry_run",&dry_run,NULL); CHKERRQ(ierr);
+        ierr = PetscOptionsGetReal(NULL,NULL,"-qn_sector",&qn_sector,NULL); CHKERRQ(ierr);
 
         /*  Setup the scratch space to save temporary data*/
         PetscBool opt_do_scratch_dir = PETSC_FALSE;
@@ -387,6 +388,8 @@ public:
             fprintf(fp_data,"{\n");
             Ham.SaveOut(fp_data);
             fprintf(fp_data,",\n");
+            fprintf(fp_data,"  \"QNSector\": %g", qn_sector);
+            fflush(fp_data);
         }
 
         ierr = PetscFOpen(mpi_comm, (data_dir+std::string("Correlations.json")).c_str(), "w", &fp_corr); CHKERRQ(ierr);
@@ -1134,6 +1137,9 @@ private:
     /** Tells whether no quantum number symmetries will be implemented */
     PetscBool   no_symm = PETSC_FALSE;
 
+    /** The quantum number sector in which to search for the ground state */
+    PetscReal   qn_sector = 0.0;
+
     /** Stores the mode of sweeps to be performed */
     SweepMode_t sweep_mode = SWEEP_MODE_NULL;
 
@@ -1329,8 +1335,7 @@ private:
         PetscInt NumSitesTotal = SysBlockEnl.NumSites() + EnvBlockEnl.NumSites();
         const std::vector< Hamiltonians::Term > Terms = Ham.H(NumSitesTotal);
 
-        /* Set the QN sectors as an option */
-        std::vector<PetscReal> QNSectors = {0};
+        std::vector<PetscReal> QNSectors = {qn_sector};
         if(no_symm) {
             QNSectors = {};
         }
@@ -1575,6 +1580,7 @@ private:
             printf("  Superblock:\n");
             printf("    NumStates:      %lld\n", LLD(KronBlocks.NumStates()));
             printf("    NumSites:       %lld\n", LLD(NumSitesTotal));
+            printf("    QNSector:       %-10.10g\n", qn_sector);
             printf("    Energy:         %-10.10g\n", gse_r);
             printf("    Energy/site:    %-10.10g\n", gse_r/PetscReal(NumSitesTotal));
             printf("  Sys Block Out\n"
@@ -2627,7 +2633,7 @@ private:
     PetscErrorCode SaveLoopsData()
     {
         if(mpi_rank) return(0);
-
+        fprintf(fp_data,",\n");
         fprintf(fp_data,"  \"Warmup\": {\n");
         fprintf(fp_data,"    \"MStates\": %lld\n", LLD(mwarmup));
         fprintf(fp_data,"  },\n");
