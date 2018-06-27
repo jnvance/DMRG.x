@@ -504,7 +504,7 @@ public:
             }
 
             /* printout some info on warmup */
-            if(!mpi_rank){
+            if(!mpi_rank && !restart){
                 std::cout
                     << "WARMUP\n"
                     << "  NumStates to keep:           " << mwarmup << "\n";

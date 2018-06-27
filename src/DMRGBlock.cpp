@@ -114,9 +114,13 @@ PetscErrorCode Block::SpinBase::Initialize(
     init = PETSC_TRUE;
     init_once = PETSC_TRUE;
 
+    if ((!init_ops) && (num_sites > 0))
+    {
+        /* Do nothing */
+    }
     /** When creating a block for one site, the single-site operators are initialized using the default
         values and matrix operators for spin-1/2 defined in Block::SpinBase::loc_dim, Block::SpinBase::loc_qn_list and Block::SpinBase::loc_qn_size */
-    if (num_sites == 1)
+    else if (init_ops && (num_sites == 1))
     {
         /*  Create the spin operators for the single site  */
         ierr = MatSpinSzCreate(SzData[0]); CHKERRQ(ierr);
@@ -133,15 +137,12 @@ PetscErrorCode Block::SpinBase::Initialize(
     }
     /** When more than one site is requested, all operator matrices are created with the correct sizes based on the
         number of states */
-    else if(num_sites > 1)
+    else if(init_ops && (num_sites > 1))
     {
-        if(init_ops)
+        for(PetscInt isite = 0; isite < num_sites; ++isite)
         {
-            for(PetscInt isite = 0; isite < num_sites; ++isite)
-            {
-                ierr = InitSingleSiteOperator(mpi_comm, num_states, &SzData[isite]); CHKERRQ(ierr);
-                ierr = InitSingleSiteOperator(mpi_comm, num_states, &SpData[isite]); CHKERRQ(ierr);
-            }
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &SzData[isite]); CHKERRQ(ierr);
+            ierr = InitSingleSiteOperator(mpi_comm, num_states, &SpData[isite]); CHKERRQ(ierr);
         }
     }
     else
