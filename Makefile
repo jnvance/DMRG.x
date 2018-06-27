@@ -29,6 +29,11 @@ docs-default: docs-generate-files FORCE
 	(cat Doxyfile && cat) | doxygen -
 	cp assets/html/doc_postproc_01.html docs/default/html/doc_postproc_01.html
 
+docs-man: docs-generate-files FORCE
+	echo "GENERATE_HTML = NO\n" \
+		"GENERATE_MAN = YES\n" | \
+	(cat Doxyfile && cat) | doxygen -
+
 docs-generate-files: FORCE
 	./docs/docs_generate_files.sh
 
@@ -37,7 +42,7 @@ flush: clean
 	${RM} src/*.optrpt
 
 flush-docs:
-	${RM} -rf docs/html docs/latex docs/doc_00_overview.dox docs/default
+	${RM} -rf docs/html docs/latex docs/doc_00_overview.dox docs/default docs/man
 
 FORCE:
 
