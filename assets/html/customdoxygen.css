@@ -803,3 +803,14 @@ div.fragment, pre.fragment, code {
 code {
     padding: 1px;
 }
+
+caption{
+    color: #000;
+    font-weight: 600 !important;
+}
+
+th {
+    color: #23609B !important;
+    background-color: #FFF !important;
+    font-weight: 600 !important;
+}

@@ -107,26 +107,61 @@ struct Op {
 
 /** Contains and manipulates the system and environment blocks used in a single DMRG run
 
-    @par Options Database
-    Command-line arguments:
-     - `-verbose <bool>`
-     - `-dry_run <bool>`
-     - `-do_save_prealloc <bool>`
-     - `-no_symm <bool>` (obsolete)
-     - `-do_shell <bool>`
-     - `-scratch_dir <string>`
-     - `-do_scratch_dir <bool>`
-     - `-data_dir <string>`
-     - `-mstates <int>`
-     - `-mwarmup <int>`
-     - `-nsweeps <int>`
-     - `-msweeps <int>`
-     - `-restart_dir <string>` path to restart directory
-     - `-restart_options <bool>`
+    <table>
+    <caption id="multi_row">Options Database</caption>
+    <tr>
+        <th style="min-width:300px!important">Command line argument
+        <th>Description
+    <tr>
+        <td>`-mstates [int]`
+        <td rowspan=2>The number of states kept during the warmup stage (default: 0)
+    <tr>
+        <td>or `-mwarmup [int]`
+    <tr>
+        <td>`-nsweeps [int]`
+        <td>The number of sweeps to perform using the same number of states as the
+            warmup
+    <tr>
+        <td>`-msweeps [int],[int],...`
+        <td>An array of the number of kept states @f$m@f$ for each sweep (default: None)
+    <tr>
+        <td>`-maxnsweeps [int],[int],...`
+        <td>An array of the maximum number of sweeps for each @f$m@f$ (default: 1)
+    <tr>
+        <td>`-verbose [bool]`
+        <td>An array of the maximum number of sweeps for each @f$m@f$ (default: 1)
+    <tr>
+        <td>`-dry_run [bool]`
+        <td>Do not execute the warmup and sweep stages. This can be used for testing
+            if the correct command line arguments were given.
+    <tr>
+        <td>`-do_save_prealloc [bool]`
+        <td>Save the preallocation data on a file in `DATA_DIR`
+    <tr>
+        <td>`-do_shell [bool]`
+        <td>Use a SHELL matrix or matrix-free approach for the superblock Hamiltonian (default: true)
+    <tr>
+        <td>`-scratch_dir [string]`
+        <td>Specify the scratch directory (default: `./scratch_dir`)
+    <tr>
+        <td>`-data_dir [string]`
+        <td>Specify the data directory (default: `./data_dir`)
+    <tr>
+        <td>`-restart_dir <string>`
+        <td>Path to the restart directory, typically the `SCRATCH_DIR` of the previous run
+    <tr>
+        <td>`-restart_options <bool>`
+        <td>Whether to continue the sweep parameters of the previous run (default: false)
+    <tr>
+        <td>`-rot_nsubcomm <int>`
+        <td>The number of subcommunicators to use for the rotation of operator matrices.
+            This has to be a number that exactly divides the total size of PETSC_COMM_WORLD
+            communicator.
+    </table>
 
-    @todo: Generalize documentation for all command line arguments
-     - `-rot_nsubcomm <int>`
-
+    @sa
+    Options regarding the Hamiltonian and geometry can be found at the
+    Hamiltonians::J1J2XXZModel_SquareLattice documentation
  */
 template<class Block, class Hamiltonian> class DMRGBlockContainer
 {

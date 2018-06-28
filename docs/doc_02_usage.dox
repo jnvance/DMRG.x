@@ -82,8 +82,8 @@ The sweep stage of DMRG may be performed using three possible modes. See: DMRGBl
     - Specify the number of kept states *m* for each sweep and the maximum number of sweeps for each *m*.
     - Sweeps with the same *m* are performed until the drop in energy is less than the truncation error or the maximum number of sweeps is reached.
 
-For a full list of these command line arguments, see the documentation for
-DMRGBlockContainer< Block, Hamiltonian >::Initialize() in DMRGBlockContainer.hpp [[md]](../include/DMRGBlockContainer.hpp)
+For a full list of these command line arguments, see the documentation for the
+DMRGBlockContainer class in DMRGBlockContainer.hpp [[md]](../include/DMRGBlockContainer.hpp)
 
 @subsection hamiltonian Setting-up the lattice and Hamiltonian
 
@@ -108,7 +108,7 @@ The default boundary condition is cylindrical (open along Lx and periodic along 
  - `-BCperiodic` for periodic (toroidal) boundary conditions
 
 For a full list of these command line arguments, see the documentation for
-Hamiltonians::J1J2XXZModel_SquareLattice::SetFromOptions() in Hamiltonians.hpp [[md]](../include/Hamiltonians.hpp)
+Hamiltonians::J1J2XXZModel_SquareLattice in Hamiltonians.hpp [[md]](../include/Hamiltonians.hpp)
 
 @subsection Examples
 

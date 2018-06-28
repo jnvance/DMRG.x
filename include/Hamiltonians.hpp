@@ -32,7 +32,48 @@ namespace Hamiltonians
         PeriodicBC=1
     } BC_t;
 
-    /** Implements the Hamiltonian for the J1-J2 XY model on the square lattice */
+    /** Implements the Hamiltonian for the J1-J2 XY model on the square lattice
+
+    <table>
+    <caption id="multi_row">Options Database</caption>
+    <tr>
+        <th style="min-width:260px!important" > Command line argument
+        <th> Description
+    <tr>
+        <td>`-Lx [int]`
+        <td>lattice dimension in the longitudinal direction (growing) [def: 4]
+    <tr>
+        <td>`-Ly [int]`
+        <td>lattice dimension in the transverse direction [def: 4]
+    <tr>
+        <td>`-J1 [float]`
+        <td>coupling constant for the nearest neighbor interaction
+    <tr>
+        <td>`-Jz1 [float]`
+        <td>anisotropy in the z-direction for the nearest neighbor interaction
+    <tr>
+        <td>`-J2 [float]`
+        <td>coupling constant for the next-nearest neighbor interaction
+    <tr>
+        <td>`-Jz2 [float]`
+        <td>anisotropy in the z-direction for the next-nearest neighbor interaction
+    <tr>
+        <td>`-heisenberg [float]`
+        <td>Overrides other coupling constants and reverts to an XXZ Heisenberg model where the given
+            parameter is the coupling constant along the z-direction
+    <tr>
+        <td>`-BCopen`
+        <td rowspan=2>Either for open boundary conditions or for periodic (toroidal) boundary conditions.
+            Only at most one of them can be true. If none of them are set, the default cylindrical
+            boundary conditions are used.
+    <tr>
+        <td>`-BCperiodic`
+    </table>
+
+    @sa
+    Options regarding the DMRG runtime can be found at the DMRGBlockContainer documentation.
+
+     */
     class J1J2XXZModel_SquareLattice
     {
 
