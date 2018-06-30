@@ -74,7 +74,9 @@ subprocess.call(
     './docs/docs_generate_files.sh;'
     'doxygen Doxyfile;'
     'cp assets/html/dynsections.js.in docs/html/dynsections.js;'
-    'cp assets/html/doc_postproc_01.html docs/html/doc_postproc_01.html;', shell=True)
+    'git clone git@github.com:jnvance/DMRGTutorial.git ~/DMRGTutorial;'
+    'cp ~/DMRGTutorial/SampleCode/03-dmrg-postproc/doc_postproc_01.html docs/html/doc_postproc_01.html;', shell=True)
+    # 'cp assets/html/doc_postproc_01.html docs/html/doc_postproc_01.html;', shell=True)
 
 
 # -- Options for HTML output -------------------------------------------------
